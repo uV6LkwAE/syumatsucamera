@@ -25,8 +25,10 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt -r /tmp/requirements.dev
 
 FROM base AS runtime
 RUN useradd -m appuser
+RUN mkdir -p /var/log/syumatsucamera /app/logs
 COPY --from=deps-prod /usr/local /usr/local
 COPY backend /app
+RUN chown -R appuser:appuser /var/log/syumatsucamera /app/logs /app
 USER appuser
 EXPOSE 8000
 CMD ["gunicorn", "syumatsucamera.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3"]
