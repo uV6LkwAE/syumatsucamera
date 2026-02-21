@@ -221,6 +221,119 @@ syumatsucamera.com
 
 ## 3.6 検索
 - クエリパラメータ `q` を記事タイトルで部分一致検索。
+
+## 3.7 sitemap.xml（SEO）
+- `django.contrib.sitemaps` を利用して `sitemap.xml` を生成する。
+- 公開対象のみを出力し、CMS内部URLや非公開記事は含めない。
+- URLごとに `priority` と `changefreq` を明示的に調整する。
+- `lastmod` は記事の更新日時（`updated_at`）を返す。
+- 記事の属性（`is_pr`, `is_ad`）に応じて優先度の重み付けを行う。
+  - 例: PR/AD記事を通常記事よりわずかに高く設定する。
+- 優先度は固定値にせず、将来的に運用で調整可能な実装にする。
+- サイトマップの責務:
+  - クローラ向けに「どのページを優先して巡回してほしいか」を示す。
+  - ルーティング定義と不整合を起こさないことを最優先とする。
+
+実装方針（クラス分割）:
+
+1. `StaticViewSitemap`
+- 対象: トップ/新着一覧/人気一覧
+- `changefreq`: `daily`
+- `priority` はページ種別で出し分ける。
+  - top: 1.0
+  - new: 0.8
+  - popular: 0.9
+
+2. `ArticleSitemap`
+- 対象: `Article.objects.filter(status='published')`
+- `changefreq`: `weekly`
+- `lastmod`: `updated_at`
+- `priority` は記事属性で調整する。
+  - 通常記事: 0.7
+  - PR記事: 0.8
+  - AD記事を加味する場合、PRと同等または別の重みを定義して分岐する。
+
+3. `CategorySitemap`
+- 対象: `Category.objects.all()`
+- カテゴリ一覧URLを `slug` で生成する。
+- `priority`: 0.6（カテゴリページは記事詳細より低め）
+
+運用ルール:
+
+- `reverse()` のURL名は実ルーティング名と厳密一致させる。
+- `items()` の返却値と `priority()` の判定条件は同一キー体系で管理する。
+- 優先度の根拠が不明にならないよう、クラスdocstringで意図を明記する。
+- 将来ページ追加時は、対象のSitemapクラスを必ず更新する。
+
+参考実装イメージ:
+
+```python
+from django.contrib.sitemaps import Sitemap
+from django.urls import reverse
+from cms.models import Article, Category
+
+
+class StaticViewSitemap(Sitemap):
+    """トップ/新着/人気の静的ページをサイトマップに載せる。"""
+
+    changefreq = "daily"
+
+    def items(self):
+        return ["blog:top", "blog:new_articles", "blog:popular_articles"]
+
+    def location(self, item):
+        return reverse(item)
+
+    def priority(self, item):
+        if item == "blog:top":
+            return 1.0
+        if item == "blog:new_articles":
+            return 0.8
+        if item == "blog:popular_articles":
+            return 0.9
+        return 0.5
+
+
+class ArticleSitemap(Sitemap):
+    """公開記事をサイトマップに載せ、更新日と優先度を返す。"""
+
+    changefreq = "weekly"
+
+    def items(self):
+        return Article.objects.filter(status="published")
+
+    def lastmod(self, obj):
+        return obj.updated_at
+
+    def priority(self, obj):
+        if obj.is_pr:
+            return 0.8
+        return 0.7
+
+
+class CategorySitemap(Sitemap):
+    """カテゴリ一覧ページをサイトマップに載せる。"""
+
+    def items(self):
+        return Category.objects.all()
+
+    def location(self, obj):
+        return reverse("blog:category_list", kwargs={"slug": obj.slug})
+
+    def priority(self, obj):
+        return 0.6
+```
+
+## 3.8 robots.txt / ads.txt
+- `robots.txt` と `ads.txt` は公開ルート直下で配信する。
+  - `/robots.txt`
+  - `/ads.txt`
+- Django APIで配信せず、Nginxの静的配信で返す。
+- 開発時は `frontend/public/` に配置する。
+  - `frontend/public/robots.txt`
+  - `frontend/public/ads.txt`
+- 本番時はフロントエンドのビルド成果物に同梱し、Nginxのドキュメントルート直下に配置する。
+- ルーティングや認証（Cloudflare Access）とは切り離し、常に公開側ドメインのルートで取得可能にする。
 ---
 
 ## 4. CMS要件
@@ -348,33 +461,7 @@ Gmail-SMTP利用
 ---
 
 ## 7. データモデル要件
-全体的に見直しが必要。
-
-### 7.1 Category
-- MPTT階層構造。
-- `name` / `slug` はユニーク。
-
-### 7.2 Article
-- 主な属性:
-  - `title`, `slug`, `category`, `content`, `summary`
-  - `status`（`draft/private/published`）
-  - `tags`, `views`, `thumbnail`, `author`, `is_pr`, `is_ad`
-- DB制約（公開時必須）:
-  - title, slug, content, category
-- slug:
-  - 未入力時はタイトルから自動生成
-  - 英訳（googletrans）→ ASCII slugify → 重複回避
-
-### 7.2.1 Tag
-- タグテーブルを用意する。
-- 記事とタグは多対多で紐づける。
-- 関連記事の表示アルゴリズムにタグを主に利用する。
-
-### 7.3 Contact
-- 問い合わせデータを保存。
-
-### 7.4 OGPPreview
-- URLごとのOGPキャッシュを保持。
+ER_DIAGRAM.md を参照。
 
 ---
 
