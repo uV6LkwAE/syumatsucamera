@@ -105,6 +105,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "rest_framework",
     "corsheaders",
 ]
 
@@ -275,6 +276,16 @@ LOGGING = {
                 "critical_file",
             ],
             "level": "DEBUG",
+            "propagate": False,
+        },
+        "django.request": {
+            "handlers": [
+                "console",
+                "logger_file",
+                "error_file",
+                "critical_file",
+            ],
+            "level": "ERROR",
             "propagate": False,
         },
     },
