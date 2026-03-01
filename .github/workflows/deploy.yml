@@ -1,0 +1,227 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: syumatsucamera-prod-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: ${{ vars.PYTHON_VERSION }}
+  NODE_VERSION: ${{ vars.NODE_VERSION }}
+
+jobs:
+  # フェーズ1: CI（アプリの基本チェック）
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Django check
+        working-directory: backend
+        env:
+          SECRET_KEY: ${{ secrets.CI_DJANGO_SECRET_KEY }}
+          DEBUG: ${{ vars.CI_DEBUG }}
+          ALLOWED_HOSTS: ${{ vars.CI_ALLOWED_HOSTS }}
+          POSTGRES_DB: ${{ vars.CI_POSTGRES_DB }}
+          POSTGRES_USER: ${{ vars.CI_POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
+          POSTGRES_HOST: ${{ vars.CI_POSTGRES_HOST }}
+          POSTGRES_PORT: ${{ vars.CI_POSTGRES_PORT }}
+          REDIS_URL: ${{ vars.CI_REDIS_URL }}
+          LOG_DIR: ${{ vars.CI_LOG_DIR }}
+          LOG_RETENTION_DAYS: ${{ vars.CI_LOG_RETENTION_DAYS }}
+          APP_LOG_LEVEL: ${{ vars.CI_APP_LOG_LEVEL }}
+          LOG_FILE_INFO: ${{ vars.CI_LOG_FILE_INFO }}
+          LOG_FILE_CRITICAL: ${{ vars.CI_LOG_FILE_CRITICAL }}
+        run: python manage.py check
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Frontend build
+        working-directory: frontend
+        run: npm run build
+
+  # フェーズ2: Dockerイメージ Build / Push（本番は常時実行）
+  build_and_push:
+    name: Build And Push Images
+    runs-on: ubuntu-latest
+    needs:
+      - ci
+    outputs:
+      sha_short: ${{ steps.meta.outputs.sha_short }}
+      backend_image: ${{ steps.meta.outputs.backend_image }}
+      frontend_image: ${{ steps.meta.outputs.frontend_image }}
+      backend_digest: ${{ steps.backend_build.outputs.digest }}
+      frontend_digest: ${{ steps.frontend_build.outputs.digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set image metadata
+        id: meta
+        run: |
+          echo "sha_short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "backend_image=${{ secrets.REGISTRY_HOST }}/${{ vars.REGISTRY_REPOSITORY }}/backend" >> "$GITHUB_OUTPUT"
+          echo "frontend_image=${{ secrets.REGISTRY_HOST }}/${{ vars.REGISTRY_REPOSITORY }}/frontend" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure Docker mTLS client certificate
+        env:
+          REGISTRY_HOST: ${{ secrets.REGISTRY_HOST }}
+          REGISTRY_MTLS_CLIENT_CERT: ${{ secrets.REGISTRY_MTLS_CLIENT_CERT }}
+          REGISTRY_MTLS_CLIENT_KEY: ${{ secrets.REGISTRY_MTLS_CLIENT_KEY }}
+        run: |
+          test -n "${REGISTRY_HOST}"
+          test -n "${REGISTRY_MTLS_CLIENT_CERT}"
+          test -n "${REGISTRY_MTLS_CLIENT_KEY}"
+
+          cert_dir="${HOME}/.docker/certs.d/${REGISTRY_HOST}"
+          mkdir -p "${cert_dir}"
+
+          printf '%s\n' "${REGISTRY_MTLS_CLIENT_CERT}" > "${cert_dir}/client.cert"
+          printf '%s\n' "${REGISTRY_MTLS_CLIENT_KEY}" > "${cert_dir}/client.key"
+
+          chmod 600 "${cert_dir}/client.key"
+
+      - name: Login to registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.REGISTRY_HOST }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build backend image
+        id: backend_build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: dockerfile/backend.dockerfile
+          target: runtime
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.backend_image }}:latest
+            ${{ steps.meta.outputs.backend_image }}:${{ github.sha }}
+
+      - name: Build frontend image
+        id: frontend_build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: dockerfile/frontend.dockerfile
+          target: static
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.frontend_image }}:latest
+            ${{ steps.meta.outputs.frontend_image }}:${{ github.sha }}
+
+  # フェーズ3: デプロイ（常時実行）
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    needs:
+      - build_and_push
+    environment: production
+    steps:
+      - name: Deploy phase plan
+        run: |
+          echo "Target endpoint: https://registry.syumatsucamera.com/v2/"
+          echo "Mode: mTLS request"
+
+      - name: Configure mTLS cert for deploy request
+        env:
+          REGISTRY_MTLS_CLIENT_CERT: ${{ secrets.REGISTRY_MTLS_CLIENT_CERT }}
+          REGISTRY_MTLS_CLIENT_KEY: ${{ secrets.REGISTRY_MTLS_CLIENT_KEY }}
+        run: |
+          test -n "${REGISTRY_MTLS_CLIENT_CERT}"
+          test -n "${REGISTRY_MTLS_CLIENT_KEY}"
+          printf '%s\n' "${REGISTRY_MTLS_CLIENT_CERT}" > /tmp/registry-client.crt
+          printf '%s\n' "${REGISTRY_MTLS_CLIENT_KEY}" > /tmp/registry-client.key
+          chmod 600 /tmp/registry-client.key
+
+      - name: Deploy request over mTLS
+        run: |
+          status_code="$(
+            curl -sS -o /tmp/registry_v2_body.txt -w '%{http_code}' \
+              --cert /tmp/registry-client.crt \
+              --key /tmp/registry-client.key \
+              https://registry.syumatsucamera.com/v2/
+          )"
+          echo "registry /v2/ status=${status_code}"
+          if [ "${status_code}" != "200" ] && [ "${status_code}" != "401" ]; then
+            echo "mTLS deploy request failed: unexpected status ${status_code}"
+            cat /tmp/registry_v2_body.txt
+            exit 1
+          fi
+
+  # フェーズ4: 通知（成功/失敗とも送る）
+  notify:
+    name: Notify
+    runs-on: ubuntu-latest
+    needs:
+      - ci
+      - build_and_push
+      - deploy
+    if: always()
+    steps:
+      - name: Build notification metadata
+        id: notify_meta
+        env:
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+          SHA_SHORT: ${{ needs.build_and_push.outputs.sha_short }}
+          ENV_NAME: ${{ vars.ENV_NAME }}
+        run: |
+          result_upper=$(printf '%s' "${DEPLOY_RESULT}" | tr '[:lower:]' '[:upper:]')
+          echo "subject=[syumatsucamera][deploy][${result_upper}] ${SHA_SHORT} ${ENV_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Notification preview
+        run: |
+          echo "Subject: ${{ steps.notify_meta.outputs.subject }}"
+          echo "Run URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Send mail
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.MAIL_SMTP_HOST }}
+          server_port: ${{ secrets.MAIL_SMTP_PORT }}
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: ${{ steps.notify_meta.outputs.subject }}
+          to: ${{ secrets.MAIL_TO }}
+          from: ${{ secrets.MAIL_FROM }}
+          secure: true
+          body: |
+            repository: ${{ github.repository }}
+            actor: ${{ github.actor }}
+            branch: ${{ github.ref_name }}
+            sha: ${{ github.sha }}
+            ci_result: ${{ needs.ci.result }}
+            build_push_result: ${{ needs.build_and_push.result }}
+            deploy_result: ${{ needs.deploy.result }}
+            run_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
