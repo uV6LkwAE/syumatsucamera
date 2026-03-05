@@ -1,0 +1,30 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: app-cronjob
+spec:
+  schedule: "0 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          imagePullSecrets:
+            - name: registry-credentials
+          containers:
+            - name: app-cronjob
+              image: registry.syumatsucamera.com/syumatsucamera/backend:latest
+              imagePullPolicy: Always
+              command:
+                - python
+              args:
+                - manage.py
+                - clearsessions
+              envFrom:
+                - configMapRef:
+                    name: app-config
+                - secretRef:
+                    name: app-secret

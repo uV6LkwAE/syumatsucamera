@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  DEBUG: "False"
+  ALLOWED_HOSTS: "syumatsucamera.com,cms.syumatsucamera.com"
+  POSTGRES_DB: "syumatsucamera"
+  POSTGRES_USER: "app_prod_user"
+  POSTGRES_HOST: "postgres"
+  POSTGRES_PORT: "5432"
+  REDIS_URL: "redis://redis:6379/0"
+  LOG_DIR: "/var/log/syumatsucamera"
+  LOG_RETENTION_DAYS: "30"
+  APP_LOG_LEVEL: "INFO"
+  LOG_FILE_INFO: "info.log"
+  LOG_FILE_CRITICAL: "critical.log"

@@ -10,6 +10,16 @@
 - 本番環境かつ恒久的なメッセージを残す場合、logger.logに書き出してください。
 - 環境変数がいい例ですが、何か足りないデータがあったときフォールバックせずにすぐ落としてください。
 
+## 実装ルール（追加）
+- `__init__.py` には原則何も書かない
+- コメントアウトはコードの右に書かない。必ずコメントしたい行の上に書くこと
+- docstringは一行形式を使わず、複数行形式で統一する
+  ```python
+  """
+  固定窓レート制限キーを返す。
+  """
+  ```
+
 ## 0. 技術スタック
 フロントエンド: React
 バックエンド: DjangoRestFramework
@@ -24,23 +34,21 @@ Django稼働用
 - Postgres
 - Redis
 - Frontend
-- Ollama
 devのみVite動かす用途
 
 本番環境（k3s）
 - クラスタ: k3s（オンプレミス UbuntuServer 上）
-- Ingress: IngressController（Nginx）
 - デプロイ単位:
-  - nginx: Deployment（Ingress + 静的ファイル配信）
+  - cloudflared: Deployment（Cloudflare Tunnel 終端）
+  - nginx: Deployment（入口 gateway + 静的ファイル配信）
     ビルド済みReact成果物（静的ファイル）はNginxで配信する（frontend Podは不要）
   - backend: Deployment（Django/DRF）
   - redis: Deployment
   - postgres: StatefulSet
   - worker: Deployment（Celery）
   - cronjob: CronJob（定期実行）
-  - Ollama: 常駐させ、Gemma2を動かす
 - 外部公開:
-  - ポート開放は行わず、Cloudflare Tunnel 経由で Ingress に到達させる
+  - NodePortは開放せず、Cloudflare Tunnel（cloudflared Pod）経由で gateway Nginx に到達させる
   - `/cms` は `cms.syumatsucamera.com` として公開し、Cloudflare Access（SSO）で認証する
 
 
@@ -50,6 +58,7 @@ LCPやCLSスコアが悪いため、高速なSPAに移行するのが目的。
 それに伴いアプリを1から作り直し、根本から設計し直す。
 
 実装ポリシー
+backend_app_structure.md も確認すること。
 - 冪等であること
 - 高速であること
 - ロジックは使い回さず可能な限り共通化する
@@ -60,14 +69,13 @@ LCPやCLSスコアが悪いため、高速なSPAに移行するのが目的。
 ## 1. システム全体要件
 - 開発環境ではDockerComposeを利用する。
 - 本番環境ではオンプレミスのUbuntuServerでk3sを用いて稼働させる。
-- 本番のIngressはk3sのIngressController(Nginx)を利用する。
 - ポート開放は行わず、CloudFlareTunnelを利用する。
 ```
 Internet
   ↓
-CloudflareTunnel
+CloudflareTunnel (cloudflared Pod)
   ↓
-nginx (Ingress Controller)
+nginx (gateway)
   ├─ /       → frontend
   ├─ /api    → backend
   └─ /cms    → 非公開（Cloudflare Accessで認証）
@@ -165,7 +173,41 @@ syumatsucamera.com
   - 同カテゴリから人気順で最大6件
   - 足りない分は全カテゴリから補完
 - カテゴリパンくず、タグ、著者情報、PR/AD表示を出し分け。
+- 記事ごとに非収益フラグ（`non_monetized`）を設定可能にする。
+- `non_monetized` が有効な記事では AdSense スクリプトを読み込まず、広告枠コンポーネントも描画しない。
 - 本文はOGP埋め込みをレンダリングし、画像URLをCDN用に変換。
+
+## 3.3.1 記事ページのSEOメタ（OGP/Twitter）
+- 記事詳細ページでは、公開時に以下のSEOメタを出力する。
+  - `<title>`（例: `記事タイトル | サイト名`）
+  - `<meta name="description">`
+  - `<link rel="canonical">`
+  - OGPメタ（`og:*`）
+  - Twitter Cardメタ（`twitter:*`）
+- `og:type` は記事ページでは `article` を使用する。
+- `og:locale` は `ja_JP` を使用する。
+- `og:url` / `canonical` は公開URL（正規URL）を使用する。
+- `og:image` / `twitter:image` は記事のサムネイル画像URLを使用する。
+- `description` 系は記事要約（summary）を基本とする。
+- サムネイル未確定時はデフォルトサムネイルを使用してメタを構成する。
+
+出力対象の例（方針）:
+
+- `<title>記事タイトル | サイト名</title>`
+- `<meta name="description" content="ページの説明">`
+- `<link rel="canonical" href="https://example.com/articles/slug/">`
+- `<meta property="og:site_name" content="サイト名">`
+- `<meta property="og:locale" content="ja_JP">`
+- `<meta property="og:type" content="article">`
+- `<meta property="og:title" content="記事タイトル">`
+- `<meta property="og:description" content="ページの説明">`
+- `<meta property="og:url" content="https://example.com/articles/slug/">`
+- `<meta property="og:image" content="https://example.com/media/ogp/slug.jpg">`
+- `<meta name="twitter:card" content="summary_large_image">`
+- `<meta name="twitter:title" content="記事タイトル">`
+- `<meta name="twitter:description" content="ページの説明">`
+- `<meta name="twitter:image" content="https://example.com/media/ogp/slug.jpg">`
+- `<meta name="twitter:site" content="@syumatsucamera">`
 
 ## 3.3 記事表示時の要件
 記事を表示するときにAPIから取得した記事を以下のように加工する必要がある。
@@ -196,7 +238,8 @@ syumatsucamera.com
 
 5. OGPカードを挿入する（必要な場合）
 - `<a>` を見つけたら `href` を正規化して `ogp_by_url` を引く
-- 対象ならリンクは残しつつ、その直後に自作の `<OgpCard>` を追加する方針で差し込む
+- 対象がURL単体リンクで `ogp_by_url` に該当データがある場合は、自作の `<OgpCard>` に置換する（元リンクは表示しない）
+- `ogp_by_url` に該当データがない場合のみ、元の `<a>` リンクをそのまま表示する
 
 ### 記事本文内の埋め込み方針（X / OGP）
 
@@ -413,7 +456,12 @@ HackMDからの読み取りに対応するプラグインを自前で実装す�
 マークダウンをJoditへインポートする。
 逆はしない。
 - hackmdのAPIを利用し、インポートに対応。
-- 画像アップロードAPI経由で `/media/<article_id>/images/` へ保存。
+- 画像アップロードAPI経由で記事内画像を保存する。
+  - 本文にはCDNの完全URLを保存しない。相対パスを保存する。
+  - 公開時に本文パース処理で `cdn_base_url` を付与してCDNリンクへ置換する。
+  - 画像ファイル名はアップロード時点でUUID名を確定する（後段処理でリネームしない）。
+  - フロントは `FormData.append("file", file, "{uuid}.{ext}")` で送信時ファイル名のみUUID化する実装を採用する。
+  - サーバー側でUUID形式/拡張子/MIMEを検証し、必要なら再採番可能な設計にする。
 - サムネイル:
   - サムネイル方式は以下から選択する。
     1. 通常アップロード（写真記事向け）
@@ -422,20 +470,50 @@ HackMDからの読み取りに対応するプラグインを自前で実装す�
   - `ARTICLE.thumbnail_mode` で方式を管理する（`uploaded / preset_logo / auto_generated`）。
   - 規定サムネイルとデフォルトサムネイルは同一の固定画像を使用する。
   - タイトル自動生成は `1200x630` 固定サイズで生成する（左ロゴ + 右タイトル構成）。
+  - デザインテンプレートによっては、背景に薄い透過度の画像を配置する場合がある。
+  - タイトル自動生成はAPI側（サーバー側）で行う。クライアント側では生成しない。
+  - 自動生成の出力形式は `jpg` を基本とする。
   - 自動生成用デザインテンプレートは別テーブルで管理する（複数選択可能）。
   - 実際に公開側で参照するサムネイルは全モード共通で `thumbnail_asset_id` に統一する。
   - モードは後から切り替え可能とする。
-  - 既存サムネイルの上書きは許可する。旧サムネイルは新サムネイル反映成功後に削除する。
+  - 既存サムネイルの上書きは許可する。`thumbnail_mode` 変更時も含め、旧サムネイルは新サムネイル反映成功後に削除する。
   - スタッフも3方式すべて選択可能とする。
   - 自動生成失敗時は保存自体は失敗させず、デフォルトサムネイルを設定してフォールバックする。
   - 自動生成失敗時のエラー内容は `MEDIA_ASSET` 側に保存し、`ARTICLE` には保持しない。
+  - タイトル自動生成サムネイルは、プレビュー生成と保存確定を分離する。
+    - プレビュー生成API: サーバー側で画像を生成し、サーバーへ保存せずクライアントへ生成物を返すだけにする。
+    - 記事サムネイルの確定は、ユーザーが記事を保存したタイミングで行う（プレビュー表示だけでは確定しない）。
+    - 保存時は、クライアントが保持している生成済みサムネイル画像をPOSTして保存する。
+  - 生成済みサムネイル画像をクライアントから保存する際も、通常アップロード画像と同様にサーバー側で検証する。
+    - 検証対象はファイルサイズ上限とMIME typeのみとする。
+    - 明らかな異常入力（例: `100MB` 超過、`pdf` など画像以外）を弾く目的で実施する。
+    - 許容ファイルサイズ上限は `50MB` とする。
+    - アップロード後に画像処理ジョブでリサイズ/加工が走る前提のため、保存時点では上記の最低限検証に留める。
+- SEOメタ設定:
+  - 記事編集画面で `twitter:card` の種別を選択できるようにする。
+  - 選択肢は `summary` / `summary_large_image` とする。
+  - 公開時の `<meta name="twitter:card">` は記事設定の値を使用する。
+- 収益化設定:
+  - 記事編集画面で「非収益記事」を選択可能にする。
+  - 非収益設定は `ARTICLE_OPTION`（`OPTION.code = non_monetized`）で管理する。
+  - 非収益記事は公開側で AdSense スクリプトを読み込まない。
 - 管理者は記事の公開,非公開を選択可能
+- 管理者は公開承認フローをスキップして直接公開できる。
+- ただし、画像処理ジョブが完了していない記事は公開できない（管理者も含む）。
 - スタッフは記事自体を公開することはできない。
 スタッフは記事執筆完了時に公開リクエストを行い、管理者が承認する。
 承認したら公開する。
 - 編集削除時に不必要になった画像を一緒に削除
+- 記事編集APIでは、本文内画像の差分（追加・削除対象）を検証して処理する。
+  - API入力として、追加画像と削除対象画像の情報を受け取る前提とする。
+  - サーバー側でも本文HTMLと照合し、矛盾があればエラーにする。
+  - 削除対象画像は、原本と派生を両方削除する。
+  - 削除対象の `MEDIA_ASSET` レコードも整合を保って更新/削除する。
+- 記事削除時は、記事に紐づく画像をサムネイルを含めてすべて物理削除してよい。
+  - 対象: 本文画像（原本/派生）、サムネイル（uploaded/auto_generated の実体）
+  - `preset_logo` の固定静的ファイルは共有資産のため削除対象にしない。
 - 画像ファイルの名前が重複したときの対策は？
-  - アップロード時にファイル名はuuidへ変換する。
+  - アップロード時にファイル名はuuidへ変換する（記事内画像・サムネイル共通）。
   - Djangoが同名アップロード時に付与するプレフィックスによる回避策（例: (1)）を不要にする。
 - slug:
   - slugはタイトルから翻訳して生成する。
@@ -444,45 +522,33 @@ HackMDからの読み取りに対応するプラグインを自前で実装す�
   - category.slug / article.slug を変更した場合はURLに反映する。
   - 過去slug（過去URL）は切り捨てる（リダイレクトは行わない）ことを要件として明記する。
 - 記事編集を行うときはフラグを立てて、悲観ロックで管理する。
-- 記事本文をもとに、生成ボタンを押したときに100文字以内のサマリーを自動生成する。
-Gemma2を利用し、共通のModelFileを用意する。
-
-```
-FROM gemma2:2b-instruct-q4_K_M
-
-SYSTEM """
-あなたは要約生成器です。
-与えられた本文だけを根拠に、日本語で100文字以内の要約を1文で出力してください。
-本文にない情報を追加しないでください。
-出力は要約文のみ。
-"""
-
-TEMPLATE """
-{{ .System }}
-
-本文:
-{{ .Prompt }}
-
-要約:
-"""
-
-PARAMETER temperature 0.2
-PARAMETER num_predict 120
-PARAMETER stop "\n"
-```
-
-`"keep_alive": -1` を設定し、モデルをアンロードさせない。
+  - 他者が編集中の記事は編集画面をブロックし、編集不可にする。
+  - フロントから定期的にTTL延長APIを呼び出してロックを延長する（疎通確認を兼ねる）。
+  - TTL延長の呼び出し間隔は `5分` とする。
+  - ユーザーがタブを閉じる/離脱した場合は延長されなくなるため、TTL切れで自然解放する。
+  - ロック解放APIはベストエフォートで呼ぶが、最終的な解放保証はTTLに委ねる。
+  - 保存APIでもロック確認（`lock_token` 照合）を行い、ロック保持者以外の更新を拒否する。
+- 記事本文サマリーの自動生成機能は現時点では保留とする（将来要件）。
 
 ### 4.2 POSTされたあとに実行される処理
 記事作成後に処理すべきこと
 以下はワーカーに丸投げする。
 1. 記事内の画像の処理
 以下の順で実行する。
-A. 記事内の画像のファイル名をuuidに変更する。
-B. リサイズ+Exifから撮影情報取得後、透かしを挿入
-C. 終わったら、配信用のディレクトリに保存する。
-D. オリジナルの画像は別のディレクトリに保存し、公開しない。
-E. 画像処理が完了したら、記事内の画像のパスを公開用に書き換える。
+A. ジョブ開始時に対象記事をロックする（ジョブ進行中は記事をロック状態にする）。
+B. 画像処理は必ず `/temp`（一時領域）を経由して行い、正式保存先へ直接書き込まない。
+C. リサイズ+Exifから撮影情報取得後、透かしを挿入（ファイル名はアップロード時にUUID確定済み）
+D. 処理結果は一時領域に出力する。
+E. オリジナルの画像は別のディレクトリに保存し、公開しない。
+F. ジョブ内の画像処理がすべて終了するまで、一時領域から正式保存先へ移動しない。
+G. ジョブ内のすべての処理が最後まで完了した場合のみ、一時領域から正式保存先へ移動して確定する（コミットする）。
+H. 失敗時は正式保存先へ反映しない。
+I. 本文HTMLの画像パスは書き換えない（公開時レンダリングでCDNリンクへ置換する）。
+J. 記事編集APIから渡された削除対象画像について、原本/派生を削除し、関連する `MEDIA_ASSET` を整理する。
+K. 正常終了・異常終了のどちらでも、最終処理で対象 `/temp` ディレクトリ配下をクリーンアップする。
+L. `/temp` クリーンアップ完了後に、ジョブ自身が記事ロックを解除する（成功/失敗時ともに実施）。
+M. 画像処理ジョブが完了するまで記事は公開不可とする。
+N. 画像処理ジョブは共用 `tmp` を利用するため並列実行しない（グローバルロックで直列化する）。
 2. OGPレコード作成
 記事内のリンクのOGPレコードを作成するため、リンク先をfetchする。
 結果をOGPテーブルに書き込む。
@@ -559,6 +625,8 @@ ER_DIAGRAM.md を参照。
 - 対象ジョブ（記事POST後に走るワーカー処理で、全体を単一ジョブとして扱う場合）
   - `lock:job:postprocess_article`（記事の後処理を丸ごと1本として排他したい場合のみ）
   - 通常は 2. の対象単位ロックを使い、グローバルロックは使わない（全記事が直列になるのを避けるため）
+  - ただし画像処理ジョブは、共用 `tmp` を使う運用のためグローバルロックで直列化する（並列不可）。
+    - 例: `lock:job:process_images`
 
 2. 対象単位ロック（記事/アセット単位で同時実行を禁止）
 - キー形式: `lock:{target_type}:{target_id}:{job_name}`
@@ -652,7 +720,17 @@ cmsapp/management/commands内に定期ジョブ用のスクリプトを実装。
 - 派生のみNginxで静的配信し、原本側はルーティングを作らない。
 - 画像の配信はCloudflareのCDNに任せる。
 - React+DjangoRestFrameworkの構成のため、Djangoテンプレートフィルターは利用しない。
-- CDN用のURL変換はサーバー側で加工して返却する必要がある可能性がある（詳細は後で詰める）。
+- 本文HTMLにはCDNの完全URLをハードコードしない。相対パスを保存する。
+- CDN用のURL変換は公開側の本文パース処理（画像 / OGP / X埋め込みの変換と同じパス）で行う。
+- 記事内画像とサムネイルは保存ディレクトリを分ける。
+  - 記事内画像（原本）: `MEDIA_ROOT/original/articles/{article_id}/images/{asset_uuid}.{ext}`
+  - 記事内画像（派生）: `MEDIA_ROOT/derived/articles/{article_id}/images/{asset_uuid}.{ext}`
+  - サムネイル uploaded（原本）: `MEDIA_ROOT/original/articles/{article_id}/thumbnails/{asset_uuid}.{ext}`
+  - サムネイル uploaded（派生）: `MEDIA_ROOT/derived/articles/{article_id}/thumbnails/{asset_uuid}.{ext}`
+  - サムネイル auto_generated（公開用のみ）: `MEDIA_ROOT/derived/articles/{article_id}/thumbnails/{asset_uuid}.{ext}`
+  - サムネイル preset_logo（固定静的ファイル）: `frontend/public/site-thumbnails/syumatsucamera-preset-1200x630.{ext}`
+- 記事内画像・サムネイルのファイル名はランダムUUIDを使用し、元ファイル名は保存パスに使わない。
+- 拡張子は固定しない（`jpg` 強制しない）。実際の出力形式に合わせる。
 
 ---
 
@@ -660,13 +738,3 @@ cmsapp/management/commands内に定期ジョブ用のスクリプトを実装。
 - NATSは利用しない。
 - ワーカーはCeleryを利用する。
 - 詳細（ブローカー/リトライ/キュー設計等）は後で詰める。
-
-
-## 考慮すべき事項
-- 排他ロック
-- 画像処理ディレクトリ問題
-- 差分を検知して画像処理や見出しのJSON化を行う？
-差分の管理が必要そう
-- 関連記事のスコア計算をどうするか？
-- タスク失敗時のretlyの設定
-- 

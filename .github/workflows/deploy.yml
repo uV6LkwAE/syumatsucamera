@@ -75,9 +75,9 @@ jobs:
     outputs:
       sha_short: ${{ steps.meta.outputs.sha_short }}
       backend_image: ${{ steps.meta.outputs.backend_image }}
-      frontend_image: ${{ steps.meta.outputs.frontend_image }}
+      nginx_image: ${{ steps.meta.outputs.nginx_image }}
       backend_digest: ${{ steps.backend_build.outputs.digest }}
-      frontend_digest: ${{ steps.frontend_build.outputs.digest }}
+      nginx_digest: ${{ steps.nginx_build.outputs.digest }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -87,7 +87,7 @@ jobs:
         run: |
           echo "sha_short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           echo "backend_image=${{ secrets.REGISTRY_HOST }}/${{ vars.REGISTRY_REPOSITORY }}/backend" >> "$GITHUB_OUTPUT"
-          echo "frontend_image=${{ secrets.REGISTRY_HOST }}/${{ vars.REGISTRY_REPOSITORY }}/frontend" >> "$GITHUB_OUTPUT"
+          echo "nginx_image=${{ secrets.REGISTRY_HOST }}/${{ vars.REGISTRY_REPOSITORY }}/nginx" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -129,17 +129,17 @@ jobs:
             ${{ steps.meta.outputs.backend_image }}:latest
             ${{ steps.meta.outputs.backend_image }}:${{ github.sha }}
 
-      - name: Build frontend image
-        id: frontend_build
+      - name: Build nginx image
+        id: nginx_build
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: dockerfile/frontend.dockerfile
-          target: static
+          file: dockerfile/nginx.dockerfile
+          target: runtime
           push: true
           tags: |
-            ${{ steps.meta.outputs.frontend_image }}:latest
-            ${{ steps.meta.outputs.frontend_image }}:${{ github.sha }}
+            ${{ steps.meta.outputs.nginx_image }}:latest
+            ${{ steps.meta.outputs.nginx_image }}:${{ github.sha }}
 
   # フェーズ3: デプロイ（常時実行）
   deploy:
@@ -151,32 +151,35 @@ jobs:
     steps:
       - name: Deploy phase plan
         run: |
-          echo "Target endpoint: https://registry.syumatsucamera.com/v2/"
-          echo "Mode: mTLS request"
+          echo "Target endpoint: https://apply.syumatsucamera.com/"
+          echo "Mode: mTLS request (POST)"
 
       - name: Configure mTLS cert for deploy request
         env:
-          REGISTRY_MTLS_CLIENT_CERT: ${{ secrets.REGISTRY_MTLS_CLIENT_CERT }}
-          REGISTRY_MTLS_CLIENT_KEY: ${{ secrets.REGISTRY_MTLS_CLIENT_KEY }}
+          APPLY_MTLS_CLIENT_CERT: ${{ secrets.APPLY_MTLS_CLIENT_CERT }}
+          APPLY_MTLS_CLIENT_KEY: ${{ secrets.APPLY_MTLS_CLIENT_KEY }}
         run: |
-          test -n "${REGISTRY_MTLS_CLIENT_CERT}"
-          test -n "${REGISTRY_MTLS_CLIENT_KEY}"
-          printf '%s\n' "${REGISTRY_MTLS_CLIENT_CERT}" > /tmp/registry-client.crt
-          printf '%s\n' "${REGISTRY_MTLS_CLIENT_KEY}" > /tmp/registry-client.key
-          chmod 600 /tmp/registry-client.key
+          test -n "${APPLY_MTLS_CLIENT_CERT}"
+          test -n "${APPLY_MTLS_CLIENT_KEY}"
+          printf '%s\n' "${APPLY_MTLS_CLIENT_CERT}" > /tmp/apply-client.crt
+          printf '%s\n' "${APPLY_MTLS_CLIENT_KEY}" > /tmp/apply-client.key
+          chmod 600 /tmp/apply-client.key
 
       - name: Deploy request over mTLS
         run: |
           status_code="$(
-            curl -sS -o /tmp/registry_v2_body.txt -w '%{http_code}' \
-              --cert /tmp/registry-client.crt \
-              --key /tmp/registry-client.key \
-              https://registry.syumatsucamera.com/v2/
+            curl -sS -o /tmp/apply_response_body.txt -w '%{http_code}' \
+              --request POST \
+              --cert /tmp/apply-client.crt \
+              --key /tmp/apply-client.key \
+              --header 'Content-Type: application/json' \
+              --data '{}' \
+              https://apply.syumatsucamera.com/
           )"
-          echo "registry /v2/ status=${status_code}"
-          if [ "${status_code}" != "200" ] && [ "${status_code}" != "401" ]; then
+          echo "apply endpoint status=${status_code}"
+          if [ "${status_code}" != "200" ] && [ "${status_code}" != "202" ]; then
             echo "mTLS deploy request failed: unexpected status ${status_code}"
-            cat /tmp/registry_v2_body.txt
+            cat /tmp/apply_response_body.txt
             exit 1
           fi
 

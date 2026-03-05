@@ -45,7 +45,6 @@
   - `DEPLOY_USER`
   - `REGISTRY_HOST`
   - `REGISTRY_REPOSITORY`
-  - `K8S_NAMESPACE`
   - `ENV_NAME`（例: `prod`）
 
 ### 1.2 Ubuntu 側の準備（既存サービスに影響しない範囲）

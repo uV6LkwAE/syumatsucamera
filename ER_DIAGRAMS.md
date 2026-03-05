@@ -161,7 +161,8 @@ erDiagram
 ## オプション運用メモ
 
 - `is_pr` / `is_ad` は `ARTICLE` カラムで持たず、`ARTICLE_OPTION` で管理する。
-- `OPTION.code` に `pr` / `ad` を登録し、記事への適用は `ARTICLE_OPTION` で表現する。
+- `OPTION.code` に `pr` / `ad` / `non_monetized` を登録し、記事への適用は `ARTICLE_OPTION` で表現する。
+- `non_monetized` が付与された記事は、公開側で AdSense スクリプトを読み込まない。
 - 将来オプション追加（例: `sponsored`）は `OPTION` 追加のみで対応する。
 
 ## CONTACT運用メモ
