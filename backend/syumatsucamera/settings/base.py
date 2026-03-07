@@ -70,6 +70,7 @@ _REQUIRED_ENV_VARS = [
     "SECRET_KEY",
     "DEBUG",
     "ALLOWED_HOSTS",
+    "DJANGO_CSRF_TRUSTED_ORIGINS",
     "POSTGRES_DB",
     "POSTGRES_USER",
     "POSTGRES_PASSWORD",
@@ -78,6 +79,12 @@ _REQUIRED_ENV_VARS = [
     "REDIS_URL",
     "REDIS_CONNECT_TIMEOUT",
     "REDIS_SOCKET_TIMEOUT",
+    "TURNSTILE_SITE_KEY",
+    "TURNSTILE_SECRET_KEY",
+    "EMAIL_HOST",
+    "EMAIL_PORT",
+    "EMAIL_HOST_USER",
+    "EMAIL_HOST_PASSWORD",
     "LOG_DIR",
     "LOG_RETENTION_DAYS",
     "APP_LOG_LEVEL",
@@ -95,6 +102,11 @@ if _missing:
 SECRET_KEY = _required_env("SECRET_KEY")
 DEBUG = _required_bool("DEBUG")
 ALLOWED_HOSTS = [v.strip() for v in _required_env("ALLOWED_HOSTS").split(",") if v.strip()]
+CSRF_TRUSTED_ORIGINS = [
+    v.strip()
+    for v in _required_env("DJANGO_CSRF_TRUSTED_ORIGINS").split(",")
+    if v.strip()
+]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -151,6 +163,14 @@ DATABASES = {
 REDIS_URL = _required_env("REDIS_URL")
 REDIS_CONNECT_TIMEOUT = _required_env("REDIS_CONNECT_TIMEOUT")
 REDIS_SOCKET_TIMEOUT = _required_env("REDIS_SOCKET_TIMEOUT")
+TURNSTILE_SITE_KEY = _required_env("TURNSTILE_SITE_KEY")
+TURNSTILE_SECRET_KEY = _required_env("TURNSTILE_SECRET_KEY")
+
+EMAIL_HOST = _required_env("EMAIL_HOST")
+EMAIL_PORT = _required_int("EMAIL_PORT")
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = _required_env("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = _required_env("EMAIL_HOST_PASSWORD")
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
