@@ -22,3 +22,7 @@ frontend/dist/
 .DS_Store
 .vscode/
 .idea/
+
+
+# docs
+todo.md
