@@ -76,14 +76,12 @@ _REQUIRED_ENV_VARS = [
     "POSTGRES_HOST",
     "POSTGRES_PORT",
     "REDIS_URL",
+    "REDIS_CONNECT_TIMEOUT",
+    "REDIS_SOCKET_TIMEOUT",
     "LOG_DIR",
     "LOG_RETENTION_DAYS",
     "APP_LOG_LEVEL",
-    "LOG_FILE_ALL",
-    "LOG_FILE_DEBUG",
     "LOG_FILE_INFO",
-    "LOG_FILE_WARNING",
-    "LOG_FILE_ERROR",
     "LOG_FILE_CRITICAL",
 ]
 
@@ -150,6 +148,10 @@ DATABASES = {
     }
 }
 
+REDIS_URL = _required_env("REDIS_URL")
+REDIS_CONNECT_TIMEOUT = _required_env("REDIS_CONNECT_TIMEOUT")
+REDIS_SOCKET_TIMEOUT = _required_env("REDIS_SOCKET_TIMEOUT")
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
@@ -172,21 +174,14 @@ LOG_DIR = Path(_required_env("LOG_DIR"))
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_RETENTION_DAYS = _required_int("LOG_RETENTION_DAYS")
 APP_LOG_LEVEL = _required_env("APP_LOG_LEVEL").upper()
-LOG_FILE_ALL = _resolve_log_file_path("LOG_FILE_ALL", LOG_DIR)
-LOG_FILE_DEBUG = _resolve_log_file_path("LOG_FILE_DEBUG", LOG_DIR)
 LOG_FILE_INFO = _resolve_log_file_path("LOG_FILE_INFO", LOG_DIR)
-LOG_FILE_WARNING = _resolve_log_file_path("LOG_FILE_WARNING", LOG_DIR)
-LOG_FILE_ERROR = _resolve_log_file_path("LOG_FILE_ERROR", LOG_DIR)
 LOG_FILE_CRITICAL = _resolve_log_file_path("LOG_FILE_CRITICAL", LOG_DIR)
 
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "filters": {
-        "debug_only": {"()": ExactLevelFilter, "level": logging.DEBUG},
         "info_only": {"()": ExactLevelFilter, "level": logging.INFO},
-        "warning_only": {"()": ExactLevelFilter, "level": logging.WARNING},
-        "error_only": {"()": ExactLevelFilter, "level": logging.ERROR},
         "critical_only": {"()": ExactLevelFilter, "level": logging.CRITICAL},
     },
     "formatters": {
@@ -200,25 +195,6 @@ LOGGING = {
             "formatter": "verbose",
             "level": APP_LOG_LEVEL,
         },
-        "logger_file": {
-            "class": "logging.handlers.TimedRotatingFileHandler",
-            "filename": LOG_FILE_ALL,
-            "when": "midnight",
-            "backupCount": LOG_RETENTION_DAYS,
-            "formatter": "verbose",
-            "encoding": "utf-8",
-            "level": "DEBUG",
-        },
-        "debug_file": {
-            "class": "logging.handlers.TimedRotatingFileHandler",
-            "filename": LOG_FILE_DEBUG,
-            "when": "midnight",
-            "backupCount": LOG_RETENTION_DAYS,
-            "formatter": "verbose",
-            "encoding": "utf-8",
-            "level": "DEBUG",
-            "filters": ["debug_only"],
-        },
         "info_file": {
             "class": "logging.handlers.TimedRotatingFileHandler",
             "filename": LOG_FILE_INFO,
@@ -228,26 +204,6 @@ LOGGING = {
             "encoding": "utf-8",
             "level": "INFO",
             "filters": ["info_only"],
-        },
-        "warning_file": {
-            "class": "logging.handlers.TimedRotatingFileHandler",
-            "filename": LOG_FILE_WARNING,
-            "when": "midnight",
-            "backupCount": LOG_RETENTION_DAYS,
-            "formatter": "verbose",
-            "encoding": "utf-8",
-            "level": "WARNING",
-            "filters": ["warning_only"],
-        },
-        "error_file": {
-            "class": "logging.handlers.TimedRotatingFileHandler",
-            "filename": LOG_FILE_ERROR,
-            "when": "midnight",
-            "backupCount": LOG_RETENTION_DAYS,
-            "formatter": "verbose",
-            "encoding": "utf-8",
-            "level": "ERROR",
-            "filters": ["error_only"],
         },
         "critical_file": {
             "class": "logging.handlers.TimedRotatingFileHandler",
@@ -261,31 +217,26 @@ LOGGING = {
         },
     },
     "root": {
-        "handlers": ["console", "logger_file"],
+        "handlers": ["console", "info_file", "critical_file"],
         "level": APP_LOG_LEVEL,
     },
     "loggers": {
         "app": {
             "handlers": [
                 "console",
-                "logger_file",
-                "debug_file",
                 "info_file",
-                "warning_file",
-                "error_file",
                 "critical_file",
             ],
-            "level": "DEBUG",
+            "level": "INFO",
             "propagate": False,
         },
         "django.request": {
             "handlers": [
                 "console",
-                "logger_file",
-                "error_file",
+                "info_file",
                 "critical_file",
             ],
-            "level": "ERROR",
+            "level": "INFO",
             "propagate": False,
         },
     },
