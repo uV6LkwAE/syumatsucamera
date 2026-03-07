@@ -17,6 +17,7 @@ frontend/dist/
 
 # Docker volumes / local runtime
 *.log
+backend/logs
 
 # OS / IDE
 .DS_Store
