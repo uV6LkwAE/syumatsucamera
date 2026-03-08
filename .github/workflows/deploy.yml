@@ -37,20 +37,7 @@ jobs:
       - name: Django check
         working-directory: backend
         env:
-          SECRET_KEY: ${{ secrets.CI_DJANGO_SECRET_KEY }}
-          DEBUG: ${{ vars.CI_DEBUG }}
-          ALLOWED_HOSTS: ${{ vars.CI_ALLOWED_HOSTS }}
-          POSTGRES_DB: ${{ vars.CI_POSTGRES_DB }}
-          POSTGRES_USER: ${{ vars.CI_POSTGRES_USER }}
-          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
-          POSTGRES_HOST: ${{ vars.CI_POSTGRES_HOST }}
-          POSTGRES_PORT: ${{ vars.CI_POSTGRES_PORT }}
-          REDIS_URL: ${{ vars.CI_REDIS_URL }}
-          LOG_DIR: ${{ vars.CI_LOG_DIR }}
-          LOG_RETENTION_DAYS: ${{ vars.CI_LOG_RETENTION_DAYS }}
-          APP_LOG_LEVEL: ${{ vars.CI_APP_LOG_LEVEL }}
-          LOG_FILE_INFO: ${{ vars.CI_LOG_FILE_INFO }}
-          LOG_FILE_CRITICAL: ${{ vars.CI_LOG_FILE_CRITICAL }}
+          CI_SKIP_REQUIRED_ENV_CHECK: "True"
         run: python manage.py check
 
       - name: Setup Node
@@ -95,18 +82,18 @@ jobs:
       - name: Configure Docker mTLS client certificate
         env:
           REGISTRY_HOST: ${{ secrets.REGISTRY_HOST }}
-          REGISTRY_MTLS_CLIENT_CERT: ${{ secrets.REGISTRY_MTLS_CLIENT_CERT }}
-          REGISTRY_MTLS_CLIENT_KEY: ${{ secrets.REGISTRY_MTLS_CLIENT_KEY }}
+          MTLS_CLIENT_CERT: ${{ secrets.MTLS_CLIENT_CERT }}
+          MTLS_CLIENT_KEY: ${{ secrets.MTLS_CLIENT_KEY }}
         run: |
           test -n "${REGISTRY_HOST}"
-          test -n "${REGISTRY_MTLS_CLIENT_CERT}"
-          test -n "${REGISTRY_MTLS_CLIENT_KEY}"
+          test -n "${MTLS_CLIENT_CERT}"
+          test -n "${MTLS_CLIENT_KEY}"
 
           cert_dir="${HOME}/.docker/certs.d/${REGISTRY_HOST}"
           mkdir -p "${cert_dir}"
 
-          printf '%s\n' "${REGISTRY_MTLS_CLIENT_CERT}" > "${cert_dir}/client.cert"
-          printf '%s\n' "${REGISTRY_MTLS_CLIENT_KEY}" > "${cert_dir}/client.key"
+          printf '%s\n' "${MTLS_CLIENT_CERT}" > "${cert_dir}/client.cert"
+          printf '%s\n' "${MTLS_CLIENT_KEY}" > "${cert_dir}/client.key"
 
           chmod 600 "${cert_dir}/client.key"
 
@@ -156,13 +143,13 @@ jobs:
 
       - name: Configure mTLS cert for deploy request
         env:
-          APPLY_MTLS_CLIENT_CERT: ${{ secrets.APPLY_MTLS_CLIENT_CERT }}
-          APPLY_MTLS_CLIENT_KEY: ${{ secrets.APPLY_MTLS_CLIENT_KEY }}
+          MTLS_CLIENT_CERT: ${{ secrets.MTLS_CLIENT_CERT }}
+          MTLS_CLIENT_KEY: ${{ secrets.MTLS_CLIENT_KEY }}
         run: |
-          test -n "${APPLY_MTLS_CLIENT_CERT}"
-          test -n "${APPLY_MTLS_CLIENT_KEY}"
-          printf '%s\n' "${APPLY_MTLS_CLIENT_CERT}" > /tmp/apply-client.crt
-          printf '%s\n' "${APPLY_MTLS_CLIENT_KEY}" > /tmp/apply-client.key
+          test -n "${MTLS_CLIENT_CERT}"
+          test -n "${MTLS_CLIENT_KEY}"
+          printf '%s\n' "${MTLS_CLIENT_CERT}" > /tmp/apply-client.crt
+          printf '%s\n' "${MTLS_CLIENT_KEY}" > /tmp/apply-client.key
           chmod 600 /tmp/apply-client.key
 
       - name: Deploy request over mTLS

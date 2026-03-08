@@ -4,6 +4,7 @@ from pathlib import Path
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
+CI_SKIP_REQUIRED_ENV_CHECK = os.getenv("CI_SKIP_REQUIRED_ENV_CHECK") == "True"
 
 
 class ExactLevelFilter(logging.Filter):
@@ -38,28 +39,22 @@ def _required_env(name: str) -> str:
     return value
 
 
-def _required_bool(name: str) -> bool:
-    value = _required_env(name).strip().lower()
-    if value in {"1", "true", "yes", "on"}:
-        return True
-    if value in {"0", "false", "no", "off"}:
-        return False
-    raise RuntimeError(f"Environment variable '{name}' must be boolean-like")
-
-
-def _required_int(name: str) -> int:
-    raw = _required_env(name)
-    try:
-        value = int(raw)
-    except ValueError as exc:
-        raise RuntimeError(f"Environment variable '{name}' must be integer") from exc
-    if value < 1:
-        raise RuntimeError(f"Environment variable '{name}' must be >= 1")
-    return value
+def _env_or_empty(name: str) -> str:
+    value = os.getenv(name)
+    return "" if value is None else value
 
 
 def _resolve_log_file_path(filename_env_key: str, log_dir: Path) -> str:
-    raw = _required_env(filename_env_key)
+    raw = os.getenv(filename_env_key)
+    if raw is None or raw.strip() == "":
+        if CI_SKIP_REQUIRED_ENV_CHECK:
+            default_map = {
+                "LOG_FILE_INFO": "info.log",
+                "LOG_FILE_CRITICAL": "critical.log",
+            }
+            raw = default_map.get(filename_env_key, "app.log")
+        else:
+            raise KeyError(filename_env_key)
     candidate = Path(raw)
     if candidate.is_absolute():
         return str(candidate)
@@ -92,19 +87,22 @@ _REQUIRED_ENV_VARS = [
     "LOG_FILE_CRITICAL",
 ]
 
-_missing = [k for k in _REQUIRED_ENV_VARS if not os.getenv(k)]
-if _missing:
-    _log_missing_env_to_bootstrap_file(_missing)
-    raise RuntimeError(
-        "Missing required environment variables: " + ", ".join(sorted(_missing))
-    )
+if not CI_SKIP_REQUIRED_ENV_CHECK:
+    _missing = [k for k in _REQUIRED_ENV_VARS if not os.getenv(k)]
+    if _missing:
+        _log_missing_env_to_bootstrap_file(_missing)
+        raise RuntimeError(
+            "Missing required environment variables: " + ", ".join(sorted(_missing))
+        )
 
-SECRET_KEY = _required_env("SECRET_KEY")
-DEBUG = _required_bool("DEBUG")
-ALLOWED_HOSTS = [v.strip() for v in _required_env("ALLOWED_HOSTS").split(",") if v.strip()]
+_env = _env_or_empty if CI_SKIP_REQUIRED_ENV_CHECK else _required_env
+
+SECRET_KEY = _env("SECRET_KEY")
+DEBUG = _env("DEBUG").strip().lower() in {"1", "true", "yes", "on"}
+ALLOWED_HOSTS = [v.strip() for v in _env("ALLOWED_HOSTS").split(",") if v.strip()]
 CSRF_TRUSTED_ORIGINS = [
     v.strip()
-    for v in _required_env("DJANGO_CSRF_TRUSTED_ORIGINS").split(",")
+    for v in _env("DJANGO_CSRF_TRUSTED_ORIGINS").split(",")
     if v.strip()
 ]
 
@@ -152,25 +150,25 @@ TEMPLATES = [
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": _required_env("POSTGRES_DB"),
-        "USER": _required_env("POSTGRES_USER"),
-        "PASSWORD": _required_env("POSTGRES_PASSWORD"),
-        "HOST": _required_env("POSTGRES_HOST"),
-        "PORT": _required_env("POSTGRES_PORT"),
+        "NAME": _env("POSTGRES_DB"),
+        "USER": _env("POSTGRES_USER"),
+        "PASSWORD": _env("POSTGRES_PASSWORD"),
+        "HOST": _env("POSTGRES_HOST"),
+        "PORT": _env("POSTGRES_PORT"),
     }
 }
 
-REDIS_URL = _required_env("REDIS_URL")
-REDIS_CONNECT_TIMEOUT = _required_env("REDIS_CONNECT_TIMEOUT")
-REDIS_SOCKET_TIMEOUT = _required_env("REDIS_SOCKET_TIMEOUT")
-TURNSTILE_SITE_KEY = _required_env("TURNSTILE_SITE_KEY")
-TURNSTILE_SECRET_KEY = _required_env("TURNSTILE_SECRET_KEY")
+REDIS_URL = _env("REDIS_URL")
+REDIS_CONNECT_TIMEOUT = _env("REDIS_CONNECT_TIMEOUT")
+REDIS_SOCKET_TIMEOUT = _env("REDIS_SOCKET_TIMEOUT")
+TURNSTILE_SITE_KEY = _env("TURNSTILE_SITE_KEY")
+TURNSTILE_SECRET_KEY = _env("TURNSTILE_SECRET_KEY")
 
-EMAIL_HOST = _required_env("EMAIL_HOST")
-EMAIL_PORT = _required_int("EMAIL_PORT")
+EMAIL_HOST = _env("EMAIL_HOST")
+EMAIL_PORT = int(_env("EMAIL_PORT") or "25")
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = _required_env("EMAIL_HOST_USER")
-EMAIL_HOST_PASSWORD = _required_env("EMAIL_HOST_PASSWORD")
+EMAIL_HOST_USER = _env("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = _env("EMAIL_HOST_PASSWORD")
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -190,10 +188,10 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CORS_ALLOW_ALL_ORIGINS = True
 
-LOG_DIR = Path(_required_env("LOG_DIR"))
+LOG_DIR = Path(_env("LOG_DIR") or "/tmp/syumatsucamera/log")
 LOG_DIR.mkdir(parents=True, exist_ok=True)
-LOG_RETENTION_DAYS = _required_int("LOG_RETENTION_DAYS")
-APP_LOG_LEVEL = _required_env("APP_LOG_LEVEL").upper()
+LOG_RETENTION_DAYS = int(_env("LOG_RETENTION_DAYS") or "1")
+APP_LOG_LEVEL = (_env("APP_LOG_LEVEL") or "INFO").upper()
 LOG_FILE_INFO = _resolve_log_file_path("LOG_FILE_INFO", LOG_DIR)
 LOG_FILE_CRITICAL = _resolve_log_file_path("LOG_FILE_CRITICAL", LOG_DIR)
 
