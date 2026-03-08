@@ -2,7 +2,7 @@
 
 ## 目的
 - `apply.syumatsucamera.com` への `POST` をトリガーに、Ubuntu Server 上で固定スクリプトを実行する。
-- 実行内容は `secret再適用 -> kubectl apply -> kubectl rollout restart/status` に限定する。
+- 実行内容は `secret再適用 -> kubectl apply -> 初期化確認 -> migrate -> rollout restart/status` を行う。
 - `apply` API は k3s 外（Ubuntu ホスト）で `systemd` 常駐する。
 
 ## 1. ディレクトリ作成
@@ -22,6 +22,7 @@ set -euo pipefail
 LOCK_FILE="/tmp/deploy_apply.lock"
 LOG_FILE="/var/log/apply/deploy_apply.log"
 APP_SECRET_ENV="/etc/syumatsucamera/secrets/app.secret.env"
+APPLY_SECRET_ENV="/etc/syumatsucamera/secrets/apply.secrets.env"
 REGISTRY_SECRET_ENV="/etc/syumatsucamera/secrets/registry.secret.env"
 
 exec 9>"${LOCK_FILE}"
@@ -31,7 +32,18 @@ flock -n 9 || { echo "already running" | tee -a "${LOG_FILE}"; exit 1; }
   date -u +"[%Y-%m-%dT%H:%M:%SZ] deploy start"
 
   test -f "${APP_SECRET_ENV}"
+  test -f "${APPLY_SECRET_ENV}"
   test -f "${REGISTRY_SECRET_ENV}"
+
+  set -a
+  . "${APPLY_SECRET_ENV}"
+  set +a
+
+  test -n "${POSTGRES_DB}"
+  test -n "${POSTGRES_USER}"
+  test -n "${POSTGRES_PASSWORD}"
+  test -n "${DJANGO_SUPERUSER_USERNAME}"
+  test -n "${DJANGO_SUPERUSER_PASSWORD}"
 
   kubectl create secret generic app-secret \
     --from-env-file="${APP_SECRET_ENV}" \
@@ -51,6 +63,23 @@ flock -n 9 || { echo "already running" | tee -a "${LOG_FILE}"; exit 1; }
     --dry-run=client -o yaml | kubectl apply -f -
 
   kubectl apply -k /opt/apply/k3s/base
+  kubectl rollout status statefulset/postgres --timeout=300s
+  kubectl rollout status deployment/backend --timeout=300s
+
+  kubectl exec statefulset/postgres -- sh -ec "
+    psql -U postgres -d postgres -tAc \"SELECT 1 FROM pg_roles WHERE rolname='${POSTGRES_USER}'\" | grep -q 1 || \
+    psql -U postgres -d postgres -c \"CREATE ROLE \\\"${POSTGRES_USER}\\\" LOGIN PASSWORD '${POSTGRES_PASSWORD}'\"
+    psql -U postgres -d postgres -tAc \"SELECT 1 FROM pg_database WHERE datname='${POSTGRES_DB}'\" | grep -q 1 || \
+    psql -U postgres -d postgres -c \"CREATE DATABASE \\\"${POSTGRES_DB}\\\" OWNER \\\"${POSTGRES_USER}\\\"\"
+  "
+
+  kubectl exec deploy/backend -- python manage.py migrate --noinput
+
+  kubectl exec deploy/backend -- env \
+    DJANGO_SUPERUSER_USERNAME="${DJANGO_SUPERUSER_USERNAME}" \
+    DJANGO_SUPERUSER_PASSWORD="${DJANGO_SUPERUSER_PASSWORD}" \
+    python manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); username = '${DJANGO_SUPERUSER_USERNAME}'; password = '${DJANGO_SUPERUSER_PASSWORD}'; user, created = User.objects.get_or_create(username=username, defaults={'is_staff': True, 'is_superuser': True}); (user.set_password(password), setattr(user, 'is_staff', True), setattr(user, 'is_superuser', True), user.save()) if created else None; print('superuser created' if created else 'superuser exists')"
+
   kubectl rollout restart deployment/nginx deployment/backend deployment/worker
   kubectl rollout status deployment/nginx --timeout=300s
   kubectl rollout status deployment/backend --timeout=300s
@@ -68,6 +97,27 @@ sudo chmod 700 /opt/apply/bin/deploy_apply.sh
 REGISTRY_USERNAME=replace_me
 REGISTRY_PASSWORD=replace_me
 ```
+
+`app.secret.env` に最低限必要な追加入力例:
+```env
+SECRET_KEY=replace_me
+DEBUG=false
+ALLOWED_HOSTS=syumatsucamera.com,cms.syumatsucamera.com
+...（Django本体の実行用変数を定義）
+```
+
+`apply.secrets.env` に最低限必要な追加入力例:
+```env
+POSTGRES_DB=syumatsucamera
+POSTGRES_USER=app_prod_user
+POSTGRES_PASSWORD=replace_me
+DJANGO_SUPERUSER_USERNAME=admin
+DJANGO_SUPERUSER_PASSWORD=replace_me
+```
+
+注記:
+- `app.secret.env` は `kubectl --from-env-file` 専用で扱い、`source` しない。
+- `POSTGRES_PASSWORD` にシングルクオート（`'`）を含める場合は、上記 SQL の文字列クオートが崩れるため別途エスケープ対応が必要。
 
 ## 3. 固定スクリプト動作確認
 ```bash
@@ -219,3 +269,13 @@ curl -i -X POST https://apply.syumatsucamera.com/
 - `deploy_apply.sh` では `docker pull` を実行しない。
 - Pod の image pull は k3s の containerd が実行する。
 - `registry.syumatsucamera.com` で mTLS を必須にする場合、k3s ノード側（containerd）にも mTLS クライアント証明書設定が必要になる。
+
+## 13. 実行タイミングの整理
+- 毎回実行:
+  - `kubectl apply -k /opt/apply/k3s/base`
+  - `python manage.py migrate --noinput`
+  - `rollout restart/status`
+- 初回だけ実質作成:
+  - Postgres ロール作成（存在時はskip）
+  - Postgres DB 作成（存在時はskip）
+  - Django superuser 作成（存在時はskip）

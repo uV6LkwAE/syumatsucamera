@@ -33,6 +33,11 @@
 - 機密値は Git 追跡しない。
 - Ubuntu Server 上に専用ディレクトリを作成し、権限を最小化する。
   - 例: `/etc/syumatsucamera/secrets`
+- secret ファイルは用途で分離する。
+  - `app.secret.env`: Django 実行用（k8s `app-secret` へ投入）
+  - `apply.secrets.env`: deploy スクリプト実行用（Postgres初期化/初回superuser作成）
+  - `registry.secret.env`: registry basic 認証情報
+- `app.secret.env` は `source` しない（`kubectl --from-env-file` 専用）。
 - `kubectl create secret` でクラスタへ投入する。
 
 実行例:
@@ -82,6 +87,9 @@ gateway nginx の振り分け:
 
 - apply 側で実行する処理:
   - `kubectl create secret ... | kubectl apply -f -`
+  - Postgres のロール/DB を初期化（存在時はskip）
+  - `python manage.py migrate --noinput`（毎回）
+  - Django superuser を初期化（存在時はskip）
   - `kubectl apply -k k3s/base`
   - `kubectl rollout restart/status`
 
@@ -103,13 +111,49 @@ gateway nginx の振り分け:
 1. NAS registry を起動する（basic auth 有効）。
 2. Cloudflare で `registry.syumatsucamera.com` と `apply.syumatsucamera.com` を作成する。
 3. Cloudflare mTLS を `registry/apply` に設定する。
-4. k3s に `cloudflared` Deployment を作成する（Token Secret 参照）。
-5. k3s に `nginx/backend/worker/cronjob/postgres/redis` を適用する。
-6. Ubuntu Server に apply エンドポイント（`127.0.0.1:19081`）を常駐させる。
-7. gateway nginx で `apply` は POST 以外を拒否する。
-8. Ubuntu Server 上で secret を作成し、`kubectl create secret ... | kubectl apply -f -` で投入する。
-9. `kubectl apply -k k3s/base` で反映する。
-10. GitHub Actions から build+push+apply を実行する。
+4. Ubuntu Server に k3s を導入し、`kubectl` を利用可能にする。
+   - `curl -sfL https://get.k3s.io | sh -`
+   - `sudo k3s kubectl get nodes`
+   - `~/.kube/config` を `yamazaki` に配置し、`kubectl get nodes` が通る状態にする。
+   - `which kubectl` が空の場合は `sudo ln -sf /usr/local/bin/k3s /usr/local/bin/kubectl` を実行する。
+5. Ubuntu Server 上で secret ディレクトリを作成する。
+   - `/etc/syumatsucamera/secrets`
+   - 推奨権限: directory `700` / file `600`
+   - 例:
+     - `sudo mkdir -p /etc/syumatsucamera/secrets`
+     - `sudo chown yamazaki:yamazaki /etc/syumatsucamera/secrets`
+     - `sudo chmod 700 /etc/syumatsucamera/secrets`
+6. secret ファイルを作成する。
+   - `app.secret.env`（Django 実行変数）
+   - `apply.secrets.env`（`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `DJANGO_SUPERUSER_USERNAME`, `DJANGO_SUPERUSER_PASSWORD`）
+   - `registry.secret.env`（`REGISTRY_USERNAME`, `REGISTRY_PASSWORD`）
+   - 例:
+     - `cat <<'EOF' > /etc/syumatsucamera/secrets/app.secret.env`（Django 実行用変数を記載）
+     - `cat <<'EOF' > /etc/syumatsucamera/secrets/apply.secrets.env`（apply 用変数を記載）
+     - `cat <<'EOF' > /etc/syumatsucamera/secrets/registry.secret.env`（registry 認証情報を記載）
+     - `sudo chown yamazaki:yamazaki /etc/syumatsucamera/secrets/*.env`
+     - `sudo chmod 600 /etc/syumatsucamera/secrets/*.env`
+   - 注記:
+     - `app.secret.env` は `kubectl --from-env-file` 専用。
+     - `apply.secrets.env` / `registry.secret.env` は `deploy_apply.sh` から `source` する。
+7. Ubuntu Server に apply エンドポイント（`127.0.0.1:19081`）を常駐させる。
+   - `apply_server.py` を `systemd` で常駐
+   - `deploy_apply.sh` は `yamazaki` 実行
+8. gateway nginx で `apply` は POST 以外を拒否し、`127.0.0.1:19081` へ転送する。
+9. k3s に `cloudflared` Deployment を作成する（Token Secret 参照）。
+10. `deploy_apply.sh` 実行で以下を反映する。
+   - secret 再投入
+   - `kubectl apply -k /opt/apply/k3s/base`
+   - Postgres 初期化（存在時 skip）
+   - `python manage.py migrate --noinput`（毎回）
+   - 初回superuser作成（存在時 skip）
+   - rollout restart/status
+11. GitHub Actions から build+push+apply を実行する。
+
+前提チェック:
+- `which kubectl` が通ること
+- `kubectl get nodes` が成功すること
+- `/opt/apply/bin/deploy_apply.sh` が実行権限を持つこと
 
 ## 10. TODO
 - `apply` 経路に第2関門（HMAC or 共有トークン）を追加する。
