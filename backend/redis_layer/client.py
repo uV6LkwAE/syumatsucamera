@@ -14,7 +14,9 @@ try:
         socket_connect_timeout=float(settings.REDIS_CONNECT_TIMEOUT),
         socket_timeout=float(settings.REDIS_SOCKET_TIMEOUT),
     )
-    redis_client.ping()
+
+    if not settings.CI_SKIP_REQUIRED_ENV_CHECK:
+        redis_client.ping()
 except redis.exceptions.ConnectionError as exc:
     raise RedisConnectionError(f"Cannot connect to Redis: {settings.REDIS_URL} ({exc})") from exc
 

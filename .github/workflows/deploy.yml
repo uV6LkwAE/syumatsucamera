@@ -38,6 +38,14 @@ jobs:
         working-directory: backend
         env:
           CI_SKIP_REQUIRED_ENV_CHECK: "True"
+          POSTGRES_DB: ci_db
+          POSTGRES_USER: ci_user
+          POSTGRES_PASSWORD: ci_password
+          POSTGRES_HOST: 127.0.0.1
+          POSTGRES_PORT: "5432"
+          REDIS_URL: redis://127.0.0.1:6379/0
+          REDIS_CONNECT_TIMEOUT: "1"
+          REDIS_SOCKET_TIMEOUT: "1"
         run: python manage.py check
 
       - name: Setup Node
