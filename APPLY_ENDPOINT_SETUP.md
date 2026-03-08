@@ -19,53 +19,77 @@ cat <<'EOF' | sudo tee /opt/apply/bin/deploy_apply.sh > /dev/null
 #!/usr/bin/env bash
 set -euo pipefail
 
+# 排他制御とログ出力先
 LOCK_FILE="/tmp/deploy_apply.lock"
 LOG_FILE="/var/log/apply/deploy_apply.log"
 APP_SECRET_ENV="/etc/syumatsucamera/secrets/app.secret.env"
 APPLY_SECRET_ENV="/etc/syumatsucamera/secrets/apply.secrets.env"
 REGISTRY_SECRET_ENV="/etc/syumatsucamera/secrets/registry.secret.env"
+REPO_DIR="/opt/apply/repo"
 
+# 二重実行を防ぐためのロック取得
 exec 9>"${LOCK_FILE}"
 flock -n 9 || { echo "already running" | tee -a "${LOG_FILE}"; exit 1; }
 
 {
   date -u +"[%Y-%m-%dT%H:%M:%SZ] deploy start"
 
+  # 必須ファイルの存在確認
   test -f "${APP_SECRET_ENV}"
   test -f "${APPLY_SECRET_ENV}"
   test -f "${REGISTRY_SECRET_ENV}"
 
+  # apply専用の環境変数を読み込む
   set -a
   . "${APPLY_SECRET_ENV}"
   set +a
 
+  # applyスクリプト側で必要な変数の空チェック
   test -n "${POSTGRES_DB}"
   test -n "${POSTGRES_USER}"
   test -n "${POSTGRES_PASSWORD}"
   test -n "${DJANGO_SUPERUSER_USERNAME}"
   test -n "${DJANGO_SUPERUSER_PASSWORD}"
+  test -n "${DEPLOY_REPO_URL}"
 
+  # app-secret を毎回再作成して反映
   kubectl create secret generic app-secret \
     --from-env-file="${APP_SECRET_ENV}" \
     --dry-run=client -o yaml | kubectl apply -f -
 
+  # registry 認証情報を読み込む
   set -a
   . "${REGISTRY_SECRET_ENV}"
   set +a
 
+  # registry 認証情報の空チェック
   test -n "${REGISTRY_USERNAME}"
   test -n "${REGISTRY_PASSWORD}"
 
+  # imagePullSecret を毎回再作成して反映
   kubectl create secret docker-registry registry-credentials \
     --docker-server=registry.syumatsucamera.com \
     --docker-username="${REGISTRY_USERNAME}" \
     --docker-password="${REGISTRY_PASSWORD}" \
     --dry-run=client -o yaml | kubectl apply -f -
 
-  kubectl apply -k /opt/apply/k3s/base
+  # 初回のみ clone して k3s ディレクトリだけ sparse-checkout する
+  if [ ! -d "${REPO_DIR}/.git" ]; then
+    git clone --filter=blob:none --no-checkout "${DEPLOY_REPO_URL}" "${REPO_DIR}"
+    git -C "${REPO_DIR}" sparse-checkout init --cone
+    git -C "${REPO_DIR}" sparse-checkout set k3s
+  fi
+
+  # 毎回最新の main を同期する
+  git -C "${REPO_DIR}" checkout main
+  git -C "${REPO_DIR}" pull --ff-only origin main
+
+  # k3s マニフェストを適用し、先に postgres/backend の起動を待つ
+  kubectl apply -k "${REPO_DIR}/k3s/base"
   kubectl rollout status statefulset/postgres --timeout=300s
   kubectl rollout status deployment/backend --timeout=300s
 
+  # 初回不足時のみ Postgres のロール/DB を作成する
   kubectl exec statefulset/postgres -- sh -ec "
     psql -U postgres -d postgres -tAc \"SELECT 1 FROM pg_roles WHERE rolname='${POSTGRES_USER}'\" | grep -q 1 || \
     psql -U postgres -d postgres -c \"CREATE ROLE \\\"${POSTGRES_USER}\\\" LOGIN PASSWORD '${POSTGRES_PASSWORD}'\"
@@ -73,13 +97,16 @@ flock -n 9 || { echo "already running" | tee -a "${LOG_FILE}"; exit 1; }
     psql -U postgres -d postgres -c \"CREATE DATABASE \\\"${POSTGRES_DB}\\\" OWNER \\\"${POSTGRES_USER}\\\"\"
   "
 
+  # 毎回 migrate を実行する
   kubectl exec deploy/backend -- python manage.py migrate --noinput
 
+  # 初回不足時のみ Django superuser を作成する
   kubectl exec deploy/backend -- env \
     DJANGO_SUPERUSER_USERNAME="${DJANGO_SUPERUSER_USERNAME}" \
     DJANGO_SUPERUSER_PASSWORD="${DJANGO_SUPERUSER_PASSWORD}" \
     python manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); username = '${DJANGO_SUPERUSER_USERNAME}'; password = '${DJANGO_SUPERUSER_PASSWORD}'; user, created = User.objects.get_or_create(username=username, defaults={'is_staff': True, 'is_superuser': True}); (user.set_password(password), setattr(user, 'is_staff', True), setattr(user, 'is_superuser', True), user.save()) if created else None; print('superuser created' if created else 'superuser exists')"
 
+  # 最新イメージ反映のために対象 Deployment を再起動し、完了待ち
   kubectl rollout restart deployment/nginx deployment/backend deployment/worker
   kubectl rollout status deployment/nginx --timeout=300s
   kubectl rollout status deployment/backend --timeout=300s
@@ -108,6 +135,7 @@ ALLOWED_HOSTS=syumatsucamera.com,cms.syumatsucamera.com
 
 `apply.secrets.env` に最低限必要な追加入力例:
 ```env
+DEPLOY_REPO_URL=https://github.com/uV6LkwAE/syumatsucamera
 POSTGRES_DB=syumatsucamera
 POSTGRES_USER=app_prod_user
 POSTGRES_PASSWORD=replace_me
@@ -117,6 +145,7 @@ DJANGO_SUPERUSER_PASSWORD=replace_me
 
 注記:
 - `app.secret.env` は `kubectl --from-env-file` 専用で扱い、`source` しない。
+- `deploy_apply.sh` は毎回 `k3s` ディレクトリのみ sparse-checkout で同期してから `kubectl apply -k` を実行する。
 - `POSTGRES_PASSWORD` にシングルクオート（`'`）を含める場合は、上記 SQL の文字列クオートが崩れるため別途エスケープ対応が必要。
 
 ## 3. 固定スクリプト動作確認
@@ -272,7 +301,8 @@ curl -i -X POST https://apply.syumatsucamera.com/
 
 ## 13. 実行タイミングの整理
 - 毎回実行:
-  - `kubectl apply -k /opt/apply/k3s/base`
+  - `git` で `k3s` ディレクトリのみ同期（sparse-checkout）
+  - `kubectl apply -k /opt/apply/repo/k3s/base`
   - `python manage.py migrate --noinput`
   - `rollout restart/status`
 - 初回だけ実質作成:
