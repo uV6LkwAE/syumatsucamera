@@ -117,6 +117,11 @@ jobs:
           printf '%s\n' "${cert_payload}" | sudo tee "${cert_dir}/client.cert" > /dev/null
           printf '%s\n' "${key_payload}" | sudo tee "${cert_dir}/client.key" > /dev/null
 
+          # 体裁の揺れを吸収（CRLF・全体引用符）
+          sudo sed -i -e 's/\r$//' "${cert_dir}/client.cert" "${cert_dir}/client.key"
+          sudo sed -i -e '1s/^"//' -e '$s/"$//' "${cert_dir}/client.cert" "${cert_dir}/client.key"
+          sudo sed -i -e "1s/^'//" -e "\$s/'$//" "${cert_dir}/client.cert" "${cert_dir}/client.key"
+
           sudo chmod 644 "${cert_dir}/client.cert"
           sudo chmod 600 "${cert_dir}/client.key"
 
@@ -128,8 +133,10 @@ jobs:
           sudo test -s "${cert_dir}/client.key"
 
           # PEMヘッダー存在確認
-          sudo grep -q "BEGIN CERTIFICATE" "${cert_dir}/client.cert"
-          sudo grep -Eq "BEGIN (RSA |EC |)PRIVATE KEY" "${cert_dir}/client.key"
+          sudo grep -qx "-----BEGIN CERTIFICATE-----" "${cert_dir}/client.cert"
+          sudo grep -qx "-----END CERTIFICATE-----" "${cert_dir}/client.cert"
+          sudo grep -Eqx "-----BEGIN (RSA |EC |)PRIVATE KEY-----" "${cert_dir}/client.key"
+          sudo grep -Eqx "-----END (RSA |EC |)PRIVATE KEY-----" "${cert_dir}/client.key"
 
           # opensslで構文確認（内容は出さない）
           sudo openssl x509 -in "${cert_dir}/client.cert" -noout
