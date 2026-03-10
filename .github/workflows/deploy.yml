@@ -133,10 +133,10 @@ jobs:
           sudo test -s "${cert_dir}/client.key"
 
           # PEMヘッダー存在確認
-          sudo grep -qx "-----BEGIN CERTIFICATE-----" "${cert_dir}/client.cert"
-          sudo grep -qx "-----END CERTIFICATE-----" "${cert_dir}/client.cert"
-          sudo grep -Eqx "-----BEGIN (RSA |EC |)PRIVATE KEY-----" "${cert_dir}/client.key"
-          sudo grep -Eqx "-----END (RSA |EC |)PRIVATE KEY-----" "${cert_dir}/client.key"
+          sudo grep -qx -- "-----BEGIN CERTIFICATE-----" "${cert_dir}/client.cert"
+          sudo grep -qx -- "-----END CERTIFICATE-----" "${cert_dir}/client.cert"
+          sudo grep -Eqx -- "-----BEGIN (RSA |EC |)PRIVATE KEY-----" "${cert_dir}/client.key"
+          sudo grep -Eqx -- "-----END (RSA |EC |)PRIVATE KEY-----" "${cert_dir}/client.key"
 
           # opensslで構文確認（内容は出さない）
           sudo openssl x509 -in "${cert_dir}/client.cert" -noout
