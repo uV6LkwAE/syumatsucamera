@@ -106,11 +106,34 @@ jobs:
           cert_dir="/etc/docker/certs.d/${REGISTRY_HOST}"
           sudo mkdir -p "${cert_dir}"
 
-          printf '%s\n' "${MTLS_CLIENT_CERT}" | sudo tee "${cert_dir}/client.cert" > /dev/null
-          printf '%s\n' "${MTLS_CLIENT_KEY}" | sudo tee "${cert_dir}/client.key" > /dev/null
+          # Secretsに実改行で登録した場合/ \n 文字列で登録した場合の両方を正規化
+          cert_payload="${MTLS_CLIENT_CERT}"
+          key_payload="${MTLS_CLIENT_KEY}"
+          cert_payload="${cert_payload//\\n/$'\n'}"
+          key_payload="${key_payload//\\n/$'\n'}"
+          cert_payload="${cert_payload//$'\r'/}"
+          key_payload="${key_payload//$'\r'/}"
+
+          printf '%s\n' "${cert_payload}" | sudo tee "${cert_dir}/client.cert" > /dev/null
+          printf '%s\n' "${key_payload}" | sudo tee "${cert_dir}/client.key" > /dev/null
 
           sudo chmod 644 "${cert_dir}/client.cert"
           sudo chmod 600 "${cert_dir}/client.key"
+
+          # 配置確認（内容は出さない）
+          echo "cert_dir=${cert_dir}"
+          sudo ls -ld /etc/docker /etc/docker/certs.d "${cert_dir}"
+          sudo ls -l "${cert_dir}"
+          sudo test -s "${cert_dir}/client.cert"
+          sudo test -s "${cert_dir}/client.key"
+
+          # PEMヘッダー存在確認
+          grep -q "BEGIN CERTIFICATE" "${cert_dir}/client.cert"
+          grep -Eq "BEGIN (RSA |EC |)PRIVATE KEY" "${cert_dir}/client.key"
+
+          # opensslで構文確認（内容は出さない）
+          openssl x509 -in "${cert_dir}/client.cert" -noout
+          openssl pkey -in "${cert_dir}/client.key" -noout
 
       - name: Login to registry
         uses: docker/login-action@v3
