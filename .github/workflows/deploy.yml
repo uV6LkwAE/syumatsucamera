@@ -128,12 +128,12 @@ jobs:
           sudo test -s "${cert_dir}/client.key"
 
           # PEMヘッダー存在確認
-          grep -q "BEGIN CERTIFICATE" "${cert_dir}/client.cert"
-          grep -Eq "BEGIN (RSA |EC |)PRIVATE KEY" "${cert_dir}/client.key"
+          sudo grep -q "BEGIN CERTIFICATE" "${cert_dir}/client.cert"
+          sudo grep -Eq "BEGIN (RSA |EC |)PRIVATE KEY" "${cert_dir}/client.key"
 
           # opensslで構文確認（内容は出さない）
-          openssl x509 -in "${cert_dir}/client.cert" -noout
-          openssl pkey -in "${cert_dir}/client.key" -noout
+          sudo openssl x509 -in "${cert_dir}/client.cert" -noout
+          sudo openssl pkey -in "${cert_dir}/client.key" -noout
 
       - name: Login to registry
         uses: docker/login-action@v3
