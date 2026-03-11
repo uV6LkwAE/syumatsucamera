@@ -98,17 +98,25 @@ jobs:
           test -n "${MTLS_CLIENT_CERT_B64}"
           test -n "${MTLS_CLIENT_KEY_B64}"
 
-          cert_dir="/etc/docker/certs.d/${REGISTRY_HOST}"
-          sudo mkdir -p "${cert_dir}"
+          tmp_cert="/tmp/registry-client.crt"
+          tmp_key="/tmp/registry-client.key"
+          printf '%s' "${MTLS_CLIENT_CERT_B64}" | base64 -d > "${tmp_cert}"
+          printf '%s' "${MTLS_CLIENT_KEY_B64}" | base64 -d > "${tmp_key}"
+          chmod 600 "${tmp_key}"
 
-          printf '%s' "${MTLS_CLIENT_CERT_B64}" | base64 -d | sudo tee "${cert_dir}/client.cert" > /dev/null
-          printf '%s' "${MTLS_CLIENT_KEY_B64}" | base64 -d | sudo tee "${cert_dir}/client.key" > /dev/null
+          openssl x509 -in "${tmp_cert}" -noout
+          openssl pkey -in "${tmp_key}" -noout
+          openssl x509 -in "${tmp_cert}" -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 > /tmp/cert.pub.sha256
+          openssl pkey -in "${tmp_key}" -pubout -outform der | openssl dgst -sha256 > /tmp/key.pub.sha256
+          cmp /tmp/cert.pub.sha256 /tmp/key.pub.sha256
 
-          sudo chmod 644 "${cert_dir}/client.cert"
-          sudo chmod 600 "${cert_dir}/client.key"
-
-          sudo openssl x509 -in "${cert_dir}/client.cert" -noout
-          sudo openssl pkey -in "${cert_dir}/client.key" -noout
+          for cert_dir in "/etc/docker/certs.d/${REGISTRY_HOST}" "/etc/docker/certs.d/${REGISTRY_HOST}:443"; do
+            sudo mkdir -p "${cert_dir}"
+            sudo cp "${tmp_cert}" "${cert_dir}/client.cert"
+            sudo cp "${tmp_key}" "${cert_dir}/client.key"
+            sudo chmod 644 "${cert_dir}/client.cert"
+            sudo chmod 600 "${cert_dir}/client.key"
+          done
 
       - name: Login to registry
         uses: docker/login-action@v3
@@ -116,6 +124,18 @@ jobs:
           registry: ${{ secrets.REGISTRY_HOST }}
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Preflight registry access over mTLS
+        env:
+          REGISTRY_HOST: ${{ secrets.REGISTRY_HOST }}
+          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+        run: |
+          curl -fsS \
+            --cert /tmp/registry-client.crt \
+            --key /tmp/registry-client.key \
+            -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" \
+            "https://${REGISTRY_HOST}/v2/" > /dev/null
 
       - name: Build and push backend image
         run: |
