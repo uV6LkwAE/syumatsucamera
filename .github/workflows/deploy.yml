@@ -96,63 +96,24 @@ jobs:
       - name: Configure Docker mTLS client certificate
         env:
           REGISTRY_HOST: ${{ secrets.REGISTRY_HOST }}
-          MTLS_CLIENT_CERT: ${{ secrets.MTLS_CLIENT_CERT }}
-          MTLS_CLIENT_KEY: ${{ secrets.MTLS_CLIENT_KEY }}
+          MTLS_CLIENT_CERT_B64: ${{ secrets.MTLS_CLIENT_CERT_B64 }}
+          MTLS_CLIENT_KEY_B64: ${{ secrets.MTLS_CLIENT_KEY_B64 }}
         run: |
           test -n "${REGISTRY_HOST}"
-          test -n "${MTLS_CLIENT_CERT}"
-          test -n "${MTLS_CLIENT_KEY}"
+          test -n "${MTLS_CLIENT_CERT_B64}"
+          test -n "${MTLS_CLIENT_KEY_B64}"
 
           cert_dir="/etc/docker/certs.d/${REGISTRY_HOST}"
           sudo mkdir -p "${cert_dir}"
 
-          # Secretsに実改行で登録した場合/ \n 文字列で登録した場合の両方を正規化
-          cert_payload="${MTLS_CLIENT_CERT}"
-          key_payload="${MTLS_CLIENT_KEY}"
-          cert_payload="${cert_payload//\\n/$'\n'}"
-          key_payload="${key_payload//\\n/$'\n'}"
-          cert_payload="${cert_payload//$'\r'/}"
-          key_payload="${key_payload//$'\r'/}"
-
-          printf '%s\n' "${cert_payload}" | sudo tee "${cert_dir}/client.cert" > /dev/null
-          printf '%s\n' "${key_payload}" | sudo tee "${cert_dir}/client.key" > /dev/null
-
-          # 体裁の揺れを吸収（CRLF・全体引用符）
-          sudo sed -i -e 's/\r$//' "${cert_dir}/client.cert" "${cert_dir}/client.key"
-          sudo sed -i -e '1s/^"//' -e '$s/"$//' "${cert_dir}/client.cert" "${cert_dir}/client.key"
-          sudo sed -i -e "1s/^'//" -e "\$s/'$//" "${cert_dir}/client.cert" "${cert_dir}/client.key"
+          printf '%s' "${MTLS_CLIENT_CERT_B64}" | base64 -d | sudo tee "${cert_dir}/client.cert" > /dev/null
+          printf '%s' "${MTLS_CLIENT_KEY_B64}" | base64 -d | sudo tee "${cert_dir}/client.key" > /dev/null
 
           sudo chmod 644 "${cert_dir}/client.cert"
           sudo chmod 600 "${cert_dir}/client.key"
 
-          # 配置確認（内容は出さない）
-          echo "cert_dir=${cert_dir}"
-          sudo ls -ld /etc/docker /etc/docker/certs.d "${cert_dir}"
-          sudo ls -l "${cert_dir}"
-          sudo test -s "${cert_dir}/client.cert"
-          sudo test -s "${cert_dir}/client.key"
-
-          # PEMヘッダー存在確認（厳密一致ではなく部分一致）
-          sudo grep -q -- "BEGIN CERTIFICATE" "${cert_dir}/client.cert"
-          sudo grep -q -- "END CERTIFICATE" "${cert_dir}/client.cert"
-          sudo grep -Eq -- "BEGIN (RSA |EC |)?PRIVATE KEY" "${cert_dir}/client.key"
-          sudo grep -Eq -- "END (RSA |EC |)?PRIVATE KEY" "${cert_dir}/client.key"
-
-          # 先頭/末尾行だけ表示して体裁確認（秘密本体は出さない）
-          echo "client.cert first/last line:"
-          sudo sed -n '1p;$p' "${cert_dir}/client.cert"
-          echo "client.key first/last line:"
-          sudo sed -n '1p;$p' "${cert_dir}/client.key"
-
-          # opensslで構文確認（失敗理由を出す）
-          if ! sudo openssl x509 -in "${cert_dir}/client.cert" -noout; then
-            echo "Invalid certificate PEM format"
-            exit 1
-          fi
-          if ! sudo openssl pkey -in "${cert_dir}/client.key" -noout; then
-            echo "Invalid private key PEM format"
-            exit 1
-          fi
+          sudo openssl x509 -in "${cert_dir}/client.cert" -noout
+          sudo openssl pkey -in "${cert_dir}/client.key" -noout
 
       - name: Login to registry
         uses: docker/login-action@v3
@@ -200,14 +161,16 @@ jobs:
 
       - name: Configure mTLS cert for deploy request
         env:
-          MTLS_CLIENT_CERT: ${{ secrets.MTLS_CLIENT_CERT }}
-          MTLS_CLIENT_KEY: ${{ secrets.MTLS_CLIENT_KEY }}
+          MTLS_CLIENT_CERT_B64: ${{ secrets.MTLS_CLIENT_CERT_B64 }}
+          MTLS_CLIENT_KEY_B64: ${{ secrets.MTLS_CLIENT_KEY_B64 }}
         run: |
-          test -n "${MTLS_CLIENT_CERT}"
-          test -n "${MTLS_CLIENT_KEY}"
-          printf '%s\n' "${MTLS_CLIENT_CERT}" > /tmp/apply-client.crt
-          printf '%s\n' "${MTLS_CLIENT_KEY}" > /tmp/apply-client.key
+          test -n "${MTLS_CLIENT_CERT_B64}"
+          test -n "${MTLS_CLIENT_KEY_B64}"
+          printf '%s' "${MTLS_CLIENT_CERT_B64}" | base64 -d > /tmp/apply-client.crt
+          printf '%s' "${MTLS_CLIENT_KEY_B64}" | base64 -d > /tmp/apply-client.key
           chmod 600 /tmp/apply-client.key
+          openssl x509 -in /tmp/apply-client.crt -noout
+          openssl pkey -in /tmp/apply-client.key -noout
 
       - name: Deploy request over mTLS
         run: |
