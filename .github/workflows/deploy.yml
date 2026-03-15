@@ -106,6 +106,7 @@ jobs:
 
           openssl x509 -in "${tmp_cert}" -noout
           openssl pkey -in "${tmp_key}" -noout
+          echo "registry_mtls_cert_serial=$(openssl x509 -in "${tmp_cert}" -noout -serial | cut -d= -f2 | tr '[:lower:]' '[:upper:]')"
           openssl x509 -in "${tmp_cert}" -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 > /tmp/cert.pub.sha256
           openssl pkey -in "${tmp_key}" -pubout -outform der | openssl dgst -sha256 > /tmp/key.pub.sha256
           cmp /tmp/cert.pub.sha256 /tmp/key.pub.sha256
