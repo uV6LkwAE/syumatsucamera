@@ -110,12 +110,24 @@ jobs:
           openssl pkey -in "${tmp_key}" -pubout -outform der | openssl dgst -sha256 > /tmp/key.pub.sha256
           cmp /tmp/cert.pub.sha256 /tmp/key.pub.sha256
 
-          for cert_dir in "/etc/docker/certs.d/${REGISTRY_HOST}" "/etc/docker/certs.d/${REGISTRY_HOST}:443"; do
+          for cert_dir in \
+            "/etc/docker/certs.d/${REGISTRY_HOST}" \
+            "/etc/docker/certs.d/${REGISTRY_HOST}:443"; do
             sudo mkdir -p "${cert_dir}"
             sudo cp "${tmp_cert}" "${cert_dir}/client.cert"
             sudo cp "${tmp_key}" "${cert_dir}/client.key"
             sudo chmod 644 "${cert_dir}/client.cert"
             sudo chmod 600 "${cert_dir}/client.key"
+          done
+
+          for cert_dir in \
+            "${HOME}/.docker/certs.d/${REGISTRY_HOST}" \
+            "${HOME}/.docker/certs.d/${REGISTRY_HOST}:443"; do
+            mkdir -p "${cert_dir}"
+            cp "${tmp_cert}" "${cert_dir}/client.cert"
+            cp "${tmp_key}" "${cert_dir}/client.key"
+            chmod 644 "${cert_dir}/client.cert"
+            chmod 600 "${cert_dir}/client.key"
           done
 
       - name: Login to registry
