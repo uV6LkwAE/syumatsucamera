@@ -125,8 +125,9 @@ gateway nginx の振り分け:
      - `sudo chmod 700 /etc/syumatsucamera/secrets`
 6. secret ファイルを作成する。
    - `app.secret.env`（Django 実行変数）
-   - `apply.secrets.env`（`DEPLOY_REPO_URL`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `DJANGO_SUPERUSER_USERNAME`, `DJANGO_SUPERUSER_PASSWORD`）
+   - `apply.secrets.env`（`DEPLOY_REPO_URL`, `DEPLOY_REPO_TOKEN`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `DJANGO_SUPERUSER_USERNAME`, `DJANGO_SUPERUSER_PASSWORD`）
    - `registry.secret.env`（`REGISTRY_USERNAME`, `REGISTRY_PASSWORD`）
+   - `DEPLOY_REPO_TOKEN` は GitHub リポジトリ読み取り可能な token を設定する。
    - 例:
      - `cat <<'EOF' > /etc/syumatsucamera/secrets/app.secret.env`（Django 実行用変数を記載）
      - `cat <<'EOF' > /etc/syumatsucamera/secrets/apply.secrets.env`（apply 用変数を記載）
@@ -138,7 +139,7 @@ gateway nginx の振り分け:
      - `apply.secrets.env` / `registry.secret.env` は `deploy_apply.sh` から `source` する。
 7. Ubuntu Server に deploy 用作業ディレクトリを作成し、`k3s` のみ同期する前提を作る。
    - `sudo mkdir -p /opt/apply && sudo chown -R yamazaki:yamazaki /opt/apply`
-   - 初回実行時に `deploy_apply.sh` が `git clone --filter=blob:none --no-checkout` + `sparse-checkout set k3s` を行う。
+   - 初回実行時に `deploy_apply.sh` が `DEPLOY_REPO_TOKEN` を使って `git clone --filter=blob:none --no-checkout` + `sparse-checkout set k3s` を行う。
 8. Ubuntu Server に apply エンドポイント（`127.0.0.1:19081`）を常駐させる。
    - `apply_server.py` を `systemd` で常駐
    - `deploy_apply.sh` は `yamazaki` 実行

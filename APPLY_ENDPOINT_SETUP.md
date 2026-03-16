@@ -44,6 +44,10 @@ flock -n 9 || { echo "already running" | tee -a "${LOG_FILE}"; exit 1; }
   . "${APPLY_SECRET_ENV}"
   set +a
 
+  # Gitは非対話で実行する
+  export GIT_TERMINAL_PROMPT=0
+  GIT_AUTH_HEADER="Authorization: Basic $(printf 'x-access-token:%s' "${DEPLOY_REPO_TOKEN}" | base64 | tr -d '\n')"
+
   # applyスクリプト側で必要な変数の空チェック
   test -n "${POSTGRES_DB}"
   test -n "${POSTGRES_USER}"
@@ -51,6 +55,7 @@ flock -n 9 || { echo "already running" | tee -a "${LOG_FILE}"; exit 1; }
   test -n "${DJANGO_SUPERUSER_USERNAME}"
   test -n "${DJANGO_SUPERUSER_PASSWORD}"
   test -n "${DEPLOY_REPO_URL}"
+  test -n "${DEPLOY_REPO_TOKEN}"
 
   # app-secret を毎回再作成して反映
   kubectl create secret generic app-secret \
@@ -75,14 +80,17 @@ flock -n 9 || { echo "already running" | tee -a "${LOG_FILE}"; exit 1; }
 
   # 初回のみ clone して k3s ディレクトリだけ sparse-checkout する
   if [ ! -d "${REPO_DIR}/.git" ]; then
-    git clone --filter=blob:none --no-checkout "${DEPLOY_REPO_URL}" "${REPO_DIR}"
+    git -c http.extraheader="${GIT_AUTH_HEADER}" \
+      clone --filter=blob:none --no-checkout "${DEPLOY_REPO_URL}" "${REPO_DIR}"
     git -C "${REPO_DIR}" sparse-checkout init --cone
     git -C "${REPO_DIR}" sparse-checkout set k3s
   fi
 
   # 毎回最新の main を同期する
-  git -C "${REPO_DIR}" checkout main
-  git -C "${REPO_DIR}" pull --ff-only origin main
+  git -C "${REPO_DIR}" -c http.extraheader="${GIT_AUTH_HEADER}" \
+    fetch origin main
+  git -C "${REPO_DIR}" -c http.extraheader="${GIT_AUTH_HEADER}" \
+    checkout -B main origin/main
 
   # k3s マニフェストを適用し、先に postgres/backend の起動を待つ
   kubectl apply -k "${REPO_DIR}/k3s/base"
@@ -136,6 +144,7 @@ ALLOWED_HOSTS=syumatsucamera.com,cms.syumatsucamera.com
 `apply.secrets.env` に最低限必要な追加入力例:
 ```env
 DEPLOY_REPO_URL=https://github.com/uV6LkwAE/syumatsucamera
+DEPLOY_REPO_TOKEN=replace_me
 POSTGRES_DB=syumatsucamera
 POSTGRES_USER=app_prod_user
 POSTGRES_PASSWORD=replace_me
