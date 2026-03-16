@@ -138,6 +138,18 @@ jobs:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
+      - name: Debug registry host and cert directory
+        env:
+          REGISTRY_HOST: ${{ secrets.REGISTRY_HOST }}
+        run: |
+          test -n "${REGISTRY_HOST}"
+          echo "REGISTRY_HOST length=${#REGISTRY_HOST}"
+          printf '%s' "${REGISTRY_HOST}" | od -An -tx1
+          sudo ls -lb /etc/docker/certs.d
+          sudo ls -lb "/etc/docker/certs.d/${REGISTRY_HOST}" || true
+          sudo ls -lb "/etc/docker/certs.d/${REGISTRY_HOST}:443" || true
+          sudo ls -l "/etc/docker/certs.d/${REGISTRY_HOST}" || true
+
       - name: Preflight registry access over mTLS
         env:
           REGISTRY_HOST: ${{ secrets.REGISTRY_HOST }}
@@ -158,7 +170,31 @@ jobs:
             --tag "${{ steps.meta.outputs.backend_image }}:latest" \
             --tag "${{ steps.meta.outputs.backend_image }}:${{ github.sha }}" \
             .
-          docker push "${{ steps.meta.outputs.backend_image }}:latest"
+
+          if ! command -v strace >/dev/null 2>&1; then
+            echo "strace not found. run push without dockerd openat trace."
+            docker push "${{ steps.meta.outputs.backend_image }}:latest"
+          else
+            trace_prefix="/tmp/dockerd-openat"
+            sudo rm -f "${trace_prefix}"*
+            dockerd_pid="$(pgrep -xo dockerd)"
+            sudo strace -ff -e trace=openat -o "${trace_prefix}" -p "${dockerd_pid}" >/tmp/strace-attach.log 2>&1 &
+            trace_pid=$!
+            sleep 1
+            set +e
+            docker push "${{ steps.meta.outputs.backend_image }}:latest"
+            push_latest_rc=$?
+            set -e
+            sudo kill "${trace_pid}" || true
+            sleep 1
+            echo "dockerd cert path lookup (openat):"
+            sudo grep -R "certs.d" "${trace_prefix}"* | sort -u || true
+            if [ "${push_latest_rc}" -ne 0 ]; then
+              echo "backend latest push failed with code=${push_latest_rc}"
+              exit "${push_latest_rc}"
+            fi
+          fi
+
           docker push "${{ steps.meta.outputs.backend_image }}:${{ github.sha }}"
 
       - name: Build and push nginx image
