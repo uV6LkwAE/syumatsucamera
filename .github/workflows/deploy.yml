@@ -172,24 +172,45 @@ jobs:
             .
 
           echo "backend image history:"
-          docker history --no-trunc --human "${{ steps.meta.outputs.backend_image }}:latest"
+          docker history --no-trunc --format 'id={{.ID}} size={{.Size}} created_by={{.CreatedBy}}' "${{ steps.meta.outputs.backend_image }}:latest"
           backend_layer_tmp="$(mktemp -d)"
           docker save "${{ steps.meta.outputs.backend_image }}:latest" -o "${backend_layer_tmp}/image.tar"
-          tar -xf "${backend_layer_tmp}/image.tar" -C "${backend_layer_tmp}"
-          echo "backend layer sizes (raw/gzip):"
-          find "${backend_layer_tmp}" -type f -name layer.tar -print0 \
-            | while IFS= read -r -d '' layer_file; do
-              raw_bytes="$(stat -c%s "${layer_file}")"
-              gzip_bytes="$(gzip -c "${layer_file}" | wc -c)"
-              raw_human="$(numfmt --to=iec --suffix=B "${raw_bytes}")"
-              gzip_human="$(numfmt --to=iec --suffix=B "${gzip_bytes}")"
-              layer_rel="${layer_file#${backend_layer_tmp}/}"
-              printf "%s\t%s\t%s\t%s\t%s\n" "${raw_bytes}" "${gzip_bytes}" "${raw_human}" "${gzip_human}" "${layer_rel}"
-            done \
-            | sort -nr -k2 \
-            | while IFS=$'\t' read -r raw_bytes gzip_bytes raw_human gzip_human layer_rel; do
-              echo "raw=${raw_human} gzip=${gzip_human} layer=${layer_rel}"
-            done
+          echo "backend layer sizes (archive members):"
+          IMAGE_TAR="${backend_layer_tmp}/image.tar" python - <<'PY'
+import json
+import os
+import tarfile
+
+image_tar = os.environ["IMAGE_TAR"]
+rows = []
+
+with tarfile.open(image_tar, "r") as tf:
+    names = set(tf.getnames())
+
+    if "manifest.json" in names:
+        manifest = json.load(tf.extractfile("manifest.json"))
+        layers = manifest[0].get("Layers", [])
+        for layer_name in layers:
+            if layer_name in names:
+                info = tf.getmember(layer_name)
+                rows.append((info.size, layer_name))
+    elif "index.json" in names:
+        index = json.load(tf.extractfile("index.json"))
+        manifest_desc = index["manifests"][0]
+        digest = manifest_desc["digest"].split(":")[1]
+        manifest_path = f"blobs/sha256/{digest}"
+        if manifest_path in names:
+            manifest = json.load(tf.extractfile(manifest_path))
+            for layer in manifest.get("layers", []):
+                d = layer["digest"].split(":")[1]
+                p = f"blobs/sha256/{d}"
+                if p in names:
+                    info = tf.getmember(p)
+                    rows.append((info.size, p))
+
+for size, name in sorted(rows, reverse=True):
+    print(f"size={size/1024/1024:.1f}MB member={name}")
+PY
           rm -rf "${backend_layer_tmp}"
 
           if ! command -v strace >/dev/null 2>&1; then
@@ -228,24 +249,45 @@ jobs:
             .
 
           echo "nginx image history:"
-          docker history --no-trunc --human "${{ steps.meta.outputs.nginx_image }}:latest"
+          docker history --no-trunc --format 'id={{.ID}} size={{.Size}} created_by={{.CreatedBy}}' "${{ steps.meta.outputs.nginx_image }}:latest"
           nginx_layer_tmp="$(mktemp -d)"
           docker save "${{ steps.meta.outputs.nginx_image }}:latest" -o "${nginx_layer_tmp}/image.tar"
-          tar -xf "${nginx_layer_tmp}/image.tar" -C "${nginx_layer_tmp}"
-          echo "nginx layer sizes (raw/gzip):"
-          find "${nginx_layer_tmp}" -type f -name layer.tar -print0 \
-            | while IFS= read -r -d '' layer_file; do
-              raw_bytes="$(stat -c%s "${layer_file}")"
-              gzip_bytes="$(gzip -c "${layer_file}" | wc -c)"
-              raw_human="$(numfmt --to=iec --suffix=B "${raw_bytes}")"
-              gzip_human="$(numfmt --to=iec --suffix=B "${gzip_bytes}")"
-              layer_rel="${layer_file#${nginx_layer_tmp}/}"
-              printf "%s\t%s\t%s\t%s\t%s\n" "${raw_bytes}" "${gzip_bytes}" "${raw_human}" "${gzip_human}" "${layer_rel}"
-            done \
-            | sort -nr -k2 \
-            | while IFS=$'\t' read -r raw_bytes gzip_bytes raw_human gzip_human layer_rel; do
-              echo "raw=${raw_human} gzip=${gzip_human} layer=${layer_rel}"
-            done
+          echo "nginx layer sizes (archive members):"
+          IMAGE_TAR="${nginx_layer_tmp}/image.tar" python - <<'PY'
+import json
+import os
+import tarfile
+
+image_tar = os.environ["IMAGE_TAR"]
+rows = []
+
+with tarfile.open(image_tar, "r") as tf:
+    names = set(tf.getnames())
+
+    if "manifest.json" in names:
+        manifest = json.load(tf.extractfile("manifest.json"))
+        layers = manifest[0].get("Layers", [])
+        for layer_name in layers:
+            if layer_name in names:
+                info = tf.getmember(layer_name)
+                rows.append((info.size, layer_name))
+    elif "index.json" in names:
+        index = json.load(tf.extractfile("index.json"))
+        manifest_desc = index["manifests"][0]
+        digest = manifest_desc["digest"].split(":")[1]
+        manifest_path = f"blobs/sha256/{digest}"
+        if manifest_path in names:
+            manifest = json.load(tf.extractfile(manifest_path))
+            for layer in manifest.get("layers", []):
+                d = layer["digest"].split(":")[1]
+                p = f"blobs/sha256/{d}"
+                if p in names:
+                    info = tf.getmember(p)
+                    rows.append((info.size, p))
+
+for size, name in sorted(rows, reverse=True):
+    print(f"size={size/1024/1024:.1f}MB member={name}")
+PY
           rm -rf "${nginx_layer_tmp}"
 
           docker push "${{ steps.meta.outputs.nginx_image }}:latest"
