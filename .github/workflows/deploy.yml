@@ -275,6 +275,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build_and_push
+    timeout-minutes: 40
     environment: production
     steps:
       - name: Deploy phase plan
@@ -296,6 +297,7 @@ jobs:
           openssl pkey -in /tmp/apply-client.key -noout
 
       - name: Deploy request over mTLS
+        id: deploy_request
         run: |
           status_code="$(
             curl -sS -o /tmp/apply_response_body.txt -w '%{http_code}' \
@@ -307,11 +309,54 @@ jobs:
               https://apply.syumatsucamera.com/
           )"
           echo "apply endpoint status=${status_code}"
-          if [ "${status_code}" != "200" ] && [ "${status_code}" != "202" ]; then
+          if [ "${status_code}" != "202" ]; then
             echo "mTLS deploy request failed: unexpected status ${status_code}"
             cat /tmp/apply_response_body.txt
             exit 1
           fi
+          job_id="$(tr -d '\n' < /tmp/apply_response_body.txt)"
+          test -n "${job_id}"
+          echo "apply job id=${job_id}"
+          echo "job_id=${job_id}" >> "$GITHUB_OUTPUT"
+
+      - name: Poll apply status over mTLS
+        run: |
+          started_at="$(date +%s)"
+          timeout_seconds=1800
+          interval_seconds=60
+
+          while true; do
+            now="$(date +%s)"
+            elapsed="$((now - started_at))"
+            if [ "${elapsed}" -ge "${timeout_seconds}" ]; then
+              echo "apply polling timed out after ${elapsed} seconds"
+              exit 1
+            fi
+
+            status="$(
+              curl -fsS \
+                --cert /tmp/apply-client.crt \
+                --key /tmp/apply-client.key \
+                "https://apply.syumatsucamera.com/status/${{ steps.deploy_request.outputs.job_id }}"
+            )"
+            status="$(printf '%s' "${status}" | tr -d '\n')"
+            echo "apply status=${status} elapsed=${elapsed}s"
+
+            if [ "${status}" = "success" ]; then
+              exit 0
+            fi
+
+            if [ "${status}" = "failed" ]; then
+              exit 1
+            fi
+
+            if [ "${status}" != "running" ]; then
+              echo "unexpected apply status: ${status}"
+              exit 1
+            fi
+
+            sleep "${interval_seconds}"
+          done
 
   # フェーズ4: 通知（成功/失敗とも送る）
   notify:

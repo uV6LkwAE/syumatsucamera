@@ -75,15 +75,17 @@ gateway nginx の振り分け:
 - `registry.syumatsucamera.com`
   - `/`      -> `192.168.1.25:5000`
 - `apply.syumatsucamera.com`
-  - `/`      -> Ubuntu Server `:19081`（POST のみ許可）
+  - `/`            -> Ubuntu Server `:19081`（POST で deploy 開始）
+  - `/status/...`  -> Ubuntu Server `:19081`（GET で deploy 状態確認）
 
 ## 6. CI/CD 方針
 - Trigger: `main` push
 - フロー:
   1. CI（Django check / frontend build）
   2. backend/nginx build + push
-  3. `POST https://apply.syumatsucamera.com/`（mTLS）
-  4. 通知
+  3. `POST https://apply.syumatsucamera.com/`（mTLS, `202` + `job_id`）
+  4. `GET https://apply.syumatsucamera.com/status/{job_id}` をポーリング
+  5. 通知
 
 - apply 側で実行する処理:
   - `kubectl create secret ... | kubectl apply -f -`

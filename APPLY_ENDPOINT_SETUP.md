@@ -169,12 +169,20 @@ echo $?
 
 ```bash
 cat <<'EOF' | sudo tee /opt/apply/apply_server.py > /dev/null
-from http.server import BaseHTTPRequestHandler, HTTPServer
 import subprocess
+import threading
+import uuid
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 SCRIPT_PATH = "/opt/apply/bin/deploy_apply.sh"
 BIND_HOST = "127.0.0.1"
 BIND_PORT = 19081
+JOB_STATUS = {}
+
+
+def run_job(job_id):
+    result = subprocess.run([SCRIPT_PATH], capture_output=True, text=True)
+    JOB_STATUS[job_id] = "success" if result.returncode == 0 else "failed"
 
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
@@ -187,17 +195,33 @@ class Handler(BaseHTTPRequestHandler):
         if length > 0:
             self.rfile.read(length)
 
-        result = subprocess.run([SCRIPT_PATH], capture_output=True, text=True)
-        code = 200 if result.returncode == 0 else 500
+        job_id = str(uuid.uuid4())
+        JOB_STATUS[job_id] = "running"
+        threading.Thread(target=run_job, args=(job_id,), daemon=True).start()
 
-        self.send_response(code)
+        self.send_response(202)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.end_headers()
-        self.wfile.write((result.stdout + result.stderr).encode("utf-8"))
+        self.wfile.write(job_id.encode("utf-8"))
 
     def do_GET(self):
-        self.send_response(405)
+        prefix = "/status/"
+        if not self.path.startswith(prefix):
+            self.send_response(405)
+            self.end_headers()
+            return
+
+        job_id = self.path[len(prefix):]
+        status = JOB_STATUS.get(job_id)
+        if status is None:
+            self.send_response(404)
+            self.end_headers()
+            return
+
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.end_headers()
+        self.wfile.write(status.encode("utf-8"))
 
     def log_message(self, fmt, *args):
         return
@@ -237,18 +261,46 @@ sudo systemctl status apply-server.service --no-pager
 
 ## 6. ローカル疎通確認（19081）
 ```bash
-curl -i -X POST http://127.0.0.1:19081/
-curl -i http://127.0.0.1:19081/
+job_id="$(curl -sS -X POST http://127.0.0.1:19081/)"
+echo "${job_id}"
+curl -i "http://127.0.0.1:19081/status/${job_id}"
 ```
 
 期待値:
-- `POST` は `200` または `500`
-- `GET` は `405`
+- `POST /` は `202` と `job_id` を返す
+- `GET /status/{job_id}` は `success` / `failed` / `running` のいずれかを返す
 
-## 7. Nginx apply ブロック設定（18082）
+## 7. Nginx サーバーブロック設定
 既存の Nginx 設定ファイルへ以下の `server` ブロックを追加する。
 
-```nginx
+```bash
+# registry
+server {
+    listen 127.0.0.1:18080;
+    server_name registry.syumatsucamra.com;
+
+    client_max_body_size 2g;
+
+    location / {
+        proxy_pass http://192.168.1.25:5000;
+
+        proxy_http_version 1.1;
+        proxy_request_buffering off;
+        proxy_buffering off;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Port 443;
+
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 3600s;
+        proxy_read_timeout 3600s;
+    }
+}
+
+# apply
 server {
     listen 127.0.0.1:18082;
     server_name apply.syumatsucamera.com;
@@ -265,6 +317,19 @@ server {
         proxy_connect_timeout 5s;
         proxy_read_timeout 600s;
     }
+
+    location ^~ /status/ {
+        if ($request_method != GET) {
+            return 405;
+        }
+
+        proxy_pass http://127.0.0.1:19081;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Request-Id $request_id;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 30s;
+    }
 }
 ```
 
@@ -273,8 +338,9 @@ server {
 ```bash
 sudo nginx -t
 sudo systemctl reload nginx
-curl -i -X POST http://127.0.0.1:18082/
-curl -i http://127.0.0.1:18082/
+job_id="$(curl -sS -X POST http://127.0.0.1:18082/)"
+echo "${job_id}"
+curl -i "http://127.0.0.1:18082/status/${job_id}"
 ```
 
 ## 8. Cloudflare Tunnel 設定
