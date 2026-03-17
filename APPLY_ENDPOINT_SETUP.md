@@ -81,15 +81,16 @@ flock -n 9 || { echo "already running" | tee -a "${LOG_FILE}"; exit 1; }
   # 初回のみ clone して k3s ディレクトリだけ sparse-checkout する
   if [ ! -d "${REPO_DIR}/.git" ]; then
     git -c http.extraheader="${GIT_AUTH_HEADER}" \
-      clone --filter=blob:none --no-checkout "${DEPLOY_REPO_URL}" "${REPO_DIR}"
+      clone --depth=1 --branch main --no-checkout "${DEPLOY_REPO_URL}" "${REPO_DIR}"
+    git -C "${REPO_DIR}" config http.https://github.com/.extraheader "${GIT_AUTH_HEADER}"
     git -C "${REPO_DIR}" sparse-checkout init --cone
     git -C "${REPO_DIR}" sparse-checkout set k3s
   fi
 
   # 毎回最新の main を同期する
-  git -C "${REPO_DIR}" -c http.extraheader="${GIT_AUTH_HEADER}" \
-    fetch origin main
-  git -C "${REPO_DIR}" -c http.extraheader="${GIT_AUTH_HEADER}" \
+  git -C "${REPO_DIR}" config http.https://github.com/.extraheader "${GIT_AUTH_HEADER}"
+  git -C "${REPO_DIR}" fetch --depth=1 origin main
+  git -C "${REPO_DIR}" \
     checkout -B main origin/main
 
   # k3s マニフェストを適用し、先に postgres/backend の起動を待つ

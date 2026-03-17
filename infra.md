@@ -139,7 +139,7 @@ gateway nginx の振り分け:
      - `apply.secrets.env` / `registry.secret.env` は `deploy_apply.sh` から `source` する。
 7. Ubuntu Server に deploy 用作業ディレクトリを作成し、`k3s` のみ同期する前提を作る。
    - `sudo mkdir -p /opt/apply && sudo chown -R yamazaki:yamazaki /opt/apply`
-   - 初回実行時に `deploy_apply.sh` が `DEPLOY_REPO_TOKEN` を使って `git clone --filter=blob:none --no-checkout` + `sparse-checkout set k3s` を行う。
+   - 初回実行時に `deploy_apply.sh` が `DEPLOY_REPO_TOKEN` を使って `git clone --depth=1 --no-checkout` + `sparse-checkout set k3s` を行う。
 8. Ubuntu Server に apply エンドポイント（`127.0.0.1:19081`）を常駐させる。
    - `apply_server.py` を `systemd` で常駐
    - `deploy_apply.sh` は `yamazaki` 実行
