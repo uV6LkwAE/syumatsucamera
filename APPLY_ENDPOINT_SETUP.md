@@ -56,10 +56,16 @@ flock -n 9 || { echo "already running" | tee -a "${LOG_FILE}"; exit 1; }
   test -n "${DJANGO_SUPERUSER_PASSWORD}"
   test -n "${DEPLOY_REPO_URL}"
   test -n "${DEPLOY_REPO_TOKEN}"
+  test -n "${TUNNEL_TOKEN}"
 
   # app-secret を毎回再作成して反映
   kubectl create secret generic app-secret \
     --from-env-file="${APP_SECRET_ENV}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+
+  # cloudflared 用 Token Secret を毎回再作成して反映
+  kubectl create secret generic cloudflared-token \
+    --from-literal=token="${TUNNEL_TOKEN}" \
     --dry-run=client -o yaml | kubectl apply -f -
 
   # registry 認証情報を読み込む
@@ -146,6 +152,7 @@ ALLOWED_HOSTS=syumatsucamera.com,cms.syumatsucamera.com
 ```env
 DEPLOY_REPO_URL=https://github.com/uV6LkwAE/syumatsucamera
 DEPLOY_REPO_TOKEN=replace_me
+TUNNEL_TOKEN=replace_me
 POSTGRES_DB=syumatsucamera
 POSTGRES_USER=app_prod_user
 POSTGRES_PASSWORD=replace_me
@@ -156,6 +163,7 @@ DJANGO_SUPERUSER_PASSWORD=replace_me
 注記:
 - `app.secret.env` は `kubectl --from-env-file` 専用で扱い、`source` しない。
 - `deploy_apply.sh` は毎回 `k3s` ディレクトリのみ sparse-checkout で同期してから `kubectl apply -k` を実行する。
+- `TUNNEL_TOKEN` は `apply.secrets.env` に置き、`deploy_apply.sh` が `cloudflared-token` Secret を毎回再作成する。
 - `POSTGRES_PASSWORD` にシングルクオート（`'`）を含める場合は、上記 SQL の文字列クオートが崩れるため別途エスケープ対応が必要。
 
 ## 3. 固定スクリプト動作確認
