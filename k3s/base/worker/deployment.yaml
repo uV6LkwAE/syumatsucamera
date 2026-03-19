@@ -35,7 +35,7 @@ spec:
             - celery
           args:
             - -A
-            - syumatsucamera
+            - syumatsucamera.celery:app
             - worker
             - -l
             - info
