@@ -128,7 +128,7 @@ flock -n 9 || { echo "already running" | tee -a "${LOG_FILE}"; exit 1; }
   kubectl rollout status deployment/worker --timeout=300s
 
   date -u +"[%Y-%m-%dT%H:%M:%SZ] deploy success"
-} | tee -a "${LOG_FILE}"
+} 2>&1 | tee -a "${LOG_FILE}"
 EOF
 
 sudo chmod 700 /opt/apply/bin/deploy_apply.sh
