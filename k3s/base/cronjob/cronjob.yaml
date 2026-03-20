@@ -14,6 +14,21 @@ spec:
           restartPolicy: OnFailure
           imagePullSecrets:
             - name: registry-credentials
+          initContainers:
+            - name: migrate
+              image: registry.syumatsucamera.com/syumatsucamera/backend:latest
+              imagePullPolicy: Always
+              command:
+                - python
+              args:
+                - manage.py
+                - migrate
+                - --noinput
+              envFrom:
+                - configMapRef:
+                    name: app-config
+                - secretRef:
+                    name: app-secret
           containers:
             - name: app-cronjob
               image: registry.syumatsucamera.com/syumatsucamera/backend:latest
