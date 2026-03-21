@@ -402,7 +402,7 @@ jobs:
           echo "Run URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: Send mail
-        uses: dawidd6/action-send-mail@v3
+        uses: dawidd6/action-send-mail@v6
         with:
           server_address: ${{ secrets.MAIL_SMTP_HOST }}
           server_port: ${{ secrets.MAIL_SMTP_PORT }}
