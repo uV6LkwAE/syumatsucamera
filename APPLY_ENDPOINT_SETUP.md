@@ -184,7 +184,7 @@ import uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 SCRIPT_PATH = "/opt/apply/bin/deploy_apply.sh"
-BIND_HOST = "127.0.0.1"
+BIND_HOST = "192.168.1.20"
 BIND_PORT = 19081
 JOB_STATUS = {}
 
@@ -213,7 +213,7 @@ class Handler(BaseHTTPRequestHandler):
             self.rfile.read(length)
 
         job_id = str(uuid.uuid4())
-        JOB_STATUS[job_id] = "running"
+        JOB_STATUS[job_id] = {"status": "running", "detail": ""}
         threading.Thread(target=run_job, args=(job_id,), daemon=True).start()
 
         self.send_response(202)
