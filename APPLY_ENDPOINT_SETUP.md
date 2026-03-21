@@ -104,13 +104,13 @@ flock -n 9 || { echo "already running" | tee -a "${LOG_FILE}"; exit 1; }
   kubectl rollout status statefulset/postgres --timeout=300s
   kubectl rollout status deployment/backend --timeout=300s
 
-  # 初回不足時のみ Postgres のロール/DB を作成する
-  kubectl exec statefulset/postgres -- sh -ec "
-    psql -U postgres -d postgres -tAc \"SELECT 1 FROM pg_roles WHERE rolname='${POSTGRES_USER}'\" | grep -q 1 || \
-    psql -U postgres -d postgres -c \"CREATE ROLE \\\"${POSTGRES_USER}\\\" LOGIN PASSWORD '${POSTGRES_PASSWORD}'\"
-    psql -U postgres -d postgres -tAc \"SELECT 1 FROM pg_database WHERE datname='${POSTGRES_DB}'\" | grep -q 1 || \
-    psql -U postgres -d postgres -c \"CREATE DATABASE \\\"${POSTGRES_DB}\\\" OWNER \\\"${POSTGRES_USER}\\\"\"
-  "
+  # Postgres の接続前提を検証する
+  if ! kubectl exec statefulset/postgres -- sh -ec "
+    psql -v ON_ERROR_STOP=1 -U \"${POSTGRES_USER}\" -d \"${POSTGRES_DB}\" -tAc 'SELECT 1' >/dev/null
+  "; then
+    echo \"postgres bootstrap check failed: unable to connect with POSTGRES_USER=${POSTGRES_USER} POSTGRES_DB=${POSTGRES_DB}\" >&2
+    exit 1
+  fi
 
   # 毎回 migrate を実行する
   kubectl exec deploy/backend -- python manage.py migrate --noinput
@@ -177,6 +177,7 @@ echo $?
 
 ```bash
 cat <<'EOF' | sudo tee /opt/apply/apply_server.py > /dev/null
+import json
 import subprocess
 import threading
 import uuid
@@ -190,7 +191,15 @@ JOB_STATUS = {}
 
 def run_job(job_id):
     result = subprocess.run([SCRIPT_PATH], capture_output=True, text=True)
-    JOB_STATUS[job_id] = "success" if result.returncode == 0 else "failed"
+    combined_output = (result.stdout + result.stderr).strip()
+    if result.returncode == 0:
+        JOB_STATUS[job_id] = {"status": "success", "detail": ""}
+        return
+
+    JOB_STATUS[job_id] = {
+        "status": "failed",
+        "detail": combined_output or "deploy_apply.sh exited with a non-zero status",
+    }
 
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
@@ -220,16 +229,16 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         job_id = self.path[len(prefix):]
-        status = JOB_STATUS.get(job_id)
-        if status is None:
+        payload = JOB_STATUS.get(job_id)
+        if payload is None:
             self.send_response(404)
             self.end_headers()
             return
 
         self.send_response(200)
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Type", "application/json; charset=utf-8")
         self.end_headers()
-        self.wfile.write(status.encode("utf-8"))
+        self.wfile.write(json.dumps(payload).encode("utf-8"))
 
     def log_message(self, fmt, *args):
         return
@@ -276,7 +285,9 @@ curl -i "http://127.0.0.1:19081/status/${job_id}"
 
 期待値:
 - `POST /` は `202` と `job_id` を返す
-- `GET /status/{job_id}` は `success` / `failed` / `running` のいずれかを返す
+- `GET /status/{job_id}` は JSON を返す
+  - 例: `{"status": "running"}`
+  - 例: `{"status": "failed", "detail": "..."}`
 
 ## 7. Nginx サーバーブロック設定
 既存の Nginx 設定ファイルへ以下の `server` ブロックを追加する。
@@ -390,6 +401,6 @@ curl -i -X POST https://apply.syumatsucamera.com/
   - `python manage.py migrate --noinput`
   - `rollout restart/status`
 - 初回だけ実質作成:
-  - Postgres ロール作成（存在時はskip）
-  - Postgres DB 作成（存在時はskip）
   - Django superuser 作成（存在時はskip）
+- 毎回前提確認:
+  - Postgres に `POSTGRES_USER` / `POSTGRES_DB` で接続できることを検証
