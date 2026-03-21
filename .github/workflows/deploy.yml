@@ -333,13 +333,25 @@ jobs:
               exit 1
             fi
 
-            status="$(
-              curl -fsS \
+            status_code="$(
+              curl -sS -o /tmp/apply_status_body.txt -w '%{http_code}' \
                 --cert /tmp/apply-client.crt \
                 --key /tmp/apply-client.key \
                 "https://apply.syumatsucamera.com/status/${{ steps.deploy_request.outputs.job_id }}"
             )"
-            status="$(printf '%s' "${status}" | tr -d '\n')"
+
+            if [ "${status_code}" != "200" ]; then
+              echo "apply status endpoint failed: unexpected status ${status_code}"
+              cat /tmp/apply_status_body.txt
+              exit 1
+            fi
+
+            status="$(
+              python -c 'import json,sys; print(json.load(open("/tmp/apply_status_body.txt"))["status"])'
+            )"
+            detail="$(
+              python -c 'import json; data=json.load(open("/tmp/apply_status_body.txt")); print(data.get("detail", ""))'
+            )"
             echo "apply status=${status} elapsed=${elapsed}s"
 
             if [ "${status}" = "success" ]; then
@@ -347,11 +359,17 @@ jobs:
             fi
 
             if [ "${status}" = "failed" ]; then
+              if [ -n "${detail}" ]; then
+                echo "apply detail=${detail}"
+              fi
               exit 1
             fi
 
             if [ "${status}" != "running" ]; then
               echo "unexpected apply status: ${status}"
+              if [ -n "${detail}" ]; then
+                echo "apply detail=${detail}"
+              fi
               exit 1
             fi
 
