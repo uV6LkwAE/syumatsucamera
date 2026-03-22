@@ -104,7 +104,7 @@ cms.syumatsucamera.com  （Cloudflare Accessで認証）
 ├─ /console                       # コンソール（トップ）
 │  ├─ /articles                   # 記事管理（一覧・並び替え：新しい/古い/人気）
 │  │  ├─ /new                     # 空ドラフト作成→編集へ遷移
-│  │  └─ /{articleId}/edit        # 記事編集（CKEditor / 画像管理 / 公開設定）
+│  │  └─ /{articleId}/edit        # 記事編集（Joddit / 画像管理 / 公開設定）
 │  ├─ /categories                 # カテゴリ管理（ツリー表示）
 │  │  ├─ /new                     # 作成
 │  │  └─ /{categoryId}/edit       # 編集
