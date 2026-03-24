@@ -103,7 +103,7 @@ nginx (gateway)
 cms.syumatsucamera.com  （Cloudflare Accessで認証）
 ├─ /console                       # コンソール（トップ）
 │  ├─ /articles                   # 記事管理（一覧・並び替え：新しい/古い/人気）
-│  │  ├─ /new                     # 空ドラフト作成→編集へ遷移
+│  │  ├─ /new                     # 新規作成画面（保存時に初回作成）
 │  │  └─ /{articleId}/edit        # 記事編集（Joddit / 画像管理 / 公開設定）
 │  ├─ /categories                 # カテゴリ管理（ツリー表示）
 │  │  ├─ /new                     # 作成
@@ -134,7 +134,7 @@ syumatsucamera.com
 │  └─ /notes
 │     ├─ /privacy-policy/          # プライバシーポリシー（記事）
 │     ├─ /administrator-self-introduction/ # 自己紹介（記事）
-│     └─ /{articleSlug}/           # 記事詳細（publishedのみ / PVはRedis incr）
+│     └─ /{articleSlug}/           # 記事詳細（publishのみ / PVはRedis incr）
 ├─ /category
 │  └─ /{categorySlug}/             # カテゴリを含む記事一覧（子孫含む・12件ページング）
 ├─ /tag
@@ -154,7 +154,7 @@ syumatsucamera.com
 
 ## 3.1 トップページ
 - 人気記事・新着記事を表示。
-- いずれも `status='published'` のみ対象。
+- いずれも `status='publish'` のみ対象。
 - 表示件数: 各6件。
 
 ## 3.2 一覧ページ
@@ -164,7 +164,7 @@ syumatsucamera.com
 
 ## 3.3 記事詳細ページ
 - URLキー: `category.slug` + `article.slug`。
-- 非公開記事（`published` 以外）は404。
+- 非公開記事（`publish` 以外）は404。
 - 表示時にPVをRedisへインクリメント。
   - Redisはインクリメントの増分を一時的に貯めるために利用する。
   - Postgresへの加算は定期実行（例: 1時間ごと）でまとめて反映する。
@@ -348,7 +348,7 @@ AmazonリンクをOGP対象外とする理由:
   - popular: 0.9
 
 2. `ArticleSitemap`
-- 対象: `Article.objects.filter(status='published')`
+- 対象: `Article.objects.filter(status='publish')`
 - `changefreq`: `weekly`
 - `lastmod`: `updated_at`
 - `priority` は記事属性で調整する。
@@ -403,7 +403,7 @@ class ArticleSitemap(Sitemap):
     changefreq = "weekly"
 
     def items(self):
-        return Article.objects.filter(status="published")
+        return Article.objects.filter(status="publish")
 
     def lastmod(self, obj):
         return obj.updated_at
@@ -449,8 +449,7 @@ class CategorySitemap(Sitemap):
 - 問い合わせ一覧表示。
 
 ### 4.2 記事作成/編集/削除
-- 新規作成はAPIで空ドラフト作成後、編集画面へ遷移。
-これはPKが確定しないと、メディアの格納ディレクトリIDが確定しないため行う。
+- 新規作成は編集画面で入力し、保存APIの初回保存で記事を作成する。
 - Jodit（無償版）で本文編集。
 管理者以外で自身の記事を編集不可にする用途でReadOnlyも使えそう。
 HackMDからの読み取りに対応するプラグインを自前で実装する。
@@ -463,33 +462,18 @@ HackMDからの読み取りに対応するプラグインを自前で実装す�
   - 画像ファイル名はアップロード時点でUUID名を確定する（後段処理でリネームしない）。
   - フロントは `FormData.append("file", file, "{uuid}.{ext}")` で送信時ファイル名のみUUID化する実装を採用する。
   - サーバー側でUUID形式/拡張子/MIMEを検証し、必要なら再採番可能な設計にする。
+  - アップロード先は `lock_token` 単位の `tmp` とし、サーバー側で保存先を強制決定する。
+  - `tmp` は k3s の永続ボリュームに保存する。
 - サムネイル:
-  - サムネイル方式は以下から選択する。
-    1. 通常アップロード（写真記事向け）
-    2. 規定サムネイル（週末カメラロゴの固定静的ファイル）
-    3. タイトルから自動生成（テック記事向け、AI生成ではない）
-  - `ARTICLE.thumbnail_mode` で方式を管理する（`uploaded / preset_logo / auto_generated`）。
-  - 規定サムネイルとデフォルトサムネイルは同一の固定画像を使用する。
-  - タイトル自動生成は `1200x630` 固定サイズで生成する（左ロゴ + 右タイトル構成）。
-  - デザインテンプレートによっては、背景に薄い透過度の画像を配置する場合がある。
-  - タイトル自動生成はAPI側（サーバー側）で行う。クライアント側では生成しない。
-  - 自動生成の出力形式は `jpg` を基本とする。
-  - 自動生成用デザインテンプレートは別テーブルで管理する（複数選択可能）。
-  - 実際に公開側で参照するサムネイルは全モード共通で `thumbnail_asset_id` に統一する。
-  - モードは後から切り替え可能とする。
-  - 既存サムネイルの上書きは許可する。`thumbnail_mode` 変更時も含め、旧サムネイルは新サムネイル反映成功後に削除する。
-  - スタッフも3方式すべて選択可能とする。
-  - 自動生成失敗時は保存自体は失敗させず、デフォルトサムネイルを設定してフォールバックする。
-  - 自動生成失敗時のエラー内容は `MEDIA_ASSET` 側に保存し、`ARTICLE` には保持しない。
-  - タイトル自動生成サムネイルは、プレビュー生成と保存確定を分離する。
-    - プレビュー生成API: サーバー側で画像を生成し、サーバーへ保存せずクライアントへ生成物を返すだけにする。
-    - 記事サムネイルの確定は、ユーザーが記事を保存したタイミングで行う（プレビュー表示だけでは確定しない）。
-    - 保存時は、クライアントが保持している生成済みサムネイル画像をPOSTして保存する。
-  - 生成済みサムネイル画像をクライアントから保存する際も、通常アップロード画像と同様にサーバー側で検証する。
-    - 検証対象はファイルサイズ上限とMIME typeのみとする。
-    - 明らかな異常入力（例: `100MB` 超過、`pdf` など画像以外）を弾く目的で実施する。
-    - 許容ファイルサイズ上限は `50MB` とする。
-    - アップロード後に画像処理ジョブでリサイズ/加工が走る前提のため、保存時点では上記の最低限検証に留める。
+  - サムネイルは `thumbnail_asset_id` のみで管理し、`ARTICLE.thumbnail_mode` は廃止する。
+  - 記事保存時のリクエストでは、以下の3択を受け付ける。
+    1. ユーザーが選択した画像を使用する（記事内画像と同様にリサイズを適用）
+    2. 固定のデフォルト画像を使用する
+    3. タイトル文字列をもとに生成した画像を使用する
+  - 方式の判定はDBカラムではなく、保存リクエストの `thumbnail_request.mode` で行う。
+  - サムネイル上書きは許可し、新規反映成功後に旧サムネイル実体を削除する。
+  - サムネイル保存時は、通常アップロード画像と同様にMIMEとサイズ上限を検証する。
+  - 許容ファイルサイズ上限は `50MB` とする。
 - SEOメタ設定:
   - 記事編集画面で `twitter:card` の種別を選択できるようにする。
   - 選択肢は `summary` / `summary_large_image` とする。
@@ -508,11 +492,37 @@ HackMDからの読み取りに対応するプラグインを自前で実装す�
 - 記事編集APIでは、本文内画像の差分（追加・削除対象）を検証して処理する。
   - API入力として、追加画像と削除対象画像の情報を受け取る前提とする。
   - サーバー側でも本文HTMLと照合し、矛盾があればエラーにする。
-  - 削除対象画像は、原本と派生を両方削除する。
+  - 削除対象画像は、原本と公開用画像を両方削除する。
   - 削除対象の `MEDIA_ASSET` レコードも整合を保って更新/削除する。
+  - 画像差分JSONは `lock_token`, `new_images`, `delete_images`, `thumbnail_request` を受け取る。
+  - 画像差分JSONの例:
+    ```json
+    {
+      "lock_token": "3d88e9d7-3a4f-4c13-8b2c-31dff2c29b6d",
+      "new_images": [
+        {
+          "file_name": "9f2c8a1e-1234-5678-9abc-def012345678.jpg",
+          "options": {
+            "resize": true,
+            "exif_watermark": true,
+            "site_logo_watermark": false,
+            "custom_text_overlay": false,
+            "custom_text": ""
+          }
+        }
+      ],
+      "delete_images": [
+        "2a0e7d75-f03f-4916-a03e-6e4f5ce2e3b9"
+      ],
+      "thumbnail_request": {
+        "mode": "generate_from_title",
+        "file_name": "7c89d972-7a3f-4ca1-8a31-25a99aa3380e-thumb.jpg",
+        "title_text": "Kyoto Trip"
+      }
+    }
+    ```
 - 記事削除時は、記事に紐づく画像をサムネイルを含めてすべて物理削除してよい。
-  - 対象: 本文画像（原本/派生）、サムネイル（uploaded/auto_generated の実体）
-  - `preset_logo` の固定静的ファイルは共有資産のため削除対象にしない。
+  - 対象: 本文画像（原本/公開用）、サムネイル実体（`thumbnail_asset_id` が指すアセット）
 - 画像ファイルの名前が重複したときの対策は？
   - アップロード時にファイル名はuuidへ変換する（記事内画像・サムネイル共通）。
   - Djangoが同名アップロード時に付与するプレフィックスによる回避策（例: (1)）を不要にする。
@@ -537,19 +547,20 @@ HackMDからの読み取りに対応するプラグインを自前で実装す�
 1. 記事内の画像の処理
 以下の順で実行する。
 A. ジョブ開始時に対象記事をロックする（ジョブ進行中は記事をロック状態にする）。
-B. 画像処理は必ず `/temp`（一時領域）を経由して行い、正式保存先へ直接書き込まない。
+B. 画像処理は必ず `tmp/{lock_token}`（一時領域）を経由して行う。
 C. リサイズ+Exifから撮影情報取得後、透かしを挿入（ファイル名はアップロード時にUUID確定済み）
-D. 処理結果は一時領域に出力する。
+D. 処理成功した画像は、その都度オリジナル保存先と公開用保存先へ移動してよい。
 E. オリジナルの画像は別のディレクトリに保存し、公開しない。
-F. ジョブ内の画像処理がすべて終了するまで、一時領域から正式保存先へ移動しない。
-G. ジョブ内のすべての処理が最後まで完了した場合のみ、一時領域から正式保存先へ移動して確定する（コミットする）。
-H. 失敗時は正式保存先へ反映しない。
-I. 本文HTMLの画像パスは書き換えない（公開時レンダリングでCDNリンクへ置換する）。
-J. 記事編集APIから渡された削除対象画像について、原本/派生を削除し、関連する `MEDIA_ASSET` を整理する。
-K. 正常終了・異常終了のどちらでも、最終処理で対象 `/temp` ディレクトリ配下をクリーンアップする。
-L. `/temp` クリーンアップ完了後に、ジョブ自身が記事ロックを解除する（成功/失敗時ともに実施）。
-M. 画像処理ジョブが完了するまで記事は公開不可とする。
-N. 画像処理ジョブは共用 `tmp` を利用するため並列実行しない（グローバルロックで直列化する）。
+F. 画像処理が一部失敗しても、成功した画像は保存済みとしてよい。
+G. 本文HTML自体は書き換えない。
+H. 公開画面とJodit編集画面では、表示時にJSで `tmp` パスを公開用パスへ表面的に置換する。
+I. 記事編集APIから渡された削除対象画像について、原本/公開用画像を削除し、関連する `MEDIA_ASSET` を整理する。
+J. 正常終了・異常終了のどちらでも、最終処理で対象 `tmp/{lock_token}` ディレクトリ配下をクリーンアップする。
+K. `tmp/{lock_token}` クリーンアップ完了後に、ジョブ自身が記事ロックを解除する（成功/失敗時ともに実施）。
+L. 画像処理ジョブが完了するまで記事は公開不可とする。
+M. 画像処理が1件でも失敗した場合、記事は公開しない。
+N. CMS側では対象記事へ警告バッジを表示し、記事保存フローログを参照できるようにする。
+O. どの画像が失敗したかは記事保存フローログテーブルへ残す。
 2. OGPレコード作成
 記事内のリンクのOGPレコードを作成するため、リンク先をfetchする。
 結果をOGPテーブルに書き込む。
@@ -564,14 +575,7 @@ h1タグなどを認識して、目次をTree状に生成する。
 - カテゴリーの親子の管理方法を検討。
 - 作成/編集/削除のCRUD。
 
-### 4.4 メディアマネージャー
-削除するかも。
-- `MEDIA_ROOT` 配下を階層ブラウズ（リスト/グリッド）。
-- ファイル削除、空ディレクトリ削除（再帰削除なし）。
-- EXIF表示（jpg/jpeg）。
-- 相対パスのコピー機能。
-
-### 4.5 OGPマネージャー
+### 4.4 OGPマネージャー
 - OGPキャッシュレコードの一覧。
 - 個別/一括に準じた再取得、編集、削除操作。
 - OGPの取得タイミング:
@@ -626,8 +630,7 @@ ER_DIAGRAM.md を参照。
 - 対象ジョブ（記事POST後に走るワーカー処理で、全体を単一ジョブとして扱う場合）
   - `lock:job:postprocess_article`（記事の後処理を丸ごと1本として排他したい場合のみ）
   - 通常は 2. の対象単位ロックを使い、グローバルロックは使わない（全記事が直列になるのを避けるため）
-  - ただし画像処理ジョブは、共用 `tmp` を使う運用のためグローバルロックで直列化する（並列不可）。
-    - 例: `lock:job:process_images`
+  - 画像処理ジョブは `lock_token` 単位の `tmp` を使うため、グローバルロック前提にはしない。
 
 2. 対象単位ロック（記事/アセット単位で同時実行を禁止）
 - キー形式: `lock:{target_type}:{target_id}:{job_name}`
@@ -637,7 +640,7 @@ ER_DIAGRAM.md を参照。
 - 解放: token一致を確認して `DEL`
 - TTL: 対象処理の想定最大実行時間 + 余裕（画像処理や外部fetchは特に長め）
 - 記事POST後に走るワーカー処理（記事単位で排他）
-  - 画像処理（記事内画像の変換〜保存〜本文パス書換えを含む）
+  - 画像処理（記事内画像の変換〜保存を含む）
     - `lock:article:{article_id}:process_images`
   - OGPレコード作成（リンク先fetch→OGPテーブル書込→フォールバック含む）
     - `lock:article:{article_id}:build_ogp`
@@ -715,23 +718,22 @@ cmsapp/management/commands内に定期ジョブ用のスクリプトを実装。
 ---
 
 ## 画像配信・保存要件（追記）
-- 画像は「原本（オリジナル）」と「派生（処理済み）」を別ディレクトリに保存する必要がある。
-- 公開ページが参照するのは必ず派生側とする。
+- 画像は「原本（オリジナル）」と「公開用（処理済み）」を別ディレクトリに保存する必要がある。
+- 公開ページが参照するのは必ず公開用側とする。
 - 原本は必ず非公開とする。
-- 派生のみNginxで静的配信し、原本側はルーティングを作らない。
+- 公開用のみNginxで静的配信し、原本側はルーティングを作らない。
 - 画像の配信はCloudflareのCDNに任せる。
 - React+DjangoRestFrameworkの構成のため、Djangoテンプレートフィルターは利用しない。
 - 本文HTMLにはCDNの完全URLをハードコードしない。相対パスを保存する。
 - CDN用のURL変換は公開側の本文パース処理（画像 / OGP / X埋め込みの変換と同じパス）で行う。
-- 記事内画像とサムネイルは保存ディレクトリを分ける。
-  - 記事内画像（原本）: `MEDIA_ROOT/original/articles/{article_id}/images/{asset_uuid}.{ext}`
-  - 記事内画像（派生）: `MEDIA_ROOT/derived/articles/{article_id}/images/{asset_uuid}.{ext}`
-  - サムネイル uploaded（原本）: `MEDIA_ROOT/original/articles/{article_id}/thumbnails/{asset_uuid}.{ext}`
-  - サムネイル uploaded（派生）: `MEDIA_ROOT/derived/articles/{article_id}/thumbnails/{asset_uuid}.{ext}`
-  - サムネイル auto_generated（公開用のみ）: `MEDIA_ROOT/derived/articles/{article_id}/thumbnails/{asset_uuid}.{ext}`
-  - サムネイル preset_logo（固定静的ファイル）: `frontend/public/site-thumbnails/syumatsucamera-preset-1200x630.{ext}`
+- 記事内画像とサムネイルは記事IDごとに分けず、UUIDシャーディングで保存する。
+  - 記事内画像（原本）: `MEDIA_ROOT/original/{xx}/{yy}/{asset_uuid}.{ext}`
+  - 記事内画像（公開用）: `MEDIA_ROOT/images/{xx}/{yy}/{asset_uuid}.{ext}`
+  - サムネイル（原本）: `MEDIA_ROOT/original/{xx}/{yy}/{asset_uuid}.{ext}`
+  - サムネイル（公開用）: `MEDIA_ROOT/images/{xx}/{yy}/{asset_uuid}.{ext}`
 - 記事内画像・サムネイルのファイル名はランダムUUIDを使用し、元ファイル名は保存パスに使わない。
 - 拡張子は固定しない（`jpg` 強制しない）。実際の出力形式に合わせる。
+- `tmp` は `MEDIA_ROOT/tmp/{lock_token}/{asset_uuid}.{ext}` に保存し、k3s の永続ボリュームに載せる。
 
 ---
 
