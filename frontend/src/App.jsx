@@ -4,7 +4,24 @@ function Home() {
   return (
     <main className="page">
       <h1>週末カメラ</h1>
-      <p>React + DjangoRestFramework の新構成プロジェクトです。</p>
+      <p>
+        ご覧いただきありがとうございます。
+        <br />
+        現在、週末カメラは新サイトへ移行作業中です。
+        <br />
+        ご不便をおかけしますが、再開まで今しばらくお待ちください。
+        <br />
+        再開は5月中を予定しています。
+        <br />
+        <br />
+        お問い合わせは以下のメールアドレスより受け付けております。
+        <br />
+        <br />
+        syumatsu.camera[*]gmail.com
+        <br />
+        <br />
+        *を@に置き換えてください。
+      </p>
     </main>
   )
 }
