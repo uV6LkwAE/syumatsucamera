@@ -1,0 +1,1308 @@
+openapi: 3.1.0
+info:
+  title: syumatsucamera API Design Draft
+  version: 0.1.0
+  description: |
+    本ファイルは実装前のAPI設計をGit管理するためのドラフトです。
+    `AGENTS.md` と各種要件mdを元にした初版であり、実装完了後の自動生成schemaではありません。
+servers:
+  - url: https://syumatsucamera.com
+    description: Public API
+  - url: https://cms.syumatsucamera.com
+    description: CMS API
+tags:
+  - name: system
+    description: プロジェクト直下の共通API
+  - name: public
+    description: apps.public が担う公開サイト向け参照API
+  - name: contacts
+    description: apps.contacts が担う問い合わせ関連API
+  - name: users
+    description: apps.users が担うCMS利用者情報と権限制御
+  - name: cms
+    description: apps.cms が担う記事、カテゴリ、タグ、公開申請の管理API
+  - name: ogp
+    description: apps.ogp が担うOGP管理API
+security: []
+x-permission-classes:
+  AdminOnlyReadWrite:
+    description: admin のみ読み書きを許可する
+  AuthorAdminReadWrite:
+    description: author と admin の読み書きを許可する
+  ArticleAuthorAdminReadWrite:
+    description: 対象記事の author と admin のみ読み書きを許可する
+  SelfActivation:
+    description: 仮登録ユーザー本人による本登録のみを許可する
+paths:
+  /health:
+    get:
+      tags:
+        - system
+      summary: DBとRedisのヘルスチェックを返す
+      operationId: getHealth
+      security: []
+      responses:
+        "200":
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/SystemHealthResponse"
+        "503":
+          description: 依存サービス異常
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/SystemHealthResponse"
+  /api/public/home:
+    get:
+      tags:
+        - public
+      summary: トップページ用の人気記事と新着記事を返す
+      operationId: getPublicHome
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/PublicHome"
+  /api/public/articles/new:
+    get:
+      tags:
+        - public
+      summary: 公開記事の新着一覧を返す
+      operationId: listNewArticles
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/PublicArticleList"
+  /api/public/articles/popular:
+    get:
+      tags:
+        - public
+      summary: 公開記事の人気一覧を返す
+      operationId: listPopularArticles
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/PublicArticleList"
+  /api/public/articles/{category_slug}/{article_slug}:
+    get:
+      tags:
+        - public
+      summary: 公開記事詳細を返す
+      operationId: getPublicArticle
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/CategorySlug"
+        - $ref: "#/components/parameters/ArticleSlug"
+      responses:
+        "200":
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/PublicArticleDetail"
+        "404":
+          description: 記事が存在しない、または非公開
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
+  /api/public/categories/{category_slug}/articles:
+    get:
+      tags:
+        - public
+      summary: 指定カテゴリと子孫カテゴリに属する公開記事一覧を返す
+      operationId: listCategoryArticles
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/CategorySlug"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/PublicArticleList"
+        "404":
+          description: カテゴリが存在しない
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
+  /api/public/tags/{tag_slug}/articles:
+    get:
+      tags:
+        - public
+      summary: 指定タグに属する公開記事一覧を返す
+      operationId: listTagArticles
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/TagSlug"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/PublicArticleList"
+        "404":
+          description: タグが存在しない
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
+  /api/public/search:
+    get:
+      tags:
+        - public
+      summary: タイトル部分一致で公開記事を検索する
+      operationId: searchArticles
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/SearchQuery"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/PublicArticleList"
+  /api/public/contacts:
+    post:
+      tags:
+        - contacts
+      summary: 問い合わせを登録する
+      operationId: createContact
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./components/schemas.yaml#/components/schemas/ContactsCreateRequest"
+      responses:
+        "201":
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/ContactsCreateResponse"
+        "400":
+          description: 入力値不正
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonValidationError"
+  /api/users/session/me:
+    get:
+      tags:
+        - users
+      summary: CMS利用中のユーザー情報を返す
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin または author
+        permission_class: AuthorAdminReadWrite
+        lock_token を検証後、必要な場合のみ tmp/{lock_token} ディレクトリを作成する
+      operationId: getCmsSessionMe
+      security:
+        - CloudflareAccessJwt:
+            - admin
+        - CloudflareAccessJwt:
+            - author
+      x-permission-class: AuthorAdminReadWrite
+      responses:
+        "200":
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/UsersSessionUser"
+        "401":
+          description: 認証失敗
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
+  /api/cms/articles:
+    get:
+      tags:
+        - cms
+      summary: CMS記事一覧を返す
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin または author
+        permission_class: AuthorAdminReadWrite
+      operationId: listCmsArticles
+      security:
+        - CloudflareAccessJwt:
+            - admin
+        - CloudflareAccessJwt:
+            - author
+      x-permission-class: AuthorAdminReadWrite
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/CmsArticleOrdering"
+        - $ref: "#/components/parameters/CmsArticleStatus"
+      responses:
+        "200":
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CmsArticleList"
+    post:
+      tags:
+        - cms
+      summary: 記事を新規作成する
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin または author
+        permission_class: AuthorAdminReadWrite
+      operationId: createCmsArticle
+      security:
+        - CloudflareAccessJwt:
+            - admin
+        - CloudflareAccessJwt:
+            - author
+      x-permission-class: AuthorAdminReadWrite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./components/schemas.yaml#/components/schemas/CmsArticleUpsertRequest"
+      responses:
+        "202":
+          description: 受付成功
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CmsArticleMutationResponse"
+        "400":
+          description: 入力値不正
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonValidationError"
+  /api/cms/articles/{article_id}:
+    get:
+      tags:
+        - cms
+      summary: CMS記事詳細を返す
+      description: |
+        認証: CloudflareAccessJwt
+        権限: 対象記事の author または admin
+        permission_class: ArticleAuthorAdminReadWrite
+      operationId: getCmsArticle
+      security:
+        - CloudflareAccessJwt:
+            - admin
+        - CloudflareAccessJwt:
+            - author
+      x-permission-class: ArticleAuthorAdminReadWrite
+      parameters:
+        - $ref: "#/components/parameters/ArticleId"
+      responses:
+        "200":
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CmsArticle"
+        "404":
+          description: 記事が存在しない
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
+    patch:
+      tags:
+        - cms
+      summary: 記事を更新する
+      description: |
+        認証: CloudflareAccessJwt
+        権限: 対象記事の author または admin
+        permission_class: ArticleAuthorAdminReadWrite
+      operationId: updateCmsArticle
+      security:
+        - CloudflareAccessJwt:
+            - admin
+        - CloudflareAccessJwt:
+            - author
+      x-permission-class: ArticleAuthorAdminReadWrite
+      parameters:
+        - $ref: "#/components/parameters/ArticleId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./components/schemas.yaml#/components/schemas/CmsArticleUpsertRequest"
+      responses:
+        "202":
+          description: 受付成功
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CmsArticleMutationResponse"
+        "400":
+          description: 入力値不正または状態不正
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonValidationError"
+        "403":
+          description: ロック不一致または権限不足
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
+        "404":
+          description: 記事が存在しない
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
+    delete:
+      tags:
+        - cms
+      summary: 記事を削除する
+      description: |
+        認証: CloudflareAccessJwt
+        権限: 対象記事の author または admin
+        permission_class: ArticleAuthorAdminReadWrite
+      operationId: deleteCmsArticle
+      security:
+        - CloudflareAccessJwt:
+            - admin
+        - CloudflareAccessJwt:
+            - author
+      x-permission-class: ArticleAuthorAdminReadWrite
+      parameters:
+        - $ref: "#/components/parameters/ArticleId"
+      responses:
+        "204":
+          description: 削除成功
+        "403":
+          description: 権限不足
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
+        "404":
+          description: 記事が存在しない
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
+  /api/cms/article-sessions:
+    post:
+      tags:
+        - cms
+      summary: 記事編集セッションを開始して lock_token を発行する
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin または author
+        permission_class: AuthorAdminReadWrite
+      operationId: createArticleSession
+      security:
+        - CloudflareAccessJwt:
+            - admin
+        - CloudflareAccessJwt:
+            - author
+      x-permission-class: AuthorAdminReadWrite
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "./components/schemas.yaml#/components/schemas/CmsArticleSessionCreateRequest"
+      responses:
+        "201":
+          description: 取得成功
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CmsArticleSession"
+        "403":
+          description: 他者編集中
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
+  /api/cms/article-sessions/{lock_token}:
+    patch:
+      tags:
+        - cms
+      summary: 記事編集セッションのTTLを延長する
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin または author
+        permission_class: AuthorAdminReadWrite
+      operationId: refreshArticleSession
+      security:
+        - CloudflareAccessJwt:
+            - admin
+        - CloudflareAccessJwt:
+            - author
+      x-permission-class: AuthorAdminReadWrite
+      parameters:
+        - $ref: "#/components/parameters/LockToken"
+      responses:
+        "200":
+          description: 延長成功
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CmsArticleSession"
+        "403":
+          description: ロック失効または不一致
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
+      parameters:
+        - $ref: "#/components/parameters/LockToken"
+      responses:
+        "204":
+          description: 解放成功
+        "403":
+          description: ロック不一致
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
+  /api/cms/article-images:
+    post:
+      tags:
+        - cms
+      summary: 記事編集中画像を tmp 配下へアップロードする
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin または author
+        permission_class: AuthorAdminReadWrite
+      operationId: uploadCmsArticleImage
+      security:
+        - CloudflareAccessJwt:
+            - admin
+        - CloudflareAccessJwt:
+            - author
+      x-permission-class: AuthorAdminReadWrite
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "./components/schemas.yaml#/components/schemas/CmsArticleImageUploadRequest"
+      responses:
+        "201":
+          description: アップロード成功
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CmsArticleImageUploadResponse"
+        "400":
+          description: 入力値不正
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonValidationError"
+        "403":
+          description: lock_token 不正または権限不足
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
+  /api/cms/articles/{article_id}/publish-requests:
+    post:
+      tags:
+        - cms
+      summary: author が公開申請を作成する
+      description: |
+        認証: CloudflareAccessJwt
+        権限: 対象記事の author または admin
+        permission_class: ArticleAuthorAdminReadWrite
+      operationId: createPublishRequest
+      security:
+        - CloudflareAccessJwt:
+            - admin
+        - CloudflareAccessJwt:
+            - author
+      x-permission-class: ArticleAuthorAdminReadWrite
+      parameters:
+        - $ref: "#/components/parameters/ArticleId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "./components/schemas.yaml#/components/schemas/CmsPublishRequestCreateRequest"
+      responses:
+        "201":
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CmsPublishRequest"
+        "400":
+          description: 状態不正
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonValidationError"
+  /api/cms/article-save-logs:
+    get:
+      tags:
+        - cms
+      summary: 記事保存フローログ一覧を返す
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin または author
+        permission_class: AuthorAdminReadWrite
+      operationId: listCmsArticleSaveLogs
+      security:
+        - CloudflareAccessJwt:
+            - admin
+        - CloudflareAccessJwt:
+            - author
+      x-permission-class: AuthorAdminReadWrite
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/RequestUserId"
+        - $ref: "#/components/parameters/OccurredAtFrom"
+        - $ref: "#/components/parameters/OccurredAtTo"
+        - $ref: "#/components/parameters/LockTokenQuery"
+        - $ref: "#/components/parameters/ArticleSaveLogTarget"
+        - $ref: "#/components/parameters/ArticleSaveLogStatus"
+      responses:
+        "200":
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CmsArticleSaveLogList"
+  /api/cms/publish-requests/{publish_request_id}/approve:
+    post:
+      tags:
+        - cms
+      summary: 管理者が公開申請を承認する
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin
+        permission_class: AdminOnlyReadWrite
+      operationId: approvePublishRequest
+      security:
+        - CloudflareAccessJwt:
+            - admin
+      x-permission-class: AdminOnlyReadWrite
+      parameters:
+        - $ref: "#/components/parameters/PublishRequestId"
+      responses:
+        "200":
+          description: 承認成功
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CmsPublishRequest"
+        "400":
+          description: 状態不正
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonValidationError"
+  /api/cms/publish-requests/{publish_request_id}/reject:
+    post:
+      tags:
+        - cms
+      summary: 管理者が公開申請を却下する
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin
+        permission_class: AdminOnlyReadWrite
+      operationId: rejectPublishRequest
+      security:
+        - CloudflareAccessJwt:
+            - admin
+      x-permission-class: AdminOnlyReadWrite
+      parameters:
+        - $ref: "#/components/parameters/PublishRequestId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "./components/schemas.yaml#/components/schemas/CmsPublishRequestRejectRequest"
+      responses:
+        "200":
+          description: 却下成功
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CmsPublishRequest"
+        "400":
+          description: 状態不正
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonValidationError"
+  /api/cms/categories:
+    get:
+      tags:
+        - cms
+      summary: カテゴリツリー一覧を返す
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin
+        permission_class: AdminOnlyReadWrite
+      operationId: listCmsCategories
+      security:
+        - CloudflareAccessJwt:
+            - admin
+      x-permission-class: AdminOnlyReadWrite
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CmsCategoryTree"
+    post:
+      tags:
+        - cms
+      summary: カテゴリを作成する
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin
+        permission_class: AdminOnlyReadWrite
+      operationId: createCmsCategory
+      security:
+        - CloudflareAccessJwt:
+            - admin
+      x-permission-class: AdminOnlyReadWrite
+      requestBody:
+        required: true
+        content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CmsCategoryCreateRequest"
+      responses:
+        "201":
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CmsCategoryNode"
+        "400":
+          description: 入力値不正
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonValidationError"
+  /api/cms/categories/{category_id}:
+    patch:
+      tags:
+        - cms
+      summary: カテゴリを更新する
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin
+        permission_class: AdminOnlyReadWrite
+      operationId: updateCmsCategory
+      security:
+        - CloudflareAccessJwt:
+            - admin
+      x-permission-class: AdminOnlyReadWrite
+      parameters:
+        - $ref: "#/components/parameters/CategoryId"
+      requestBody:
+        required: true
+        content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CmsCategoryUpdateRequest"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CmsCategoryNode"
+        "400":
+          description: 入力値不正
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonValidationError"
+    delete:
+      tags:
+        - cms
+      summary: カテゴリを削除する
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin
+        permission_class: AdminOnlyReadWrite
+      operationId: deleteCmsCategory
+      security:
+        - CloudflareAccessJwt:
+            - admin
+      x-permission-class: AdminOnlyReadWrite
+      parameters:
+        - $ref: "#/components/parameters/CategoryId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./components/schemas.yaml#/components/schemas/CmsCategoryDeleteRequest"
+      responses:
+        "204":
+          description: 削除成功
+        "400":
+          description: 削除不可
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
+        "404":
+          description: カテゴリが存在しない
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
+  /api/users:
+    get:
+      tags:
+        - users
+      summary: CMSユーザー一覧を返す
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin
+        permission_class: AdminOnlyReadWrite
+      operationId: listCmsUsers
+      security:
+        - CloudflareAccessJwt:
+            - admin
+      x-permission-class: AdminOnlyReadWrite
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/UsersUserList"
+    post:
+      tags:
+        - users
+      summary: 管理者が仮登録ユーザーを作成する
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin
+        permission_class: AdminOnlyReadWrite
+      operationId: createProvisionalUser
+      security:
+        - CloudflareAccessJwt:
+            - admin
+      x-permission-class: AdminOnlyReadWrite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./components/schemas.yaml#/components/schemas/UsersProvisionCreateRequest"
+      responses:
+        "201":
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/UsersUser"
+        "400":
+          description: 入力値不正
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonValidationError"
+  /api/users/{user_id}:
+    get:
+      tags:
+        - users
+      summary: CMSユーザー詳細を返す
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin
+      operationId: getCmsUser
+      security:
+        - CloudflareAccessJwt:
+            - admin
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/UsersUser"
+        "404":
+          description: ユーザーが存在しない
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
+    patch:
+      tags:
+        - users
+      summary: CMSユーザーを更新する
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin
+      operationId: updateCmsUser
+      security:
+        - CloudflareAccessJwt:
+            - admin
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./components/schemas.yaml#/components/schemas/UsersUserUpdateRequest"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/UsersUser"
+        "400":
+          description: 入力値不正
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonValidationError"
+  /api/users/{user_id}/invite:
+    post:
+      tags:
+        - users
+      summary: 管理者が仮登録ユーザーの招待URLを発行する
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin
+      operationId: issueUserInvitation
+      security:
+        - CloudflareAccessJwt:
+            - admin
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: 発行成功
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/UsersActivationIssueResponse"
+        "404":
+          description: ユーザーが存在しない
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
+  /api/users/activate/{user_id}:
+    get:
+      tags:
+        - users
+      summary: 本登録対象ユーザー情報を返す
+      description: |
+        認証: CloudflareAccessJwt
+        権限: activate_self
+        permission_class: SelfActivation
+      operationId: getActivationUser
+      security:
+        - CloudflareAccessJwt:
+            - activate_self
+      x-permission-class: SelfActivation
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/UsersActivationDetail"
+        "404":
+          description: 本登録対象ユーザーが存在しない
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
+    post:
+      tags:
+        - users
+      summary: 仮登録ユーザーが本登録を完了する
+      description: |
+        認証: CloudflareAccessJwt
+        権限: activate_self
+        permission_class: SelfActivation
+      operationId: completeUserActivation
+      security:
+        - CloudflareAccessJwt:
+            - activate_self
+      x-permission-class: SelfActivation
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./components/schemas.yaml#/components/schemas/UsersRegistrationCompleteRequest"
+      responses:
+        "200":
+          description: 本登録成功
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/UsersUser"
+        "400":
+          description: 入力値不正または状態不正
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonValidationError"
+        "404":
+          description: 本登録対象ユーザーが存在しない
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
+  /api/contacts:
+    get:
+      tags:
+        - contacts
+      summary: 問い合わせ一覧を返す
+      operationId: listCmsContacts
+      security:
+        - CloudflareAccessJwt: []
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/ContactsContactList"
+  /api/ogp:
+    get:
+      tags:
+        - ogp
+      summary: OGPキャッシュ一覧を返す
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin
+        permission_class: AdminOnlyReadWrite
+      operationId: listCmsOgp
+      security:
+        - CloudflareAccessJwt:
+            - admin
+      x-permission-class: AdminOnlyReadWrite
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/OgpRecordList"
+  /api/ogp/{ogp_id}:
+    get:
+      tags:
+        - ogp
+      summary: OGPキャッシュ詳細を返す
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin
+        permission_class: AdminOnlyReadWrite
+      operationId: getCmsOgp
+      security:
+        - CloudflareAccessJwt:
+            - admin
+      x-permission-class: AdminOnlyReadWrite
+      parameters:
+        - $ref: "#/components/parameters/OgpId"
+      responses:
+        "200":
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/OgpRecord"
+        "404":
+          description: OGPレコードが存在しない
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
+    patch:
+      tags:
+        - ogp
+      summary: OGPキャッシュを編集する
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin
+        permission_class: AdminOnlyReadWrite
+      operationId: updateCmsOgp
+      security:
+        - CloudflareAccessJwt:
+            - admin
+      x-permission-class: AdminOnlyReadWrite
+      parameters:
+        - $ref: "#/components/parameters/OgpId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./components/schemas.yaml#/components/schemas/OgpRecordUpdateRequest"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/OgpRecord"
+    delete:
+      tags:
+        - ogp
+      summary: OGPキャッシュを削除する
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin
+        permission_class: AdminOnlyReadWrite
+      operationId: deleteCmsOgp
+      security:
+        - CloudflareAccessJwt:
+            - admin
+      x-permission-class: AdminOnlyReadWrite
+      parameters:
+        - $ref: "#/components/parameters/OgpId"
+      responses:
+        "204":
+          description: 削除成功
+  /api/ogp/{ogp_id}/refetch:
+    post:
+      tags:
+        - ogp
+      summary: OGPキャッシュを再取得する
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin
+        permission_class: AdminOnlyReadWrite
+      operationId: refetchCmsOgp
+      security:
+        - CloudflareAccessJwt:
+            - admin
+      x-permission-class: AdminOnlyReadWrite
+      parameters:
+        - $ref: "#/components/parameters/OgpId"
+      responses:
+        "202":
+          description: 再取得ジョブを受け付けた
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/SystemAcceptedJob"
+components:
+  securitySchemes:
+    CloudflareAccessJwt:
+      type: apiKey
+      in: header
+      name: Cf-Access-Jwt-Assertion
+      description: 記事管理 / ユーザー管理 / OGP管理 / 招待本登録などの Access 保護対象APIで Cloudflare Access が付与するJWT
+  parameters:
+    Page:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: 返却するオブジェクト件数。未指定時は各APIのデフォルト件数を用いる。
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+    SearchQuery:
+      name: q
+      in: query
+      required: true
+      schema:
+        type: string
+        minLength: 1
+    CmsArticleOrdering:
+      name: ordering
+      in: query
+      required: false
+      schema:
+        type: string
+        enum:
+          - newest
+          - oldest
+          - popular
+        default: newest
+    CmsArticleStatus:
+      name: status
+      in: query
+      required: false
+      schema:
+        type: string
+        enum:
+          - draft
+          - publish
+          - private
+    ArticleId:
+      name: article_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CategoryId:
+      name: category_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    UserId:
+      name: user_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    OgpId:
+      name: ogp_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PublishRequestId:
+      name: publish_request_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    LockToken:
+      name: lock_token
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    LockTokenQuery:
+      name: lock_token
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+    RequestUserId:
+      name: request_user_id
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+    OccurredAtFrom:
+      name: occurred_at_from
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date-time
+    OccurredAtTo:
+      name: occurred_at_to
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date-time
+    ArticleSaveLogTarget:
+      name: target
+      in: query
+      required: false
+      schema:
+        type: string
+    ArticleSaveLogStatus:
+      name: status
+      in: query
+      required: false
+      schema:
+        type: string
+        enum:
+          - failed
+          - started
+          - completed
+    CategorySlug:
+      name: category_slug
+      in: path
+      required: true
+      schema:
+        type: string
+    ArticleSlug:
+      name: article_slug
+      in: path
+      required: true
+      schema:
+        type: string
+    TagSlug:
+      name: tag_slug
+      in: path
+      required: true
+      schema:
+        type: string

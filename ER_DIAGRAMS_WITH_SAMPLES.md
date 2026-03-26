@@ -6,7 +6,9 @@ erDiagram
         string email UK "editor@syumatsucamera.com"
         string display_name "WeekendCameraEditor"
         string profile "週末にスナップ撮影をしています。"
-        string role "[admin, staff]"
+        string icon "/media/users/2a0e7d75-f03f-4916-a03e-6e4f5ce2e3b9/icon.png"
+        string header_image "/media/users/2a0e7d75-f03f-4916-a03e-6e4f5ce2e3b9/header.jpg"
+        string role "[admin, author]"
         bool is_active "true"
         timestamptz last_login_at "2026-03-24T10:15:03+09:00"
         timestamptz created_at "2026-03-22T10:15:03+09:00"
@@ -36,7 +38,7 @@ erDiagram
         string summary "Kyoto street photo report."
         text body_html "<html><body><p>本文サンプル</p></body></html>"
         string status "[draft, publish, private]"
-        string thumbnail_mode "[uploaded, default, generated]"
+        string twitter_card "[summary, summary_large_image]"
         timestamptz published_at "null"
         bigint views_total "0"
         uuid thumbnail_asset_id FK "0c1ac2d4-9f50-4ed8-8e6e-4d8250d25f24"
@@ -51,9 +53,9 @@ erDiagram
 
     OPTION {
         uuid id PK "958de44f-0279-4078-b445-bbc47ecb4b14"
-        string code UK "non_monetized"
-        string label "NonMonetized"
-        text default_text "off"
+        string code UK "pr"
+        string label "PR"
+        text default_text "on"
         timestamptz created_at "2026-03-22T10:15:03+09:00"
         timestamptz updated_at "2026-03-22T10:15:03+09:00"
     }
@@ -168,12 +170,12 @@ erDiagram
 - `media_asset.file_name` は重複禁止: `UNIQUE(file_name)`
 - `user.cf_access_sub` は `UNIQUE`（`NULL` を許容する実装。PostgreSQLは `NULL` 同士を重複扱いしない）
 - `user.email` は `UNIQUE`（大文字小文字を同一視する実装を推奨）
-- `user.role` は列挙制約: `admin/staff`
+- `user.role` は列挙制約: `admin/author`
 - `user.profile` は `max_length=300`
 - `user` は `CHECK (NOT is_active OR (cf_access_sub IS NOT NULL AND display_name IS NOT NULL AND profile IS NOT NULL AND char_length(btrim(display_name)) > 0 AND char_length(btrim(profile)) > 0))` を推奨
 - `article_publish_request.status` は列挙制約（例: `pending/approved/rejected`）
 - `article.status` は列挙制約（例: `draft/publish/private`）+ `DEFAULT 'draft'`
-- `article.thumbnail_mode` は列挙制約（例: `uploaded/default/generated`）
+- `article.twitter_card` は列挙制約（例: `summary/summary_large_image`）+ `DEFAULT 'summary_large_image'`
 - `article.title` / `article.slug` / `article.summary` / `article.body_html` は空文字禁止を推奨: `CHECK (char_length(btrim(col)) > 0)`
 - `article.views_total` は負数禁止を推奨: `CHECK (views_total >= 0)`
 - `article` は公開状態と公開日時の整合を推奨: `CHECK ((status = 'publish' AND published_at IS NOT NULL) OR (status <> 'publish' AND published_at IS NULL))`
@@ -194,13 +196,11 @@ erDiagram
 ## オプション運用メモ
 
 - `is_pr` / `is_ad` は `ARTICLE` カラムで持たず、`ARTICLE_OPTION` で管理する。
-- `OPTION.code` に `pr` / `ad` / `non_monetized` を登録し、記事への適用は `ARTICLE_OPTION` で表現する。
-- `non_monetized` が付与された記事は、公開側で AdSense スクリプトを読み込まない。
+- `OPTION.code` に `pr` / `ad` を登録し、記事への適用は `ARTICLE_OPTION` で表現する。
 - 将来オプション追加（例: `sponsored`）は `OPTION` 追加のみで対応する。
 
 ## CONTACT運用メモ
 
-- `email_confirm` は問い合わせAPIの入力確認用フィールドであり、DBには保存しない。
 - `CONTACT` テーブルには `email` のみ保存する。
 
 ## MEDIA_ASSET運用メモ

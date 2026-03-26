@@ -14,7 +14,11 @@
   - 500は `{"detail": "サーバー内部でエラーが発生しました。"}`
   - ValidationError は DRF 標準の辞書形式
 - Cloudflare Access 認証ミドルウェア
-- DRF permission 基盤（admin/staff）
+- Access 保護対象API（記事管理 / ユーザー管理 / OGP管理 / 招待本登録）の各リクエスト単位でヘッダー検証
+- DRF permission 基盤（admin/author）
+  - adminのみ読み書き
+  - author + admin 読み書き
+  - authorのみ読み
 - `redis_layer`
   - `keys.py`
   - `lock.py`
@@ -26,6 +30,10 @@
 目的: CMSコアAPI実装のための最低限の永続化層を先に固める。
 
 - `users`
+  - 仮登録
+  - 招待URL発行
+  - 本登録
+  - セッション確認
 - `cms`（統合アプリ）
   - Article
   - Category
@@ -59,7 +67,6 @@
 
 - ロック取得 API
 - TTL延長 API（5分ごと）
-- ロック解放 API（ベストエフォート）
 - 保存APIでの `lock_token` 照合
 
 ## 5. 画像アップロードAPI（記事内画像・サムネイル）
@@ -86,9 +93,9 @@
 
 ## 7. 記事公開フローAPI
 
-目的: CMSの運用ルール（admin/staff差分）を成立させる。
+目的: CMSの運用ルール（admin/author差分）を成立させる。
 
-- staff: 公開リクエスト API
+- author: 公開リクエスト API
 - admin: 承認 / 却下 API
 - admin: 直接公開 API（承認スキップ）
 - 公開ガード
@@ -130,7 +137,7 @@
 
 目的: 公開機能の主要フォームを成立させる。
 
-- 入力検証（メール確認一致）
+- 入力検証
 - Turnstile 検証
 - DB保存
 - 自動返信メール送信

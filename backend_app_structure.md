@@ -24,9 +24,9 @@ backend/
 
   core/
     middleware/
-      cloudflare_access.py      # Cloudflare Accessヘッダ検証とrequest.user解決
+      cloudflare_access.py      # 記事管理 / ユーザー管理 / OGP管理 / 招待本登録などの各リクエストで Cloudflare Access ヘッダを検証し request.user を解決
     permissions/
-      cms_permissions.py         # DRF permission_classes定義
+      cms_permissions.py         # adminのみ読み書き / author+admin読み書き / 記事のauthor+admin読み書き の DRF permission_classes定義
     exceptions/
     pagination/
 
@@ -38,7 +38,7 @@ backend/
     rate_limit.py                # INCR + EXPIRE共通化
 
   apps/
-    users/                       # ユーザー/執筆者/管理者
+    users/                       # 仮登録, 本登録, 招待, ユーザー/author/管理者
     cms/                         # 記事, カテゴリ, タグ, 公開承認フロー
     public/                      # 公開サイト向けRead API
     contacts/                    # 問い合わせ
@@ -77,6 +77,7 @@ backend/
 - ただし重い処理は分割ファイルを許可する。
   - 例: `image_precessing_services.py`（命名はプロジェクト内で統一）
 - ViewSetでは責務の近い処理をまとめ、サービス層へ引き渡す。
+- Access認証スキーマは OpenAPI の `components.securitySchemes.CloudflareAccessJwt` に定義し、権限クラスは実装側では `core/permissions/cms_permissions.py`、設計書上では各 operation の `x-permission-class` に対応付ける。
 
 ## 4. views.pyとservices.pyの責務境界
 

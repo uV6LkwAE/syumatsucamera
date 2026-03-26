@@ -6,7 +6,9 @@ erDiagram
         string email UK "NOT NULL, max_length=255, case_insensitive"
         string display_name "NULLABLE, max_length=100, required_if=is_active=true"
         string profile "NULLABLE, max_length=300, required_if=is_active=true"
-        string role "NOT NULL, enum=admin|staff, default=staff"
+        string icon "NULLABLE, max_length=500"
+        string header_image "NULLABLE, max_length=500"
+        string role "NOT NULL, enum=admin|author, default=author"
         bool is_active "NOT NULL, default=false"
         timestamptz last_login_at "NULLABLE"
         timestamptz created_at "NOT NULL"
@@ -36,7 +38,7 @@ erDiagram
         string summary "NOT NULL, max_length=200"
         text body_html "NOT NULL"
         string status "NOT NULL, enum=draft|publish|private, default=draft"
-        string thumbnail_mode "NOT NULL, enum=uploaded|default|generated"
+        string twitter_card "NOT NULL, enum=summary|summary_large_image, default=summary_large_image"
         timestamptz published_at "NULLABLE, required_if=status=publish, null_if=status!=publish"
         bigint views_total "NOT NULL, default=0"
         uuid thumbnail_asset_id FK "NOT NULL"
@@ -168,12 +170,12 @@ erDiagram
 - `media_asset.file_name` は重複禁止: `UNIQUE(file_name)`
 - `user.cf_access_sub` は `UNIQUE`（`NULL` を許容する実装。PostgreSQLは `NULL` 同士を重複扱いしない）
 - `user.email` は `UNIQUE`（大文字小文字を同一視する実装を推奨）
-- `user.role` は列挙制約: `admin/staff`
+- `user.role` は列挙制約: `admin/author`
 - `user.profile` は `max_length=300`
 - `user` は `CHECK (NOT is_active OR (cf_access_sub IS NOT NULL AND display_name IS NOT NULL AND profile IS NOT NULL AND char_length(btrim(display_name)) > 0 AND char_length(btrim(profile)) > 0))` を推奨
 - `article_publish_request.status` は列挙制約（例: `pending/approved/rejected`）
 - `article.status` は列挙制約（例: `draft/publish/private`）+ `DEFAULT 'draft'`
-- `article.thumbnail_mode` は列挙制約（例: `uploaded/default/generated`）
+- `article.twitter_card` は列挙制約（例: `summary/summary_large_image`）+ `DEFAULT 'summary_large_image'`
 - `article.title` / `article.slug` / `article.summary` / `article.body_html` は空文字禁止を推奨: `CHECK (char_length(btrim(col)) > 0)`
 - `article.views_total` は負数禁止を推奨: `CHECK (views_total >= 0)`
 - `article` は公開状態と公開日時の整合を推奨: `CHECK ((status = 'publish' AND published_at IS NOT NULL) OR (status <> 'publish' AND published_at IS NULL))`
@@ -194,13 +196,11 @@ erDiagram
 ## オプション運用メモ
 
 - `is_pr` / `is_ad` は `ARTICLE` カラムで持たず、`ARTICLE_OPTION` で管理する。
-- `OPTION.code` に `pr` / `ad` / `non_monetized` を登録し、記事への適用は `ARTICLE_OPTION` で表現する。
-- `non_monetized` が付与された記事は、公開側で AdSense スクリプトを読み込まない。
+- `OPTION.code` に `pr` / `ad` を登録し、記事への適用は `ARTICLE_OPTION` で表現する。
 - 将来オプション追加（例: `sponsored`）は `OPTION` 追加のみで対応する。
 
 ## CONTACT運用メモ
 
-- `email_confirm` は問い合わせAPIの入力確認用フィールドであり、DBには保存しない。
 - `CONTACT` テーブルには `email` のみ保存する。
 
 ## MEDIA_ASSET運用メモ

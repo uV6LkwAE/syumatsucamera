@@ -1,0 +1,1159 @@
+components:
+  schemas:
+    SystemHealthResponse:
+      type: object
+      required:
+        - status
+        - db
+        - redis
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+            - ng
+        db:
+          type: boolean
+        redis:
+          type: boolean
+        db_error:
+          type: string
+        redis_error:
+          type: string
+    CommonDetailError:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+    CommonValidationError:
+      type: object
+      additionalProperties:
+        oneOf:
+          - type: array
+            maxItems: 20
+            items:
+              type: string
+          - type: string
+    CommonPagination:
+      type: object
+      required:
+        - page
+        - page_size
+        - total_count
+        - total_pages
+      properties:
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total_count:
+          type: integer
+        total_pages:
+          type: integer
+    CmsCategorySummary:
+      type: object
+      required:
+        - id
+        - name
+        - slug
+        - path
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        path:
+          type: string
+    PublicCategorySummary:
+      type: object
+      required:
+        - id
+        - name
+        - path
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        path:
+          type: string
+    UsersAuthorSummary:
+      type: object
+      required:
+        - id
+        - display_name
+        - icon
+        - header_image
+      properties:
+        id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+        icon:
+          type:
+            - string
+            - "null"
+        header_image:
+          type:
+            - string
+            - "null"
+    CmsTagSummary:
+      type: object
+      required:
+        - id
+        - name
+        - slug
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+    PublicArticleSummary:
+      type: object
+      required:
+        - id
+        - title
+        - summary
+        - published_at
+        - views_total
+        - category
+        - thumbnail_url
+        - path
+        - article_option
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        summary:
+          type: string
+        published_at:
+          type: string
+          format: date-time
+        views_total:
+          type: integer
+        thumbnail_url:
+          type: string
+          format: uri
+        path:
+          type: string
+        category:
+          $ref: "#/components/schemas/PublicCategorySummary"
+        article_option:
+          $ref: "#/components/schemas/ArticleOption"
+    PublicArticleList:
+      type: object
+      required:
+        - items
+        - pagination
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/PublicArticleSummary"
+        pagination:
+          $ref: "#/components/schemas/CommonPagination"
+    PublicHome:
+      type: object
+      required:
+        - popular_articles
+        - latest_articles
+      properties:
+        popular_articles:
+          type: array
+          maxItems: 6
+          items:
+            $ref: "#/components/schemas/PublicArticleSummary"
+        latest_articles:
+          type: array
+          maxItems: 6
+          items:
+            $ref: "#/components/schemas/PublicArticleSummary"
+    CmsTocNode:
+      type: object
+      required:
+        - level
+        - id
+        - text
+        - children
+      properties:
+        level:
+          type: integer
+          enum:
+            - 1
+            - 2
+            - 3
+        id:
+          type: string
+        text:
+          type: string
+        children:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/CmsTocNode"
+    OgpRecord:
+      type: object
+      required:
+        - id
+        - url
+      properties:
+        id:
+          type: string
+          format: uuid
+        article_id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        title:
+          type: string
+        summary:
+          type: string
+        thumbnail:
+          type: string
+          format: uri
+        site_name:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+    PublicArticleDetail:
+      type: object
+      required:
+        - article
+        - related_articles
+        - cdn_base_url
+      properties:
+        article:
+          type: object
+          required:
+            - id
+            - title
+            - summary
+            - body_html
+            - status
+            - published_at
+            - views_total
+            - category
+            - author
+            - tags
+            - toc
+            - ogp_by_url
+            - thumbnail_url
+            - twitter_card
+            - article_option
+            - path
+          properties:
+            id:
+              type: string
+              format: uuid
+            title:
+              type: string
+            summary:
+              type: string
+            body_html:
+              type: string
+            status:
+              type: string
+              enum:
+                - publish
+            published_at:
+              type: string
+              format: date-time
+            views_total:
+              type: integer
+            thumbnail_url:
+              type: string
+              format: uri
+            path:
+              type: string
+            twitter_card:
+              type: string
+              enum:
+                - summary
+                - summary_large_image
+            article_option:
+              $ref: "#/components/schemas/ArticleOption"
+            category:
+              $ref: "#/components/schemas/PublicCategorySummary"
+            author:
+              $ref: "#/components/schemas/UsersAuthorSummary"
+            tags:
+              type: array
+              maxItems: 20
+              items:
+                $ref: "#/components/schemas/CmsTagSummary"
+            toc:
+              type: array
+              maxItems: 100
+              items:
+                $ref: "#/components/schemas/CmsTocNode"
+            ogp_by_url:
+              type: object
+              additionalProperties:
+                $ref: "#/components/schemas/OgpRecord"
+        related_articles:
+          type: array
+          maxItems: 6
+          items:
+            $ref: "#/components/schemas/PublicArticleSummary"
+        cdn_base_url:
+          type: string
+          format: uri
+    ContactsCreateRequest:
+      type: object
+      required:
+        - subject_type
+        - person_name
+        - email
+        - body
+        - turnstile_token
+      properties:
+        subject_type:
+          type: string
+          enum:
+            - review
+            - blog
+        company_name:
+          type: string
+        person_name:
+          type: string
+        email:
+          type: string
+          format: email
+        body:
+          type: string
+        turnstile_token:
+          type: string
+    ContactsCreateResponse:
+      type: object
+      required:
+        - id
+        - message
+      properties:
+        id:
+          type: string
+          format: uuid
+        message:
+          type: string
+    UsersSessionUser:
+      type: object
+      required:
+        - id
+        - email
+        - display_name
+        - icon
+        - header_image
+        - role
+        - is_active
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        display_name:
+          type:
+            - string
+            - "null"
+        icon:
+          type:
+            - string
+            - "null"
+        header_image:
+          type:
+            - string
+            - "null"
+        profile:
+          type:
+            - string
+            - "null"
+        role:
+          type: string
+          enum:
+            - admin
+            - author
+        is_active:
+          type: boolean
+    CmsArticleSummary:
+      type: object
+      required:
+        - id
+        - title
+        - path
+        - status
+        - author
+        - category
+        - article_option
+        - views_total
+        - image_job_status
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        path:
+          type: string
+        status:
+          type: string
+          enum:
+            - draft
+            - publish
+            - private
+        author:
+          $ref: "#/components/schemas/UsersAuthorSummary"
+        category:
+          $ref: "#/components/schemas/CmsCategorySummary"
+        article_option:
+          $ref: "#/components/schemas/ArticleOption"
+        views_total:
+          type: integer
+        image_job_status:
+          type: string
+          enum:
+            - pending
+            - processing
+            - completed
+            - failed
+        updated_at:
+          type: string
+          format: date-time
+    CmsArticleList:
+      type: object
+      required:
+        - items
+        - pagination
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/CmsArticleSummary"
+        pagination:
+          $ref: "#/components/schemas/CommonPagination"
+    ArticleOption:
+      type: object
+      required:
+        - is_pr
+        - is_ad
+      properties:
+        is_pr:
+          type: boolean
+        is_ad:
+          type: boolean
+    MediaAssetImageProcessingOptions:
+      type: object
+      required:
+        - resize
+        - exif_watermark
+        - site_logo_watermark
+        - custom_text_overlay
+      properties:
+        resize:
+          type: boolean
+        exif_watermark:
+          type: boolean
+        site_logo_watermark:
+          type: boolean
+        custom_text_overlay:
+          type: boolean
+        custom_text:
+          type: string
+    MediaAssetNewImage:
+      type: object
+      required:
+        - file_name
+        - options
+      properties:
+        file_name:
+          type: string
+        options:
+          $ref: "#/components/schemas/MediaAssetImageProcessingOptions"
+    MediaAssetThumbnailRequest:
+      type: object
+      required:
+        - mode
+      properties:
+        mode:
+          type: string
+          enum:
+            - use_uploaded
+            - use_default
+            - generate_from_title
+        file_name:
+          type: string
+        title_text:
+          type: string
+    CmsArticleImageUploadRequest:
+      type: object
+      required:
+        - lock_token
+        - file
+      properties:
+        lock_token:
+          type: string
+          format: uuid
+        file:
+          type: string
+          format: binary
+    CmsArticleImageUploadResponse:
+      type: object
+      required:
+        - file_name
+        - path
+      properties:
+        file_name:
+          type: string
+        path:
+          type: string
+    MediaAssetImageDiff:
+      type: object
+      required:
+        - lock_token
+        - new_images
+        - delete_images
+        - thumbnail_request
+      properties:
+        lock_token:
+          type: string
+          format: uuid
+        new_images:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/MediaAssetNewImage"
+        delete_images:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+            format: uuid
+        thumbnail_request:
+          $ref: "#/components/schemas/MediaAssetThumbnailRequest"
+    CmsArticleUpsertRequest:
+      type: object
+      required:
+        - category_id
+        - title
+        - summary
+        - body_html
+        - status
+        - article_option
+        - image_diff
+      properties:
+        category_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 200
+        body_html:
+          type: string
+          minLength: 1
+        status:
+          type: string
+          enum:
+            - draft
+            - publish
+            - private
+        tag_ids:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            format: uuid
+        twitter_card:
+          type: string
+          enum:
+            - summary
+            - summary_large_image
+          default: summary_large_image
+        article_option:
+          $ref: "#/components/schemas/ArticleOption"
+        image_diff:
+          $ref: "#/components/schemas/MediaAssetImageDiff"
+    CmsArticleMutationResponse:
+      type: object
+      required:
+        - article
+        - postprocess_job
+      properties:
+        article:
+          $ref: "#/components/schemas/CmsArticle"
+        postprocess_job:
+          $ref: "#/components/schemas/SystemAcceptedJob"
+    CmsArticle:
+      type: object
+      required:
+        - id
+        - category_id
+        - author_id
+        - author
+        - title
+        - path
+        - slug
+        - summary
+        - body_html
+        - status
+        - views_total
+        - thumbnail_asset_id
+        - twitter_card
+        - article_option
+        - tags
+        - toc
+        - image_job_status
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        category_id:
+          type: string
+          format: uuid
+        author_id:
+          type: string
+          format: uuid
+        author:
+          $ref: "#/components/schemas/UsersAuthorSummary"
+        title:
+          type: string
+        path:
+          type: string
+        slug:
+          type: string
+        summary:
+          type: string
+        body_html:
+          type: string
+        status:
+          type: string
+          enum:
+            - draft
+            - publish
+            - private
+        published_at:
+          type: string
+          format: date-time
+        views_total:
+          type: integer
+        thumbnail_asset_id:
+          type: string
+          format: uuid
+        twitter_card:
+          type: string
+          enum:
+            - summary
+            - summary_large_image
+        article_option:
+          $ref: "#/components/schemas/ArticleOption"
+        tags:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/CmsTagSummary"
+        toc:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/CmsTocNode"
+        image_job_status:
+          type: string
+          enum:
+            - pending
+            - processing
+            - completed
+            - failed
+        lock:
+          $ref: "#/components/schemas/CmsArticleSession"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CmsArticleSessionCreateRequest:
+      type: object
+      properties:
+        article_id:
+          type: string
+          format: uuid
+    CmsArticleSession:
+      type: object
+      required:
+        - lock_token
+        - locked_by
+        - lock_expires_at
+      properties:
+        article_id:
+          type: string
+          format: uuid
+        lock_token:
+          type: string
+          format: uuid
+        locked_by_id:
+          type: string
+          format: uuid
+        locked_by:
+          $ref: "#/components/schemas/UsersAuthorSummary"
+        lock_expires_at:
+          type: string
+          format: date-time
+    CmsPublishRequestCreateRequest:
+      type: object
+      properties:
+        note:
+          type: string
+    CmsPublishRequestRejectRequest:
+      type: object
+      properties:
+        note:
+          type: string
+    CmsPublishRequest:
+      type: object
+      required:
+        - id
+        - article_id
+        - requested_by
+        - requested_at
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        article_id:
+          type: string
+          format: uuid
+        requested_by_id:
+          type: string
+          format: uuid
+        requested_by:
+          $ref: "#/components/schemas/UsersAuthorSummary"
+        requested_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum:
+            - pending
+            - approved
+            - rejected
+        handled_by_id:
+          type: string
+          format: uuid
+        handled_by:
+          $ref: "#/components/schemas/UsersAuthorSummary"
+        handled_at:
+          type: string
+          format: date-time
+        note:
+          type: string
+    CmsArticleSaveLog:
+      type: object
+      required:
+        - occurred_at
+        - request_user_id
+        - request_user
+        - lock_token
+        - status
+      properties:
+        occurred_at:
+          type: string
+          format: date-time
+        request_user_id:
+          type: string
+          format: uuid
+        request_user:
+          $ref: "#/components/schemas/UsersAuthorSummary"
+        lock_token:
+          type: string
+          format: uuid
+        target:
+          type:
+            - string
+            - "null"
+        status:
+          type: string
+          enum:
+            - failed
+            - started
+            - completed
+        message:
+          type:
+            - string
+            - "null"
+    CmsArticleSaveLogList:
+      type: object
+      required:
+        - items
+        - pagination
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/CmsArticleSaveLog"
+        pagination:
+          $ref: "#/components/schemas/CommonPagination"
+    CmsCategoryCreateRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        parent_id:
+          type: string
+          format: uuid
+    CmsCategoryUpdateRequest:
+      type: object
+      required:
+        - name
+        - ordered_sibling_category_ids
+      properties:
+        name:
+          type: string
+        parent_id:
+          type: string
+          format: uuid
+        ordered_sibling_category_ids:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+            format: uuid
+    CmsCategoryDeleteRequest:
+      type: object
+      required:
+        - ordered_sibling_category_ids
+      properties:
+        parent_id:
+          type: string
+          format: uuid
+        ordered_sibling_category_ids:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+            format: uuid
+    CmsCategoryNode:
+      type: object
+      required:
+        - id
+        - name
+        - slug
+        - sort_order
+        - children
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        parent_id:
+          type: string
+          format: uuid
+        sort_order:
+          type: integer
+        children:
+          type: array
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/CmsCategoryNode"
+    CmsCategoryTree:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/CmsCategoryNode"
+    UsersUserSummary:
+      type: object
+      required:
+        - id
+        - email
+        - display_name
+        - icon
+        - header_image
+        - role
+        - is_active
+        - last_login_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        display_name:
+          type:
+            - string
+            - "null"
+        icon:
+          type:
+            - string
+            - "null"
+        header_image:
+          type:
+            - string
+            - "null"
+        role:
+          type: string
+          enum:
+            - admin
+            - author
+        is_active:
+          type: boolean
+        last_login_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+    UsersProvisionCreateRequest:
+      type: object
+      required:
+        - email
+        - role
+      properties:
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum:
+            - admin
+            - author
+    UsersActivationIssueResponse:
+      type: object
+      required:
+        - user_id
+        - email
+        - role
+        - activate_path
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum:
+            - admin
+            - author
+        activate_path:
+          type: string
+          example: /users/activate/11111111-1111-1111-1111-111111111111
+    UsersActivationDetail:
+      type: object
+      required:
+        - user_id
+        - email
+        - role
+        - is_active
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum:
+            - admin
+            - author
+        is_active:
+          type: boolean
+        display_name:
+          type:
+            - string
+            - "null"
+        icon:
+          type:
+            - string
+            - "null"
+        header_image:
+          type:
+            - string
+            - "null"
+        profile:
+          type:
+            - string
+            - "null"
+    UsersUserList:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/UsersUserSummary"
+    UsersUser:
+      allOf:
+        - $ref: "#/components/schemas/UsersUserSummary"
+        - type: object
+          properties:
+            profile:
+              type:
+                - string
+                - "null"
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+    UsersRegistrationCompleteRequest:
+      type: object
+      required:
+        - display_name
+        - profile
+      properties:
+        display_name:
+          type: string
+        icon:
+          type:
+            - string
+            - "null"
+        header_image:
+          type:
+            - string
+            - "null"
+        profile:
+          type: string
+    UsersUserUpdateRequest:
+      type: object
+      required:
+        - display_name
+        - profile
+        - role
+        - is_active
+      properties:
+        display_name:
+          type: string
+        icon:
+          type:
+            - string
+            - "null"
+        header_image:
+          type:
+            - string
+            - "null"
+        profile:
+          type: string
+        role:
+          type: string
+          enum:
+            - admin
+            - author
+        is_active:
+          type: boolean
+    ContactsContact:
+      type: object
+      required:
+        - id
+        - subject_type
+        - person_name
+        - email
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        subject_type:
+          type: string
+          enum:
+            - review
+            - blog
+        company_name:
+          type: string
+        person_name:
+          type: string
+        email:
+          type: string
+          format: email
+        body:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    ContactsContactList:
+      type: object
+      required:
+        - items
+        - pagination
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/ContactsContact"
+        pagination:
+          $ref: "#/components/schemas/CommonPagination"
+    OgpRecordList:
+      type: object
+      required:
+        - items
+        - pagination
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/OgpRecord"
+        pagination:
+          $ref: "#/components/schemas/CommonPagination"
+    OgpRecordUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        summary:
+          type: string
+        thumbnail:
+          type: string
+          format: uri
+        site_name:
+          type: string
+    SystemAcceptedJob:
+      type: object
+      required:
+        - job_name
+        - status
+      properties:
+        job_name:
+          type: string
+        status:
+          type: string
+          enum:
+            - accepted
