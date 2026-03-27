@@ -488,6 +488,21 @@ paths:
             application/json:
               schema:
                 $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
+    delete:
+      tags:
+        - cms
+      summary: 記事編集セッションを解放する
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin または author
+        permission_class: AuthorAdminReadWrite
+      operationId: releaseArticleSession
+      security:
+        - CloudflareAccessJwt:
+            - admin
+        - CloudflareAccessJwt:
+            - author
+      x-permission-class: AuthorAdminReadWrite
       parameters:
         - $ref: "#/components/parameters/LockToken"
       responses:
