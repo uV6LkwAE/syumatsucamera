@@ -44,6 +44,10 @@ EXPOSE 8000
 CMD ["gunicorn", "syumatsucamera.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3"]
 
 FROM base AS dev
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+      curl \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=deps-dev /usr/local /usr/local
 COPY backend /app
 EXPOSE 8000
