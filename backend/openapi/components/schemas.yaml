@@ -24,18 +24,33 @@ components:
       type: object
       required:
         - detail
+        - code
       properties:
         detail:
           type: string
+        code:
+          type: string
     CommonValidationError:
       type: object
-      additionalProperties:
-        oneOf:
-          - type: array
-            maxItems: 20
-            items:
-              type: string
-          - type: string
+      required:
+        - detail
+        - code
+        - errors
+      properties:
+        detail:
+          type: string
+        code:
+          type: string
+        errors:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: array
+                maxItems: 20
+                items:
+                  type: string
+              - type: string
+              - type: object
     CommonPagination:
       type: object
       required:
@@ -949,6 +964,12 @@ components:
           enum:
             - admin
             - author
+        icon_file:
+          type: string
+          format: binary
+        header_image_file:
+          type: string
+          format: binary
     UsersActivationIssueResponse:
       type: object
       required:
@@ -1037,6 +1058,8 @@ components:
       type: object
       required:
         - display_name
+        - icon
+        - header_image
         - profile
       properties:
         display_name:
@@ -1065,10 +1088,16 @@ components:
           type:
             - string
             - "null"
+        icon_file:
+          type: string
+          format: binary
         header_image:
           type:
             - string
             - "null"
+        header_image_file:
+          type: string
+          format: binary
         profile:
           type: string
         role:

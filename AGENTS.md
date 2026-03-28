@@ -21,6 +21,84 @@
   """
   ```
 
+## 例外レスポンス方針
+- APIの業務エラーは `rest_framework.exceptions` を使って送出する。
+- API層では `NotFound` と `ValidationError` を標準とし、メッセージ文言ではなく `code` でフロント制御する。
+- エラーレスポンスのJSONは必ず `detail` と `code` を含める。
+- `request_id` は返さない。
+- ミドルウェアのエラーも同じJSON形（`detail`, `code`）に合わせる。
+
+標準レスポンス例（400）:
+```json
+{
+  "detail": "入力エラーです。",
+  "code": "VALIDATION_ERROR",
+  "errors": {
+    "display_name": [
+      "この項目は必須です。"
+    ]
+  }
+}
+```
+
+標準レスポンス例（404）:
+```json
+{
+  "detail": "対象リソースが存在しません。",
+  "code": "RESOURCE_NOT_FOUND"
+}
+```
+
+標準レスポンス例（500）:
+```json
+{
+  "detail": "サーバー内部でエラーが発生しました。",
+  "code": "INTERNAL_ERROR"
+}
+```
+
+想定される `code` 一覧:
+
+| code | 概要 |
+| --- | --- |
+| `VALIDATION_ERROR` | リクエスト入力値が不正 |
+| `AUTH_REQUIRED` | 認証情報が不足している |
+| `AUTH_TOKEN_INVALID` | JWTが不正、期限切れ、署名不一致 |
+| `AUTH_USER_NOT_FOUND` | 認証済み主体に対応するユーザーが存在しない |
+| `PERMISSION_DENIED` | 認証済みだが操作権限がない |
+| `RESOURCE_NOT_FOUND` | 対象リソースが存在しない |
+| `METHOD_NOT_ALLOWED` | 許可されていないHTTPメソッド |
+| `RESOURCE_CONFLICT` | リソース競合（重複、状態競合など） |
+| `RATE_LIMITED` | レート制限超過 |
+| `SERVICE_UNAVAILABLE` | 一時的にサービス利用不可（依存先障害など） |
+| `INTERNAL_ERROR` | サーバー内部エラー |
+| `API_ERROR` | 上記に分類できないAPIエラー |
+
+## レイヤー責務と分割方針
+- View層の責務:
+  - 認証と権限判定
+  - リクエスト入力の検証
+  - Serviceから受け取ったデータをSerializerに通して返却
+- Service層の責務:
+  - 業務ロジック全般
+  - 状態遷移、整合性チェック、トランザクション制御
+- Serviceは肥大化しやすいため、責務単位で複数ファイルへ分割する。
+- 複数サービスを管理する場合は `services/` ディレクトリを作成し管理する。
+- Serializerは原則として入力と出力の双方で通す。
+- きわめてシンプルなJSON返却のみ、Serializerを省略可能とする。
+- Serializerクラスが肥大化する場合は、責務ごとに分割して管理する。
+- 命名は `HogeViewSet` / `HogeService` のように用途単位でまとめる。
+- DRFの思想（View, Serializer, Permission, Exception Handlerの責務分離）に沿って実装する。
+
+services ディレクトリ構成例:
+```text
+backend/booths/services
+.
+├── booth_asset_manage_services.py
+├── booth_qr_services.py
+└── booth_services.py
+```
+
 ## 0. 技術スタック
 フロントエンド: React
 バックエンド: DjangoRestFramework

@@ -214,8 +214,8 @@
 
 ### Phase 7: contacts
 
-1. `POST /api/public/contacts`
-2. `GET /api/contacts`
+1. `POST /api/contacts`
+2. `GET /api/cms/contacts`
 
 ### Phase 8: ogp
 
@@ -273,8 +273,8 @@
 
 ### contacts
 
-1. `POST /api/public/contacts`
-2. `GET /api/contacts`
+1. `POST /api/contacts`
+2. `GET /api/cms/contacts`
 
 ### ogp
 

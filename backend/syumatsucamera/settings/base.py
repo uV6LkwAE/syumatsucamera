@@ -74,6 +74,8 @@ _REQUIRED_ENV_VARS = [
     "REDIS_URL",
     "REDIS_CONNECT_TIMEOUT",
     "REDIS_SOCKET_TIMEOUT",
+    "CLOUDFLARE_ACCESS_TEAM_DOMAIN",
+    "CLOUDFLARE_ACCESS_AUD",
     "TURNSTILE_SITE_KEY",
     "TURNSTILE_SECRET_KEY",
     "EMAIL_HOST",
@@ -115,6 +117,8 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "corsheaders",
+    "users",
+    "contacts",
 ]
 
 MIDDLEWARE = [
@@ -124,6 +128,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "core.middleware.cloudflare_access.CloudflareAccessMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -131,6 +136,7 @@ MIDDLEWARE = [
 ROOT_URLCONF = "syumatsucamera.urls"
 WSGI_APPLICATION = "syumatsucamera.wsgi.application"
 ASGI_APPLICATION = "syumatsucamera.asgi.application"
+AUTH_USER_MODEL = "users.User"
 
 TEMPLATES = [
     {
@@ -161,6 +167,16 @@ DATABASES = {
 REDIS_URL = _env("REDIS_URL")
 REDIS_CONNECT_TIMEOUT = _env("REDIS_CONNECT_TIMEOUT")
 REDIS_SOCKET_TIMEOUT = _env("REDIS_SOCKET_TIMEOUT")
+CLOUDFLARE_ACCESS_TEAM_DOMAIN = _env("CLOUDFLARE_ACCESS_TEAM_DOMAIN").strip()
+CLOUDFLARE_ACCESS_AUD = _env("CLOUDFLARE_ACCESS_AUD").strip()
+CLOUDFLARE_ACCESS_JWT_HEADER = "Cf-Access-Jwt-Assertion"
+CLOUDFLARE_ACCESS_ISSUER = f"https://{CLOUDFLARE_ACCESS_TEAM_DOMAIN}"
+CLOUDFLARE_ACCESS_CERTS_URL = f"{CLOUDFLARE_ACCESS_ISSUER}/cdn-cgi/access/certs"
+CLOUDFLARE_ACCESS_PROTECTED_PATH_PREFIXES = (
+    "/api/cms/",
+    "/api/users/",
+    "/api/ogp/",
+)
 TURNSTILE_SITE_KEY = _env("TURNSTILE_SITE_KEY")
 TURNSTILE_SECRET_KEY = _env("TURNSTILE_SECRET_KEY")
 
@@ -187,6 +203,25 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CORS_ALLOW_ALL_ORIGINS = True
+
+_renderer_classes = [
+    "rest_framework.renderers.JSONRenderer",
+]
+if DEBUG:
+    _renderer_classes.append("rest_framework.renderers.BrowsableAPIRenderer")
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "core.auth.authentication.MiddlewareUserAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.AllowAny",
+    ],
+    "DEFAULT_RENDERER_CLASSES": _renderer_classes,
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 20,
+    "EXCEPTION_HANDLER": "core.exception_handler.api_exception_handler",
+}
 
 LOG_DIR = Path(_env("LOG_DIR") or "/tmp/syumatsucamera/log")
 LOG_DIR.mkdir(parents=True, exist_ok=True)
