@@ -2,7 +2,9 @@
 
 FROM node:22-alpine AS deps-dev
 WORKDIR /app
-COPY frontend/package*.json ./
+RUN chown -R node:node /app
+USER node
+COPY --chown=node:node frontend/package*.json ./
 RUN npm install
 
 FROM node:22-alpine AS deps-prod
@@ -11,7 +13,7 @@ COPY frontend/package*.json ./
 RUN npm ci
 
 FROM deps-dev AS dev
-COPY frontend /app
+COPY --chown=node:node frontend /app
 EXPOSE 5173
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
 
