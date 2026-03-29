@@ -35,6 +35,18 @@ class UsersSessionUserSerializer(serializers.Serializer):
     is_active = serializers.BooleanField(read_only=True)
 
 
+class UsersDevelopmentAccessTokenSerializer(serializers.Serializer):
+    """
+    開発用 Access JWT 発行レスポンスのシリアライザー。
+    """
+
+    token_type = serializers.CharField(read_only=True)
+    token = serializers.CharField(read_only=True)
+    expires_at = serializers.DateTimeField(read_only=True)
+    email = serializers.EmailField(read_only=True)
+    sub = serializers.CharField(read_only=True)
+
+
 class UsersUserSummarySerializer(serializers.Serializer):
     """
     ユーザー要約情報を返すシリアライザー。

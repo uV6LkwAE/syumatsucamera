@@ -21,6 +21,25 @@
   """
   ```
 
+## 開発環境での切替方針（DEBUG）
+- 開発環境で再現が難しい要件は、`DEBUG=True` のときのみ代替経路に切り替える。
+- 本番相当の挙動は `DEBUG=False` を正とし、最終確認は staging または本番同等環境で行う。
+- 切替時もAPIの入出力契約（レスポンス形式、エラーcode）は変えない。
+- 切替可否や代替挙動は settings で明示し、実装側で暗黙分岐しない。
+- 対象項目:
+  - Turnstile:
+  `DEBUG=True` 限定で `DEV_TURNSTILE_BYPASS` を許可する。実トークン検証は `DEBUG=False` で必須。
+  - メール送信（SMTP）:
+  dev は MailHog または console backend に切り替える。本番SMTP直送は `DEBUG=False` のみ。
+  - OGP取得（外部HTTP fetch）:
+  dev はモックレスポンス併用を許可する。外部サイト実fetchは本番相当環境で確認する。
+  - 画像配信/CDNパス:
+  `cdn_base_url` は環境別に分離し、dev と本番でURL混在させない。
+  - Celery/定期ジョブ依存処理（画像処理、PV反映など）:
+  API後続処理を検証できるよう dev compose に worker/cron を含める。
+  - HTTPS前提挙動（Secure Cookie, SameSite, Origin）:
+  ローカルHTTPでは差分が出るため、最終確認は staging で実施する。
+
 ## 例外レスポンス方針
 - APIの業務エラーは `rest_framework.exceptions` を使って送出する。
 - API層では `NotFound` と `ValidationError` を標準とし、メッセージ文言ではなく `code` でフロント制御する。

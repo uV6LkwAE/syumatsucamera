@@ -32,7 +32,7 @@ def _log_missing_env_to_bootstrap_file(missing: list[str]) -> None:
         bootstrap_logger.log(logging.ERROR, "Missing required environment variable: %s", key)
 
 
-def _required_env(name: str) -> str:
+def required_env(name: str) -> str:
     value = os.getenv(name)
     if value is None or value.strip() == "":
         raise KeyError(name)
@@ -97,7 +97,7 @@ if not CI_SKIP_REQUIRED_ENV_CHECK:
             "Missing required environment variables: " + ", ".join(sorted(_missing))
         )
 
-_env = _env_or_empty if CI_SKIP_REQUIRED_ENV_CHECK else _required_env
+_env = _env_or_empty if CI_SKIP_REQUIRED_ENV_CHECK else required_env
 
 SECRET_KEY = _env("SECRET_KEY")
 DEBUG = _env("DEBUG").strip().lower() in {"1", "true", "yes", "on"}

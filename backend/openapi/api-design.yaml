@@ -54,6 +54,29 @@ paths:
             application/json:
               schema:
                 $ref: "./components/schemas.yaml#/components/schemas/SystemHealthResponse"
+  /api/system/dev-access-token:
+    get:
+      tags:
+        - system
+      summary: 開発環境向けの Access JWT を発行する
+      description: |
+        開発環境（DEBUG=true）専用のAPI。
+        Cloudflare Access 本番JWTの代替として、開発専用シークレットで署名したJWTを返す。
+      operationId: getSystemDevAccessToken
+      security: []
+      responses:
+        "200":
+          description: 発行成功
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/SystemDevAccessToken"
+        "404":
+          description: 発行対象ユーザーが存在しない、または開発環境以外
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
   /api/public/home:
     get:
       tags:

@@ -1,20 +1,58 @@
 """
 users アプリの業務ロジックを定義する。
 """
+from typing import Any
+
+from django.conf import settings
 from django.core.files.uploadedfile import UploadedFile
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework.exceptions import NotFound, ValidationError
 
-from core.auth.cloudflare_access_verifier import CloudflareAccessPrincipal
+from core.auth.cloudflare_access_verifier import (
+    CloudflareAccessPrincipal,
+    issue_development_access_token,
+)
 from users.image_services import UsersImageService
-from users.models import User
+from users.models import User, UserRole
+
 
 class UsersService:
     """
     users アプリの業務ロジックをまとめて扱うサービス。
     """
+
+    @staticmethod
+    def issue_development_access_token() -> dict[str, Any]:
+        """
+        開発用の Access JWT を発行する。
+        """
+        if not settings.DEBUG:
+            raise NotFound("対象リソースが存在しません。")
+
+        user = (
+            User.objects.filter(
+                role=UserRole.ADMIN,
+                is_active=True,
+            )
+            .order_by("created_at")
+            .first()
+        )
+        if user is None or user.cf_access_sub is None:
+            raise NotFound("開発用JWTを発行できる有効ユーザーが存在しません。")
+
+        token, expires_at = issue_development_access_token(
+            sub=user.cf_access_sub,
+            email=user.email,
+        )
+        return {
+            "token_type": "Bearer",
+            "token": token,
+            "expires_at": expires_at,
+            "email": user.email,
+            "sub": user.cf_access_sub,
+        }
 
     @staticmethod
     def list_users(*, limit: int) -> list[User]:

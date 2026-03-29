@@ -20,6 +20,28 @@ components:
           type: string
         redis_error:
           type: string
+    SystemDevAccessToken:
+      type: object
+      required:
+        - token_type
+        - token
+        - expires_at
+        - email
+        - sub
+      properties:
+        token_type:
+          type: string
+          example: Bearer
+        token:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        email:
+          type: string
+          format: email
+        sub:
+          type: string
     CommonDetailError:
       type: object
       required:

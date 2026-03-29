@@ -4,6 +4,7 @@ users アプリの view を定義する。
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotAuthenticated, NotFound
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet
 from rest_framework.views import APIView
@@ -18,6 +19,7 @@ from users.serializers import (
     ActivationUserDetailSerializer,
     RegistrationCompleteSerializer,
     UsersActivationIssueResponseSerializer,
+    UsersDevelopmentAccessTokenSerializer,
     UsersListQuerySerializer,
     UsersProvisionCreateRequestSerializer,
     UsersSessionUserSerializer,
@@ -183,3 +185,19 @@ class ActivationUserView(APIView):
         )
         response_serializer = UsersUserSerializer(activated_user)
         return Response(response_serializer.data)
+
+
+class DevelopmentAccessTokenView(APIView):
+    """
+    開発環境向けの Access JWT を返す。
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        """
+        開発用 Access JWT を発行して返す。
+        """
+        payload = UsersService.issue_development_access_token()
+        serializer = UsersDevelopmentAccessTokenSerializer(payload)
+        return Response(serializer.data)

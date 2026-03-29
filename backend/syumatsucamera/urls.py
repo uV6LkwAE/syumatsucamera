@@ -18,9 +18,15 @@ from django.contrib import admin
 from django.urls import include, path
 
 from .views import health
+from users.views import DevelopmentAccessTokenView
 
 urlpatterns = [
     path("health", health),
+    path(
+        "api/system/dev-access-token",
+        DevelopmentAccessTokenView.as_view(),
+        name="system-dev-access-token",
+    ),
     path("api/", include("contacts.urls")),
     path("api/users/", include("users.urls")),
     path("admin/", admin.site.urls),
