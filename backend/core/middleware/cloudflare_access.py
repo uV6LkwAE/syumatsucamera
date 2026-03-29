@@ -10,6 +10,7 @@ from core.auth.cloudflare_access_verifier import (
     CloudflareAccessPrincipal,
     verify_cloudflare_access_token,
 )
+from core.auth.cloudflare_access_subject import hash_cloudflare_access_sub
 from users.models import User
 
 
@@ -27,10 +28,11 @@ def resolve_cloudflare_access_user(
     principal: CloudflareAccessPrincipal,
 ) -> object | None:
     """
-    principal.sub に一致する user レコードを返す。
+    principal.sub のハッシュに一致する user レコードを返す。
     """
+    subject_hash = hash_cloudflare_access_sub(principal.sub)
     try:
-        return User.objects.get(cf_access_sub=principal.sub)
+        return User.objects.get(cf_access_sub=subject_hash)
     except User.DoesNotExist:
         return None
 

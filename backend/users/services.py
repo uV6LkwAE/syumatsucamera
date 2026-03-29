@@ -14,6 +14,7 @@ from core.auth.cloudflare_access_verifier import (
     CloudflareAccessPrincipal,
     issue_development_access_token,
 )
+from core.auth.cloudflare_access_subject import hash_cloudflare_access_sub
 from users.image_services import UsersImageService
 from users.models import User, UserRole
 
@@ -42,8 +43,15 @@ class UsersService:
         if user is None or user.cf_access_sub is None:
             raise NotFound("開発用JWTを発行できる有効ユーザーが存在しません。")
 
+        development_sub = settings.DEV_ACCESS_JWT_SUB.strip()
+        if development_sub == "":
+            raise NotFound("開発用JWTのsubが設定されていません。")
+
+        if user.cf_access_sub != hash_cloudflare_access_sub(development_sub):
+            raise NotFound("開発用JWTのsub設定が管理者ユーザーと一致しません。")
+
         token, expires_at = issue_development_access_token(
-            sub=user.cf_access_sub,
+            sub=development_sub,
             email=user.email,
         )
         return {
@@ -51,7 +59,7 @@ class UsersService:
             "token": token,
             "expires_at": expires_at,
             "email": user.email,
-            "sub": user.cf_access_sub,
+            "sub": development_sub,
         }
 
     @staticmethod
@@ -254,7 +262,7 @@ class UsersService:
         if user.email != normalized_email:
             raise ValidationError("本登録対象ユーザーのメールアドレスが一致しません。")
 
-        user.cf_access_sub = principal.sub
+        user.cf_access_sub = hash_cloudflare_access_sub(principal.sub)
         user.display_name = display_name
         user.profile = profile
         user.icon = icon

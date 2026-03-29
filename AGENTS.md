@@ -40,6 +40,60 @@
   - HTTPS前提挙動（Secure Cookie, SameSite, Origin）:
   ローカルHTTPでは差分が出るため、最終確認は staging で実施する。
 
+## Cloudflare Access 初期セットアップ（sub）
+- 本番環境の `sub` は任意値を使わない。Cloudflare Access JWT の `sub` クレーム実値を使用する。
+- 初期管理者作成時の `cf_access_sub` 引数には、JWT の `sub` 平文を渡す。
+- 保存時はアプリ側で HMAC 化して `users.cf_access_sub` に保存するため、平文はDB保存しない。
+- `sub` はブラウザの `CF_Authorization` クッキー値から取得し、JWT payload をローカルでデコードして確認する。
+- 取得手順:
+  1. `cms` ドメインへ Cloudflare Access ログインする。
+  2. ブラウザ開発者ツールで `CF_Authorization` クッキー値をコピーする。
+  3. ローカルでJWT payloadをデコードし、`sub` を確認する。
+  ```bash
+  export CF_JWT='コピーしたCF_Authorization'
+  python - <<'PY'
+  import json, base64, os
+  token = os.environ["CF_JWT"]
+  payload = token.split(".")[1]
+  payload += "=" * (-len(payload) % 4)
+  data = json.loads(base64.urlsafe_b64decode(payload))
+  print(json.dumps(data, ensure_ascii=False, indent=2))
+  print("sub =", data.get("sub"))
+  PY
+  ```
+
+必須環境変数:
+- `CLOUDFLARE_ACCESS_SUB_HASH_SECRET`:
+  全環境必須。`sub` のHMACキー。32byte以上のランダム文字列を設定する。
+- `DEV_ACCESS_JWT_SECRET`:
+  開発環境のみ。開発用JWT署名キー。32byte以上のランダム文字列を設定する。
+- `DEV_ACCESS_JWT_SUB`:
+  開発環境のみ。開発用JWTに埋める `sub` 平文。初期管理者の `sub` と同じ値を設定する。
+
+開発環境での `sub` 反映手順（推奨順）:
+1. `sub` を取得して控える。
+2. `.env.dev` の `DEV_ACCESS_JWT_SUB` に同じ `sub` を設定する。
+3. 追加した環境変数を反映するため backend コンテナを再作成する。
+```bash
+docker compose -p syumatsucamera-dev -f compose/compose.dev.yml up -d --force-recreate --no-deps backend
+```
+4. 初期adminが未作成なら bootstrap で作成する。
+```bash
+docker compose -p syumatsucamera-dev -f compose/compose.dev.yml exec backend \
+python manage.py shell -c "from users.bootstrap_admin import ensure_initial_admin; r=ensure_initial_admin(email='admin@example.com', password='change-me', cf_access_sub='google-oauth2|1172...', display_name='Admin', profile='initial admin', icon='/media/users/icons/default.png', header_image='/media/users/headers/default.png'); print({'created': r.created, 'id': str(r.user.id), 'email': r.user.email})"
+```
+5. 既存adminへ後付けする場合は `sub` をハッシュ化して保存する。
+```bash
+docker compose -p syumatsucamera-dev -f compose/compose.dev.yml exec backend \
+python manage.py shell -c "from users.models import User,UserRole; from core.auth.cloudflare_access_subject import hash_cloudflare_access_sub; sub='google-oauth2|1172...'; u=User.objects.filter(role=UserRole.ADMIN).order_by('created_at').first(); u.cf_access_sub=hash_cloudflare_access_sub(sub); u.is_active=True; u.save(update_fields=['cf_access_sub','is_active','updated_at']); print(str(u.id), u.email)"
+```
+6. 最後に backend を再起動する。
+```bash
+docker compose -p syumatsucamera-dev -f compose/compose.dev.yml restart backend
+```
+7. 補足:
+`users.cf_access_sub` には平文 `sub` は保存しない。アプリ側でハッシュ化した値のみ保存する。
+
 ## 例外レスポンス方針
 - APIの業務エラーは `rest_framework.exceptions` を使って送出する。
 - API層では `NotFound` と `ValidationError` を標準とし、メッセージ文言ではなく `code` でフロント制御する。

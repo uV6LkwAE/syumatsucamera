@@ -2,7 +2,7 @@
 erDiagram
     USER {
         uuid id PK "NOT NULL, default=uuid"
-        string cf_access_sub UK "NULLABLE, max_length=255, required_if=is_active=true"
+        string cf_access_sub UK "NULLABLE, max_length=255, Cloudflare subのHMACハッシュ, required_if=is_active=true"
         string email UK "NOT NULL, max_length=255, case_insensitive"
         string display_name "NULLABLE, max_length=100, required_if=is_active=true"
         string profile "NULLABLE, max_length=300, required_if=is_active=true"
@@ -168,7 +168,7 @@ erDiagram
 - `article_tag` は重複禁止: `UNIQUE(article_id, tag_id)`
 - `article_option` は重複禁止: `UNIQUE(article_id, option_id)`
 - `media_asset.file_name` は重複禁止: `UNIQUE(file_name)`
-- `user.cf_access_sub` は `UNIQUE`（`NULL` を許容する実装。PostgreSQLは `NULL` 同士を重複扱いしない）
+- `user.cf_access_sub` は `UNIQUE`（Cloudflare Access `sub` の平文ではなく、HMACハッシュを保存する）
 - `user.email` は `UNIQUE`（大文字小文字を同一視する実装を推奨）
 - `user.role` は列挙制約: `admin/author`
 - `user.profile` は `max_length=300`

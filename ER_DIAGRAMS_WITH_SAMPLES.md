@@ -2,7 +2,7 @@
 erDiagram
     USER {
         uuid id PK "2a0e7d75-f03f-4916-a03e-6e4f5ce2e3b9"
-        string cf_access_sub UK "google-oauth2|117200000000000000001"
+        string cf_access_sub UK "HMAC_SHA256_HEX(sub), 例=3f8d...a1c2"
         string email UK "editor@syumatsucamera.com"
         string display_name "WeekendCameraEditor"
         string profile "週末にスナップ撮影をしています。"
@@ -168,7 +168,7 @@ erDiagram
 - `article_tag` は重複禁止: `UNIQUE(article_id, tag_id)`
 - `article_option` は重複禁止: `UNIQUE(article_id, option_id)`
 - `media_asset.file_name` は重複禁止: `UNIQUE(file_name)`
-- `user.cf_access_sub` は `UNIQUE`（`NULL` を許容する実装。PostgreSQLは `NULL` 同士を重複扱いしない）
+- `user.cf_access_sub` は `UNIQUE`（Cloudflare Access `sub` の平文ではなく、HMACハッシュを保存する）
 - `user.email` は `UNIQUE`（大文字小文字を同一視する実装を推奨）
 - `user.role` は列挙制約: `admin/author`
 - `user.profile` は `max_length=300`

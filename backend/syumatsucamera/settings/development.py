@@ -2,4 +2,5 @@ from .base import *  # noqa: F403
 
 DEBUG = True
 DEV_ACCESS_JWT_SECRET = required_env("DEV_ACCESS_JWT_SECRET")
+DEV_ACCESS_JWT_SUB = required_env("DEV_ACCESS_JWT_SUB")
 DEV_ACCESS_JWT_EXPIRES_IN_SECONDS = 60 * 60

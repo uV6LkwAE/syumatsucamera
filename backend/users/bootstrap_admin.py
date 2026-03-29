@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from django.db import transaction
 
+from core.auth.cloudflare_access_subject import hash_cloudflare_access_sub
 from users.models import User, UserRole
 
 
@@ -51,6 +52,7 @@ def ensure_initial_admin(
     normalized_profile = _required_text(profile, "profile")
     normalized_icon = _required_text(icon, "icon")
     normalized_header_image = _required_text(header_image, "header_image")
+    hashed_sub = hash_cloudflare_access_sub(normalized_sub)
 
     existing_admin = User.objects.filter(role=UserRole.ADMIN).order_by("created_at").first()
     if existing_admin is not None:
@@ -61,7 +63,7 @@ def ensure_initial_admin(
         password=normalized_password,
         role=UserRole.ADMIN,
         is_active=True,
-        cf_access_sub=normalized_sub,
+        cf_access_sub=hashed_sub,
         display_name=normalized_display_name,
         profile=normalized_profile,
         icon=normalized_icon,
