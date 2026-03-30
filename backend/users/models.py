@@ -18,8 +18,8 @@ class UserRole(models.TextChoices):
     CMS 利用者の role を表す。
     """
 
-    ADMIN = "admin", "admin"
-    AUTHOR = "author", "author"
+    ADMIN = "admin", "管理者"
+    AUTHOR = "author", "執筆者"
 
 
 class User(AbstractBaseUser, PermissionsMixin):
@@ -27,31 +27,60 @@ class User(AbstractBaseUser, PermissionsMixin):
     CMS 利用者を表すカスタムユーザー。
     """
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+        verbose_name="ID",
+    )
     cf_access_sub = models.CharField(
         max_length=255,
         null=True,
         blank=True,
         unique=True,
+        verbose_name="Cloudflare Access subハッシュ",
+        help_text="Cloudflare Access subのHMACハッシュを保持する。",
     )
-    email = models.EmailField(max_length=255, unique=True)
-    display_name = models.CharField(max_length=100, null=True, blank=True)
-    profile = models.CharField(max_length=300, null=True, blank=True)
-    icon = models.CharField(max_length=500, null=True, blank=True)
-    header_image = models.CharField(max_length=500, null=True, blank=True)
+    email = models.EmailField(max_length=255, unique=True, verbose_name="メールアドレス")
+    display_name = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        verbose_name="表示名",
+    )
+    profile = models.CharField(
+        max_length=300,
+        null=True,
+        blank=True,
+        verbose_name="プロフィール",
+    )
+    icon = models.CharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        verbose_name="アイコン画像URL",
+    )
+    header_image = models.CharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        verbose_name="ヘッダー画像URL",
+    )
     role = models.CharField(
         max_length=20,
         choices=UserRole.choices,
         default=UserRole.AUTHOR,
+        verbose_name="権限",
     )
-    is_active = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=False, verbose_name="有効フラグ")
     last_login = models.DateTimeField(
         null=True,
         blank=True,
         db_column="last_login_at",
+        verbose_name="最終ログイン日時",
     )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新日時")
 
     objects = UserManager()
 
@@ -66,6 +95,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     )
 
     class Meta:
+        verbose_name = "ユーザー"
+        verbose_name_plural = "ユーザー"
         constraints = [
             models.UniqueConstraint(
                 Lower("email"),
@@ -163,4 +194,4 @@ class User(AbstractBaseUser, PermissionsMixin):
         """
         管理画面向けの文字列表現を返す。
         """
-        return self.display_name
+        return self.display_name or self.email
