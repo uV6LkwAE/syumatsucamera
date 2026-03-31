@@ -4,8 +4,8 @@ import JoditEditor from 'jodit-react'
 import 'jodit/es2021/jodit.min.css'
 import { apiRequest, getStoredAccessJwt } from '../../../api/client'
 import ConsoleNotice from '../../../components/ConsoleNotice'
+import CmsCategoryVisualPicker from '../components/CmsCategoryVisualPicker'
 import {
-  flattenCmsCategoryTree,
   formatCmsDate,
   normalizeStoredArticleHtml,
   resolveDeleteImageIds,
@@ -167,7 +167,6 @@ export default function CmsArticleEditorPage() {
   const [thumbnailUploadFileName, setThumbnailUploadFileName] = useState('')
   const [thumbnailPreviewPath, setThumbnailPreviewPath] = useState('')
 
-  const flatCategories = flattenCmsCategoryTree(categories)
   const statusOptions = toStatusOptions(sessionUser?.role, form.status)
 
   useEffect(() => {
@@ -493,24 +492,23 @@ export default function CmsArticleEditorPage() {
 
       <div className="console-card">
         <div className="console-form-grid cms-article-editor-grid">
-          <label className="console-label">
-            カテゴリ
-            <select
-              className="console-select"
-              value={form.categoryId}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, categoryId: event.target.value }))
-              }
-            >
-              <option value="">選択してください</option>
-              {flatCategories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {'　'.repeat(category.depth)}
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="cms-article-category-panel">
+            <div className="console-card-header">
+              <h2>カテゴリ</h2>
+              <p>親子関係を見ながら保存先カテゴリを選択します。</p>
+            </div>
+            {categories.length === 0 ? (
+              <div className="console-placeholder">カテゴリがまだありません。先にカテゴリ管理で作成してください。</div>
+            ) : (
+              <CmsCategoryVisualPicker
+                items={categories}
+                selectedId={form.categoryId}
+                onSelect={(categoryId) =>
+                  setForm((prev) => ({ ...prev, categoryId }))
+                }
+              />
+            )}
+          </div>
 
           <label className="console-label">
             公開状態

@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { apiRequest } from '../../../api/client'
 import ConsoleHeroCard from '../../../components/ConsoleHeroCard'
 import ConsoleNotice from '../../../components/ConsoleNotice'
+import CmsCategoryVisualPicker from '../components/CmsCategoryVisualPicker'
 import { flattenCmsCategoryTree, toApiMessage } from '../helpers'
 import type { CmsCategoryNode, CmsCategoryTreeResponse } from '../types'
 
@@ -9,38 +10,39 @@ type CmsCategoriesPageProps = {
   embedded?: boolean
 }
 
-type CategoryFormState = {
-  name: string
-  parentId: string
-}
-
-const EMPTY_CATEGORY_FORM: CategoryFormState = {
-  name: '',
-  parentId: '',
-}
-
 export default function CmsCategoriesPage({ embedded = false }: CmsCategoriesPageProps) {
   const [tree, setTree] = useState<CmsCategoryNode[]>([])
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
-  const [createForm, setCreateForm] = useState<CategoryFormState>(EMPTY_CATEGORY_FORM)
   const [selectedCategoryId, setSelectedCategoryId] = useState('')
-  const [editForm, setEditForm] = useState<CategoryFormState>(EMPTY_CATEGORY_FORM)
 
-  const flatCategories = flattenCmsCategoryTree(tree)
-  const selectedCategory = flatCategories.find((category) => category.id === selectedCategoryId) ?? null
+  const flatCategories = useMemo(() => flattenCmsCategoryTree(tree), [tree])
 
   useEffect(() => {
     void fetchCategories()
   }, [])
 
-  async function fetchCategories(): Promise<void> {
+  useEffect(() => {
+    if (flatCategories.length === 0) {
+      setSelectedCategoryId('')
+      return
+    }
+
+    if (!flatCategories.some((category) => category.id === selectedCategoryId)) {
+      setSelectedCategoryId(flatCategories[0].id)
+    }
+  }, [flatCategories, selectedCategoryId])
+
+  async function fetchCategories(nextSelectedCategoryId?: string): Promise<void> {
     setLoading(true)
     setErrorMessage('')
     try {
       const payload = await apiRequest<CmsCategoryTreeResponse>('/cms/categories?limit=200')
       setTree(payload.items)
+      if (nextSelectedCategoryId !== undefined) {
+        setSelectedCategoryId(nextSelectedCategoryId)
+      }
     } catch (error) {
       setErrorMessage(toApiMessage(error))
     } finally {
@@ -48,21 +50,39 @@ export default function CmsCategoriesPage({ embedded = false }: CmsCategoriesPag
     }
   }
 
-  async function createCategory(): Promise<void> {
+  async function createRootCategory(name: string): Promise<void> {
     setErrorMessage('')
     setMessage('')
 
     try {
-      await apiRequest('/cms/categories', {
+      const created = await apiRequest<CmsCategoryNode>('/cms/categories', {
         method: 'POST',
         body: {
-          name: createForm.name.trim(),
-          parent_id: createForm.parentId === '' ? null : createForm.parentId,
+          name: name.trim(),
+          parent_id: null,
         },
       })
-      setCreateForm(EMPTY_CATEGORY_FORM)
       setMessage('カテゴリを作成しました。')
-      await fetchCategories()
+      await fetchCategories(created.id)
+    } catch (error) {
+      setErrorMessage(toApiMessage(error))
+    }
+  }
+
+  async function createChildCategory(parentId: string, name: string): Promise<void> {
+    setErrorMessage('')
+    setMessage('')
+
+    try {
+      const created = await apiRequest<CmsCategoryNode>('/cms/categories', {
+        method: 'POST',
+        body: {
+          name: name.trim(),
+          parent_id: parentId,
+        },
+      })
+      setMessage('子カテゴリを作成しました。')
+      await fetchCategories(created.id)
     } catch (error) {
       setErrorMessage(toApiMessage(error))
     }
@@ -75,92 +95,65 @@ export default function CmsCategoriesPage({ embedded = false }: CmsCategoriesPag
       .map((category) => category.id)
   }
 
-  async function saveCategory(): Promise<void> {
-    if (selectedCategory === null) {
+  async function updateCategory(categoryId: string, name: string, parentId: string): Promise<void> {
+    const targetCategory = flatCategories.find((category) => category.id === categoryId)
+    if (targetCategory === undefined) {
       setErrorMessage('更新対象カテゴリを選択してください。')
       return
     }
 
-    const nextParentId = editForm.parentId === '' ? null : editForm.parentId
+    const nextParentId = parentId.trim() === '' ? null : parentId
     const siblingIds = getSiblingIds(nextParentId)
-    if (!siblingIds.includes(selectedCategory.id)) {
-      siblingIds.push(selectedCategory.id)
+    if (!siblingIds.includes(targetCategory.id)) {
+      siblingIds.push(targetCategory.id)
     }
 
     try {
-      await apiRequest(`/cms/categories/${selectedCategory.id}`, {
+      await apiRequest(`/cms/categories/${targetCategory.id}`, {
         method: 'PATCH',
         body: {
-          name: editForm.name.trim(),
+          name: name.trim(),
           parent_id: nextParentId,
           ordered_sibling_category_ids: siblingIds,
         },
       })
+      setSelectedCategoryId(targetCategory.id)
       setMessage('カテゴリを更新しました。')
-      await fetchCategories()
+      await fetchCategories(targetCategory.id)
     } catch (error) {
       setErrorMessage(toApiMessage(error))
     }
   }
 
-  async function moveCategory(direction: -1 | 1): Promise<void> {
-    if (selectedCategory === null) {
-      setErrorMessage('並び替え対象カテゴリを選択してください。')
-      return
-    }
-
-    const siblingIds = getSiblingIds(selectedCategory.parent_id)
-    const currentIndex = siblingIds.findIndex((value) => value === selectedCategory.id)
-    const nextIndex = currentIndex + direction
-    if (currentIndex === -1 || nextIndex < 0 || nextIndex >= siblingIds.length) {
-      return
-    }
-
-    const reordered = [...siblingIds]
-    const [target] = reordered.splice(currentIndex, 1)
-    reordered.splice(nextIndex, 0, target)
-
-    try {
-      await apiRequest(`/cms/categories/${selectedCategory.id}`, {
-        method: 'PATCH',
-        body: {
-          name: editForm.name.trim(),
-          parent_id: selectedCategory.parent_id,
-          ordered_sibling_category_ids: reordered,
-        },
-      })
-      setMessage('カテゴリの並び順を更新しました。')
-      await fetchCategories()
-    } catch (error) {
-      setErrorMessage(toApiMessage(error))
-    }
-  }
-
-  async function deleteCategory(): Promise<void> {
-    if (selectedCategory === null) {
+  async function deleteCategory(category: CmsCategoryNode): Promise<void> {
+    const targetCategory = flatCategories.find((item) => item.id === category.id)
+    if (targetCategory === undefined) {
       setErrorMessage('削除対象カテゴリを選択してください。')
       return
     }
-    if (!window.confirm(`「${selectedCategory.name}」を削除します。`)) {
+    if (category.children.length > 0) {
+      setErrorMessage('子カテゴリを持つカテゴリは削除できません。先に子カテゴリを移動または削除してください。')
+      return
+    }
+    if (!window.confirm(`「${targetCategory.name}」を削除します。`)) {
       return
     }
 
-    const remainingSiblingIds = getSiblingIds(selectedCategory.parent_id).filter(
-      (categoryId) => categoryId !== selectedCategory.id,
+    const remainingSiblingIds = getSiblingIds(targetCategory.parent_id).filter(
+      (categoryId) => categoryId !== targetCategory.id,
     )
 
     try {
-      await apiRequest(`/cms/categories/${selectedCategory.id}`, {
+      await apiRequest(`/cms/categories/${targetCategory.id}`, {
         method: 'DELETE',
         body: {
-          parent_id: selectedCategory.parent_id,
+          parent_id: targetCategory.parent_id,
           ordered_sibling_category_ids: remainingSiblingIds,
         },
       })
       setSelectedCategoryId('')
-      setEditForm(EMPTY_CATEGORY_FORM)
       setMessage('カテゴリを削除しました。')
-      await fetchCategories()
+      await fetchCategories(targetCategory.parent_id ?? undefined)
     } catch (error) {
       setErrorMessage(toApiMessage(error))
     }
@@ -173,148 +166,33 @@ export default function CmsCategoriesPage({ embedded = false }: CmsCategoriesPag
 
       <div className="console-card">
         <div className="console-card-header">
-          <h2>カテゴリ作成</h2>
-          <p>親子関係を保ったまま、新しいカテゴリを末尾に追加します。</p>
-        </div>
-        <div className="console-form-grid">
-          <label className="console-label">
-            名前
-            <input
-              className="console-input"
-              type="text"
-              value={createForm.name}
-              onChange={(event) =>
-                setCreateForm((prev) => ({ ...prev, name: event.target.value }))
-              }
-            />
-          </label>
-          <label className="console-label">
-            親カテゴリ
-            <select
-              className="console-select"
-              value={createForm.parentId}
-              onChange={(event) =>
-                setCreateForm((prev) => ({ ...prev, parentId: event.target.value }))
-              }
+          <div className="cms-category-header-row">
+            <h2>カテゴリ構造</h2>
+            <button
+              type="button"
+              className="console-secondary console-icon-button"
+              onClick={() => void fetchCategories()}
+              disabled={loading}
             >
-              <option value="">ルート</option>
-              {flatCategories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {'　'.repeat(category.depth)}
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="console-actions">
-            <button type="button" className="console-primary" onClick={() => void createCategory()}>
-              カテゴリを追加
+              <i
+                className={`bi ${loading ? 'bi-arrow-repeat is-spinning' : 'bi-arrow-clockwise'}`}
+                aria-hidden="true"
+              />
+              {loading ? '再読込中' : '更新'}
             </button>
           </div>
+          <p>gradexpo のスクール/学部追加UIに合わせて、親子関係を見ながら追加と選択を行います。</p>
         </div>
-      </div>
-
-      <div className="console-card">
-        <div className="console-card-header">
-          <h2>カテゴリ管理</h2>
-          <p>カテゴリ名の変更、親子変更、兄弟順の並び替え、削除を行います。</p>
-        </div>
-        <div className="console-actions console-actions-spread">
-          <div className="console-static-value">登録数: {flatCategories.length}件</div>
-          <button
-            type="button"
-            className="console-secondary console-icon-button"
-            onClick={() => void fetchCategories()}
-            disabled={loading}
-          >
-            <i
-              className={`bi ${loading ? 'bi-arrow-repeat is-spinning' : 'bi-arrow-clockwise'}`}
-              aria-hidden="true"
-            />
-            {loading ? '再読込中' : '更新'}
-          </button>
-        </div>
-
-        <div className="cms-category-grid">
-          <div className="cms-category-list">
-            {flatCategories.map((category) => {
-              const active = category.id === selectedCategoryId
-              return (
-                <button
-                  key={category.id}
-                  type="button"
-                  className={`cms-category-row ${active ? 'is-active' : ''}`}
-                  onClick={() => {
-                    setSelectedCategoryId(category.id)
-                    setEditForm({
-                      name: category.name,
-                      parentId: category.parent_id ?? '',
-                    })
-                  }}
-                >
-                  <span className="cms-category-row-name" style={{ paddingLeft: `${category.depth * 20 + 14}px` }}>
-                    {category.name}
-                  </span>
-                  <span className="cms-category-row-slug">{category.slug}</span>
-                </button>
-              )
-            })}
-          </div>
-
-          <div className="cms-category-editor">
-            {selectedCategory === null ? (
-              <div className="console-placeholder">左の一覧からカテゴリを選択してください。</div>
-            ) : (
-              <>
-                <label className="console-label">
-                  名前
-                  <input
-                    className="console-input"
-                    type="text"
-                    value={editForm.name}
-                    onChange={(event) =>
-                      setEditForm((prev) => ({ ...prev, name: event.target.value }))
-                    }
-                  />
-                </label>
-                <label className="console-label">
-                  親カテゴリ
-                  <select
-                    className="console-select"
-                    value={editForm.parentId}
-                    onChange={(event) =>
-                      setEditForm((prev) => ({ ...prev, parentId: event.target.value }))
-                    }
-                  >
-                    <option value="">ルート</option>
-                    {flatCategories
-                      .filter((category) => category.id !== selectedCategory.id)
-                      .map((category) => (
-                        <option key={category.id} value={category.id}>
-                          {'　'.repeat(category.depth)}
-                          {category.name}
-                        </option>
-                      ))}
-                  </select>
-                </label>
-                <div className="console-actions">
-                  <button type="button" className="console-primary" onClick={() => void saveCategory()}>
-                    更新
-                  </button>
-                  <button type="button" className="console-secondary" onClick={() => void moveCategory(-1)}>
-                    上へ
-                  </button>
-                  <button type="button" className="console-secondary" onClick={() => void moveCategory(1)}>
-                    下へ
-                  </button>
-                  <button type="button" className="console-secondary" onClick={() => void deleteCategory()}>
-                    削除
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+        <CmsCategoryVisualPicker
+          items={tree}
+          selectedId={selectedCategoryId}
+          onSelect={setSelectedCategoryId}
+          mode="manage"
+          onCreateRoot={createRootCategory}
+          onCreateChild={createChildCategory}
+          onUpdateCategory={updateCategory}
+          onDeleteCategory={deleteCategory}
+        />
       </div>
     </>
   )
