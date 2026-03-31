@@ -43,6 +43,7 @@ erDiagram
         bigint views_total "0"
         uuid thumbnail_asset_id FK "0c1ac2d4-9f50-4ed8-8e6e-4d8250d25f24"
         jsonb toc_json "[]"
+        string image_job_status "[pending, processing, completed, failed], 例=processing"
         uuid locked_by_id FK "2a0e7d75-f03f-4916-a03e-6e4f5ce2e3b9"
         timestamptz locked_at "2026-03-22T10:15:03+09:00"
         uuid lock_token "3d88e9d7-3a4f-4c13-8b2c-31dff2c29b6d"
@@ -176,6 +177,7 @@ erDiagram
 - `article_publish_request.status` は列挙制約（例: `pending/approved/rejected`）
 - `article.status` は列挙制約（例: `draft/publish/private`）+ `DEFAULT 'draft'`
 - `article.twitter_card` は列挙制約（例: `summary/summary_large_image`）+ `DEFAULT 'summary_large_image'`
+- `article.image_job_status` は列挙制約（例: `pending/processing/completed/failed`）+ `DEFAULT 'pending'`
 - `article.title` / `article.slug` / `article.summary` / `article.body_html` は空文字禁止を推奨: `CHECK (char_length(btrim(col)) > 0)`
 - `article.views_total` は負数禁止を推奨: `CHECK (views_total >= 0)`
 - `article` は公開状態と公開日時の整合を推奨: `CHECK ((status = 'publish' AND published_at IS NOT NULL) OR (status <> 'publish' AND published_at IS NULL))`

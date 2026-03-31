@@ -118,6 +118,8 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "corsheaders",
+    "mptt",
+    "cms",
     "users",
     "contacts",
 ]
@@ -202,9 +204,13 @@ USE_TZ = True
 
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CORS_ALLOW_ALL_ORIGINS = True
+CMS_ARTICLE_SESSION_TTL_SECONDS = 300
+CMS_ARTICLE_IMAGE_UPLOAD_MAX_BYTES = 50 * 1024 * 1024
 
 _renderer_classes = [
     "rest_framework.renderers.JSONRenderer",

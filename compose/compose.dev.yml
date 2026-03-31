@@ -64,6 +64,52 @@ services:
       start_period: 20s
     restart: unless-stopped
 
+  worker:
+    build:
+      context: ..
+      dockerfile: dockerfile/backend.dockerfile
+      target: dev
+    container_name: worker-dev
+    working_dir: /app
+    user: "1000:1000"
+    env_file:
+      - ../.env.dev
+    command:
+      - /bin/sh
+      - -ec
+      - exec celery -A "$${CELERY_APP_MODULE:-syumatsucamera}" worker -l info
+    volumes:
+      - ../backend:/app
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  cronjob:
+    build:
+      context: ..
+      dockerfile: dockerfile/backend.dockerfile
+      target: dev
+    container_name: cronjob-dev
+    working_dir: /app
+    user: "1000:1000"
+    env_file:
+      - ../.env.dev
+    command:
+      - /bin/sh
+      - -ec
+      - while true; do python manage.py pv_flush && sleep 1800; done
+    volumes:
+      - ../backend:/app
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
   postgres:
     image: postgres:16-alpine
     container_name: postgres-dev

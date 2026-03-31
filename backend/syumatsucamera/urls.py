@@ -28,6 +28,7 @@ urlpatterns = [
         name="system-dev-access-token",
     ),
     path("api/", include("contacts.urls")),
+    path("api/cms/", include("cms.urls")),
     path("api/users/", include("users.urls")),
     path("admin/", admin.site.urls),
 ]

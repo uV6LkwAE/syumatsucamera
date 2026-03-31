@@ -266,6 +266,8 @@ paths:
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/CmsArticleOrdering"
+        - $ref: "#/components/parameters/CmsArticleAuthor"
+        - $ref: "#/components/parameters/CmsArticleTitle"
         - $ref: "#/components/parameters/CmsArticleStatus"
       responses:
         "200":
@@ -1248,6 +1250,20 @@ components:
           - draft
           - publish
           - private
+    CmsArticleAuthor:
+      name: author
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+    CmsArticleTitle:
+      name: title
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
     ArticleId:
       name: article_id
       in: path
