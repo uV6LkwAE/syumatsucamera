@@ -134,11 +134,8 @@ export default function ContactsPage({ embedded = false }: ContactsPageProps) {
               onClick={() => void fetchCmsContacts()}
               disabled={loadingCms}
             >
-              <i
-                className={`bi ${loadingCms ? 'bi-arrow-repeat is-spinning' : 'bi-arrow-clockwise'}`}
-                aria-hidden="true"
-              />
-              {loadingCms ? '再読込中' : '更新'}
+              <i className="bi bi-arrow-clockwise" aria-hidden="true" />
+              更新
             </button>
           </div>
         </div>

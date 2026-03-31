@@ -1,5 +1,13 @@
 const API_BASE_PATH = '/api'
 const ACCESS_JWT_STORAGE_KEY = 'cf_access_jwt_assertion'
+const API_LOADING_MIN_VISIBLE_MS = 500
+
+const apiLoadingListeners = new Set<() => void>()
+
+let pendingApiRequestCount = 0
+let apiLoadingVisible = false
+let apiLoadingMinimumVisibleUntil = 0
+let apiLoadingHideTimer: number | null = null
 
 type ApiRequestMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE'
 
@@ -41,6 +49,71 @@ export class ApiError extends Error {
   }
 }
 
+function emitApiLoadingChange(): void {
+  for (const listener of apiLoadingListeners) {
+    listener()
+  }
+}
+
+function setApiLoadingVisible(nextVisible: boolean): void {
+  if (apiLoadingVisible === nextVisible) {
+    return
+  }
+
+  apiLoadingVisible = nextVisible
+  emitApiLoadingChange()
+}
+
+function beginApiRequestLoading(): void {
+  const now = Date.now()
+
+  pendingApiRequestCount += 1
+  apiLoadingMinimumVisibleUntil = Math.max(
+    apiLoadingMinimumVisibleUntil,
+    now + API_LOADING_MIN_VISIBLE_MS,
+  )
+
+  if (apiLoadingHideTimer !== null) {
+    window.clearTimeout(apiLoadingHideTimer)
+    apiLoadingHideTimer = null
+  }
+
+  setApiLoadingVisible(true)
+}
+
+function finishApiRequestLoading(): void {
+  pendingApiRequestCount = Math.max(0, pendingApiRequestCount - 1)
+  if (pendingApiRequestCount > 0) {
+    return
+  }
+
+  const remaining = Math.max(apiLoadingMinimumVisibleUntil - Date.now(), 0)
+  if (remaining === 0) {
+    apiLoadingMinimumVisibleUntil = 0
+    setApiLoadingVisible(false)
+    return
+  }
+
+  apiLoadingHideTimer = window.setTimeout(() => {
+    apiLoadingHideTimer = null
+    if (pendingApiRequestCount === 0) {
+      apiLoadingMinimumVisibleUntil = 0
+      setApiLoadingVisible(false)
+    }
+  }, remaining)
+}
+
+export function subscribeApiLoading(listener: () => void): () => void {
+  apiLoadingListeners.add(listener)
+  return () => {
+    apiLoadingListeners.delete(listener)
+  }
+}
+
+export function getApiLoadingSnapshot(): boolean {
+  return apiLoadingVisible
+}
+
 export function getStoredAccessJwt(): string {
   return window.localStorage.getItem(ACCESS_JWT_STORAGE_KEY) ?? ''
 }
@@ -70,6 +143,8 @@ export async function apiRequest<T>(
   path: string,
   options: ApiRequestOptions = {},
 ): Promise<T> {
+  beginApiRequestLoading()
+
   const method = options.method ?? 'GET'
   const withAuth = options.withAuth ?? true
   const headers: Record<string, string> = {
@@ -91,23 +166,27 @@ export async function apiRequest<T>(
     }
   }
 
-  const response = await fetch(`${API_BASE_PATH}${path}`, {
-    method,
-    headers,
-    body,
-  })
+  try {
+    const response = await fetch(`${API_BASE_PATH}${path}`, {
+      method,
+      headers,
+      body,
+    })
 
-  const payload = await parseJsonSafely(response)
+    const payload = await parseJsonSafely(response)
 
-  if (!response.ok) {
-    throw new ApiError(response.status, payload as ApiErrorPayload | undefined)
+    if (!response.ok) {
+      throw new ApiError(response.status, payload as ApiErrorPayload | undefined)
+    }
+
+    if (response.status === 204) {
+      return undefined as T
+    }
+
+    return payload as T
+  } finally {
+    finishApiRequestLoading()
   }
-
-  if (response.status === 204) {
-    return undefined as T
-  }
-
-  return payload as T
 }
 
 export async function bootstrapDevelopmentAccessJwt(): Promise<void> {

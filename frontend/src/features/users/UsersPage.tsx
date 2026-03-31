@@ -309,11 +309,8 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
             onClick={() => void fetchUsersList()}
             disabled={loadingUsers}
           >
-            <i
-              className={`bi ${loadingUsers ? 'bi-arrow-repeat is-spinning' : 'bi-arrow-clockwise'}`}
-              aria-hidden="true"
-            />
-            {loadingUsers ? '再読込中' : '再読み込み'}
+            <i className="bi bi-arrow-clockwise" aria-hidden="true" />
+            再読み込み
           </button>
         </div>
         <div className="console-table-scroll">

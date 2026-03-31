@@ -174,11 +174,8 @@ export default function CmsCategoriesPage({ embedded = false }: CmsCategoriesPag
               onClick={() => void fetchCategories()}
               disabled={loading}
             >
-              <i
-                className={`bi ${loading ? 'bi-arrow-repeat is-spinning' : 'bi-arrow-clockwise'}`}
-                aria-hidden="true"
-              />
-              {loading ? '再読込中' : '更新'}
+              <i className="bi bi-arrow-clockwise" aria-hidden="true" />
+              更新
             </button>
           </div>
           <p>gradexpo のスクール/学部追加UIに合わせて、親子関係を見ながら追加と選択を行います。</p>

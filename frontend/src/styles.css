@@ -51,6 +51,74 @@ body {
   overflow-x: hidden;
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.global-api-spinner {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+  opacity: 0;
+  transform: scale(0.94);
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.global-api-spinner.is-visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.global-api-spinner-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: auto;
+  min-height: auto;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  color: #2563eb;
+}
+
+.global-api-spinner-chip .spinner-border,
+.global-api-spinner-chip .spinner-border-sm {
+  width: 2.8rem;
+  height: 2.8rem;
+  border-width: 0.28rem;
+}
+
+.spinner-border {
+  display: inline-block;
+  width: 2rem;
+  height: 2rem;
+  border: 0.22rem solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spinnerBorder 0.75s linear infinite;
+}
+
+.spinner-border-sm {
+  width: 1.2rem;
+  height: 1.2rem;
+  border-width: 0.18rem;
+}
+
 .page {
   max-width: 880px;
   margin: 48px auto;
@@ -540,6 +608,12 @@ body {
   from {
     transform: rotate(0deg);
   }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spinnerBorder {
   to {
     transform: rotate(360deg);
   }

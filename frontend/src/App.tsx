@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useRef, useState } from 'react'
+import { startTransition, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import {
   Link,
   Navigate,
@@ -9,7 +9,12 @@ import {
   useNavigate,
   useOutletContext,
 } from 'react-router-dom'
-import { ApiError, apiRequest } from './api/client'
+import {
+  ApiError,
+  apiRequest,
+  getApiLoadingSnapshot,
+  subscribeApiLoading,
+} from './api/client'
 import ConsoleNotice from './components/ConsoleNotice'
 import ContactsPage from './features/contacts/ContactsPage'
 import CmsArticleEditorPage from './features/cms/articles/CmsArticleEditorPage'
@@ -976,40 +981,63 @@ function NotFound() {
   )
 }
 
+function GlobalApiLoadingIndicator() {
+  const isLoading = useSyncExternalStore(
+    subscribeApiLoading,
+    getApiLoadingSnapshot,
+    getApiLoadingSnapshot,
+  )
+
+  return (
+    <div
+      className={`global-api-spinner${isLoading ? ' is-visible' : ''}`}
+      aria-hidden={!isLoading}
+    >
+      <div className="global-api-spinner-chip" role="status" aria-live="polite" aria-label="通信中">
+        <span className="spinner-border spinner-border-sm" aria-hidden="true" />
+        <span className="visually-hidden">通信中</span>
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Home />} />
-      <Route path="/cms" element={<Navigate to="/cms/console/articles" replace />} />
-      <Route path="/cms/console" element={<CmsConsoleLayout />}>
-        <Route index element={<Navigate to="/cms/console/articles" replace />} />
-        <Route path="me" element={<Navigate to="/cms/console" replace />} />
-        <Route path="articles/new" element={<CmsArticleEditorPage />} />
-        <Route path="articles/:articleId/edit" element={<CmsArticleEditorPage />} />
-        <Route
-          path="articles"
-          element={<CmsConsolePage />}
-        />
-        <Route
-          path="categories"
-          element={<CmsConsolePage />}
-        />
-        <Route
-          path="contacts"
-          element={<CmsConsolePage />}
-        />
-        <Route
-          path="users"
-          element={<CmsConsolePage />}
-        />
-        <Route
-          path="ogp"
-          element={<CmsConsolePage />}
-        />
-        <Route path="impressions" element={<CmsConsolePage />} />
-      </Route>
-      <Route path="/cms/*" element={<CmsNotFound />} />
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+    <>
+      <GlobalApiLoadingIndicator />
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/cms" element={<Navigate to="/cms/console/articles" replace />} />
+        <Route path="/cms/console" element={<CmsConsoleLayout />}>
+          <Route index element={<Navigate to="/cms/console/articles" replace />} />
+          <Route path="me" element={<Navigate to="/cms/console" replace />} />
+          <Route path="articles/new" element={<CmsArticleEditorPage />} />
+          <Route path="articles/:articleId/edit" element={<CmsArticleEditorPage />} />
+          <Route
+            path="articles"
+            element={<CmsConsolePage />}
+          />
+          <Route
+            path="categories"
+            element={<CmsConsolePage />}
+          />
+          <Route
+            path="contacts"
+            element={<CmsConsolePage />}
+          />
+          <Route
+            path="users"
+            element={<CmsConsolePage />}
+          />
+          <Route
+            path="ogp"
+            element={<CmsConsolePage />}
+          />
+          <Route path="impressions" element={<CmsConsolePage />} />
+        </Route>
+        <Route path="/cms/*" element={<CmsNotFound />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </>
   )
 }
