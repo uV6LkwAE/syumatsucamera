@@ -3,6 +3,7 @@
 """
 from datetime import datetime, timedelta
 import json
+import shutil
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -56,7 +57,10 @@ class ArticleSessionService:
             if existing_token is not None:
                 existing_session = ArticleSessionService._get_session(lock_token=existing_token)
                 if existing_session is None:
-                    release_lock(LockKeys.article_edit(str(article.id)), existing_token)
+                    ArticleSessionService._cleanup_expired_lock(
+                        lock_token=existing_token,
+                        article=article,
+                    )
                 elif existing_session.locked_by_id == str(user.id):
                     return ArticleSessionService._build_response(
                         session=existing_session,
@@ -120,6 +124,10 @@ class ArticleSessionService:
                 settings.CMS_ARTICLE_SESSION_TTL_SECONDS,
             )
             if not extended:
+                ArticleSessionService._cleanup_expired_lock(
+                    lock_token=lock_token,
+                    article=article,
+                )
                 raise PermissionDenied("編集ロックが失効しています。")
             ArticleSessionService._sync_article_lock_state(
                 article=article,
@@ -147,6 +155,7 @@ class ArticleSessionService:
                 lock_expires_at=None,
                 updated_at=timezone.now(),
             )
+        ArticleSessionService._cleanup_temp_dir(lock_token=lock_token)
 
     @staticmethod
     def assert_session_owner(*, user: User, lock_token: str, article: Article | None = None) -> None:
@@ -212,6 +221,15 @@ class ArticleSessionService:
         return path
 
     @staticmethod
+    def _cleanup_temp_dir(*, lock_token: str) -> None:
+        """
+        セッション用 tmp ディレクトリを削除する。
+        """
+        path = Path(settings.MEDIA_ROOT) / "tmp" / lock_token
+        if path.exists():
+            shutil.rmtree(path)
+
+    @staticmethod
     def _store_session(session: ArticleSessionPayload) -> None:
         """
         Redis にセッション情報を保存する。
@@ -236,6 +254,7 @@ class ArticleSessionService:
         """
         session = ArticleSessionService._get_session(lock_token=lock_token)
         if session is None:
+            ArticleSessionService._cleanup_expired_lock(lock_token=lock_token)
             raise PermissionDenied("編集ロックが存在しません。")
         if session.locked_by_id != str(user.id):
             raise PermissionDenied("この編集ロックの所有者ではありません。")
@@ -263,6 +282,30 @@ class ArticleSessionService:
         Redis からセッション情報を削除する。
         """
         get_redis_client().delete(ArticleSessionService._session_key(lock_token))
+
+    @staticmethod
+    def _cleanup_expired_lock(*, lock_token: str, article: Article | None = None) -> None:
+        """
+        失効した編集ロックに紐づく一時データと状態を掃除する。
+        """
+        target_article = article
+        if target_article is None:
+            target_article = Article.objects.filter(lock_token=lock_token).first()
+
+        ArticleSessionService._delete_session(lock_token=lock_token)
+        ArticleSessionService._cleanup_temp_dir(lock_token=lock_token)
+
+        if target_article is None:
+            return
+
+        release_lock(LockKeys.article_edit(str(target_article.id)), lock_token)
+        Article.objects.filter(id=target_article.id).update(
+            locked_by=None,
+            locked_at=None,
+            lock_token=None,
+            lock_expires_at=None,
+            updated_at=timezone.now(),
+        )
 
     @staticmethod
     def _session_key(lock_token: str) -> str:
