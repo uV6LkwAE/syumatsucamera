@@ -94,6 +94,8 @@ type CmsSessionUser = {
   icon: string | null
   header_image: string | null
   profile: string | null
+  meta: Record<string, string>
+  meta_help_text?: string
   role: 'admin' | 'author'
   is_active: boolean
 }
@@ -103,14 +105,97 @@ type CmsOutletContext = {
   setSessionUser: (user: CmsSessionUser | null) => void
 }
 
+type ProfileMetaItem = {
+  id: string
+  key: string
+  value: string
+}
+
 type ProfileFormState = {
   display_name: string
   profile: string
+  meta_items: ProfileMetaItem[]
 }
 
 type ProfileValidationResult = {
   valid: boolean
   message: string
+  normalizedMeta: Record<string, string>
+}
+
+const PROFILE_META_MAX_ITEMS = 20
+const PROFILE_META_KEY_MAX_LENGTH = 50
+const PROFILE_META_VALUE_MAX_LENGTH = 300
+
+function createProfileMetaItem(key = '', value = ''): ProfileMetaItem {
+  const randomPart = Math.random().toString(16).slice(2)
+  return {
+    id: `meta-${Date.now()}-${randomPart}`,
+    key,
+    value,
+  }
+}
+
+function toProfileMetaItems(meta: Record<string, string> | null | undefined): ProfileMetaItem[] {
+  if (meta === null || meta === undefined) {
+    return []
+  }
+  return Object.entries(meta).map(([key, value]) => createProfileMetaItem(key, value))
+}
+
+function normalizeProfileMeta(items: ProfileMetaItem[]): ProfileValidationResult {
+  if (items.length > PROFILE_META_MAX_ITEMS) {
+    return {
+      valid: false,
+      message: `追加プロフィール項目は最大${PROFILE_META_MAX_ITEMS}件です。`,
+      normalizedMeta: {},
+    }
+  }
+
+  const normalizedMeta: Record<string, string> = {}
+  for (const item of items) {
+    const key = item.key.trim()
+    const value = item.value.trim()
+
+    if (key === '' && value === '') {
+      continue
+    }
+    if (key === '' || value === '') {
+      return {
+        valid: false,
+        message: '追加プロフィール項目は「項目名」と「内容」をセットで入力してください。',
+        normalizedMeta: {},
+      }
+    }
+    if (key.length > PROFILE_META_KEY_MAX_LENGTH) {
+      return {
+        valid: false,
+        message: `項目名は${PROFILE_META_KEY_MAX_LENGTH}文字以内で入力してください。`,
+        normalizedMeta: {},
+      }
+    }
+    if (value.length > PROFILE_META_VALUE_MAX_LENGTH) {
+      return {
+        valid: false,
+        message: `内容は${PROFILE_META_VALUE_MAX_LENGTH}文字以内で入力してください。`,
+        normalizedMeta: {},
+      }
+    }
+    if (normalizedMeta[key] !== undefined) {
+      return {
+        valid: false,
+        message: `追加プロフィール項目の「${key}」が重複しています。`,
+        normalizedMeta: {},
+      }
+    }
+    normalizedMeta[key] = value
+  }
+
+  return {
+    valid: true,
+    message: '',
+    normalizedMeta,
+  }
 }
 
 function validateProfileForm(
@@ -128,12 +213,14 @@ function validateProfileForm(
     return {
       valid: false,
       message: '表示名は必須です。',
+      normalizedMeta: {},
     }
   }
   if (normalizedDisplayName.length > 100) {
     return {
       valid: false,
       message: '表示名は100文字以内で入力してください。',
+      normalizedMeta: {},
     }
   }
 
@@ -142,12 +229,14 @@ function validateProfileForm(
     return {
       valid: false,
       message: '自己紹介は必須です。',
+      normalizedMeta: {},
     }
   }
   if (normalizedProfile.length > 300) {
     return {
       valid: false,
       message: '自己紹介は300文字以内で入力してください。',
+      normalizedMeta: {},
     }
   }
 
@@ -159,6 +248,7 @@ function validateProfileForm(
     return {
       valid: false,
       message: '有効ユーザーはアイコン画像の登録が必須です。',
+      normalizedMeta: {},
     }
   }
 
@@ -170,12 +260,19 @@ function validateProfileForm(
     return {
       valid: false,
       message: '有効ユーザーはヘッダー画像の登録が必須です。',
+      normalizedMeta: {},
     }
+  }
+
+  const metaValidation = normalizeProfileMeta(form.meta_items)
+  if (!metaValidation.valid) {
+    return metaValidation
   }
 
   return {
     valid: true,
     message: '',
+    normalizedMeta: metaValidation.normalizedMeta,
   }
 }
 
@@ -367,6 +464,7 @@ function CmsConsolePage() {
   const [profileForm, setProfileForm] = useState<ProfileFormState>({
     display_name: '',
     profile: '',
+    meta_items: [],
   })
   const [profileIconFile, setProfileIconFile] = useState<File | null>(null)
   const [profileHeaderImageFile, setProfileHeaderImageFile] = useState<File | null>(null)
@@ -379,6 +477,7 @@ function CmsConsolePage() {
     setProfileForm({
       display_name: sessionUser?.display_name ?? '',
       profile: sessionUser?.profile ?? '',
+      meta_items: toProfileMetaItems(sessionUser?.meta),
     })
     setProfileIconFile(null)
     setProfileHeaderImageFile(null)
@@ -387,7 +486,7 @@ function CmsConsolePage() {
     setProfileEditMode(false)
     setProfileMessage('')
     setProfileError('')
-  }, [sessionUser?.id, sessionUser?.display_name, sessionUser?.profile])
+  }, [sessionUser?.id, sessionUser?.display_name, sessionUser?.profile, sessionUser?.meta])
 
   useEffect(() => {
     if (profileIconFile === null) {
@@ -429,6 +528,38 @@ function CmsConsolePage() {
     ? (profileHeaderPreviewUrl ?? sessionUser?.header_image ?? '')
     : (sessionUser?.header_image ?? '')
   const canPickProfileImages = canEditProfile && profileEditMode
+  const profileMetaEntries = Object.entries(sessionUser?.meta ?? {})
+
+  function addProfileMetaItem(): void {
+    setProfileForm((prev) => {
+      if (prev.meta_items.length >= PROFILE_META_MAX_ITEMS) {
+        return prev
+      }
+      return {
+        ...prev,
+        meta_items: [...prev.meta_items, createProfileMetaItem()],
+      }
+    })
+  }
+
+  function updateProfileMetaItem(
+    targetId: string,
+    field: 'key' | 'value',
+    nextValue: string,
+  ): void {
+    setProfileForm((prev) => ({
+      ...prev,
+      meta_items: prev.meta_items.map((item) =>
+        item.id === targetId ? { ...item, [field]: nextValue } : item),
+    }))
+  }
+
+  function removeProfileMetaItem(targetId: string): void {
+    setProfileForm((prev) => ({
+      ...prev,
+      meta_items: prev.meta_items.filter((item) => item.id !== targetId),
+    }))
+  }
 
   async function saveProfile(): Promise<void> {
     if (!canEditProfile || sessionUser === null) {
@@ -455,6 +586,7 @@ function CmsConsolePage() {
       if (profileHeaderImageFile !== null) {
         formData.append('header_image_file', profileHeaderImageFile)
       }
+      formData.append('meta', JSON.stringify(profileValidation.normalizedMeta))
 
       const payload = await apiRequest<CmsSessionUser>(`/users/${sessionUser.id}`, {
         method: 'PATCH',
@@ -463,6 +595,7 @@ function CmsConsolePage() {
       setProfileForm({
         display_name: payload.display_name ?? '',
         profile: payload.profile ?? '',
+        meta_items: toProfileMetaItems(payload.meta),
       })
       setProfileIconFile(null)
       setProfileHeaderImageFile(null)
@@ -607,9 +740,7 @@ function CmsConsolePage() {
                 alt="profile"
               />
             ) : (
-              <div className="cms-profile-avatar cms-profile-avatar-fallback">
-                {userLabel.slice(0, 1).toUpperCase()}
-              </div>
+              <div className="cms-profile-avatar cms-profile-avatar-empty" aria-hidden="true" />
             )}
             {canPickProfileImages && (
               <span className="cms-profile-avatar-upload-badge" aria-hidden="true">
@@ -659,6 +790,57 @@ function CmsConsolePage() {
                     }))
                   }
                 />
+                <div className="cms-profile-meta-editor">
+                  <div className="cms-profile-meta-editor-head">
+                    <h2 className="cms-profile-meta-editor-title">追加プロフィール項目</h2>
+                    <button
+                      type="button"
+                      className="console-secondary cms-profile-meta-add-button"
+                      onClick={addProfileMetaItem}
+                      disabled={profileForm.meta_items.length >= PROFILE_META_MAX_ITEMS}
+                    >
+                      <i className="bi bi-plus-lg" aria-hidden="true" />
+                      項目を追加
+                    </button>
+                  </div>
+                  <p className="cms-profile-meta-editor-caption">
+                    {sessionUser?.meta_help_text ?? '任意のプロフィール情報を追加できます。'}
+                  </p>
+                  {profileForm.meta_items.length === 0 && (
+                    <div className="cms-profile-meta-empty">追加項目はまだありません。</div>
+                  )}
+                  {profileForm.meta_items.map((item) => (
+                    <div key={item.id} className="cms-profile-meta-row">
+                      <input
+                        type="text"
+                        className="console-input cms-profile-meta-key"
+                        placeholder="項目名（例: 使用機材）"
+                        value={item.key}
+                        maxLength={PROFILE_META_KEY_MAX_LENGTH}
+                        onChange={(event) =>
+                          updateProfileMetaItem(item.id, 'key', event.target.value)
+                        }
+                      />
+                      <input
+                        type="text"
+                        className="console-input cms-profile-meta-value"
+                        placeholder="内容（例: Nikon Zf）"
+                        value={item.value}
+                        maxLength={PROFILE_META_VALUE_MAX_LENGTH}
+                        onChange={(event) =>
+                          updateProfileMetaItem(item.id, 'value', event.target.value)
+                        }
+                      />
+                      <button
+                        type="button"
+                        className="console-secondary cms-profile-meta-remove-button"
+                        onClick={() => removeProfileMetaItem(item.id)}
+                      >
+                        削除
+                      </button>
+                    </div>
+                  ))}
+                </div>
                 <input
                   ref={profileIconInputRef}
                   type="file"
@@ -701,13 +883,29 @@ function CmsConsolePage() {
                   <span>
                     自己紹介 {profileForm.profile.trim().length}/300
                   </span>
+                  <span>
+                    追加項目 {Object.keys(profileValidation.normalizedMeta).length}
+                    /{PROFILE_META_MAX_ITEMS}
+                  </span>
                 </div>
                 {profileValidation.message !== '' && (
                   <div className="console-error">{profileValidation.message}</div>
                 )}
               </>
             ) : (
-              <p className="cms-profile-description">{sessionUser?.profile ?? ''}</p>
+              <>
+                <p className="cms-profile-description">{sessionUser?.profile ?? ''}</p>
+                {profileMetaEntries.length > 0 && (
+                  <dl className="cms-profile-meta-list">
+                    {profileMetaEntries.map(([key, value]) => (
+                      <div key={key} className="cms-profile-meta-list-item">
+                        <dt>{key}</dt>
+                        <dd>{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+              </>
             )}
 
             <ConsoleNotice

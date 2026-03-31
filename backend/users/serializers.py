@@ -1,10 +1,16 @@
 """
 users アプリのシリアライザーを定義する。
 """
+import json
+
 from django.conf import settings
 from rest_framework import serializers
 
-from users.models import UserRole
+from users.models import User, UserRole
+
+USER_META_MAX_ITEMS = 20
+USER_META_KEY_MAX_LENGTH = 50
+USER_META_VALUE_MAX_LENGTH = 300
 
 
 class UsersListQuerySerializer(serializers.Serializer):
@@ -31,8 +37,19 @@ class UsersSessionUserSerializer(serializers.Serializer):
     icon = serializers.CharField(allow_null=True, read_only=True)
     header_image = serializers.CharField(allow_null=True, read_only=True)
     profile = serializers.CharField(allow_null=True, read_only=True)
+    meta = serializers.DictField(
+        child=serializers.CharField(),
+        read_only=True,
+    )
+    meta_help_text = serializers.SerializerMethodField()
     role = serializers.ChoiceField(choices=UserRole.choices, read_only=True)
     is_active = serializers.BooleanField(read_only=True)
+
+    def get_meta_help_text(self, _obj) -> str:
+        """
+        meta の入力補助テキストを返す。
+        """
+        return str(User._meta.get_field("meta").help_text)
 
 
 class UsersDevelopmentAccessTokenSerializer(serializers.Serializer):
@@ -57,6 +74,10 @@ class UsersUserSummarySerializer(serializers.Serializer):
     display_name = serializers.CharField(allow_null=True, read_only=True)
     icon = serializers.CharField(allow_null=True, read_only=True)
     header_image = serializers.CharField(allow_null=True, read_only=True)
+    meta = serializers.DictField(
+        child=serializers.CharField(),
+        read_only=True,
+    )
     role = serializers.ChoiceField(choices=UserRole.choices, read_only=True)
     is_active = serializers.BooleanField(read_only=True)
     last_login_at = serializers.DateTimeField(
@@ -130,6 +151,7 @@ class UsersUserUpdateRequestSerializer(serializers.Serializer):
         write_only=True,
     )
     profile = serializers.CharField(max_length=300)
+    meta = serializers.JSONField(required=False)
     role = serializers.ChoiceField(choices=UserRole.choices)
     is_active = serializers.BooleanField()
 
@@ -150,6 +172,54 @@ class UsersUserUpdateRequestSerializer(serializers.Serializer):
                 }
             )
         return attrs
+
+    def validate_meta(self, value):
+        """
+        ユーザーメタ情報のキー/値形式を検証する。
+        """
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError as exc:
+                raise serializers.ValidationError(
+                    "meta はJSONオブジェクト文字列で指定してください。"
+                ) from exc
+        if value is None:
+            return {}
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("meta はオブジェクト形式で指定してください。")
+        if len(value) > USER_META_MAX_ITEMS:
+            raise serializers.ValidationError(
+                f"meta は最大{USER_META_MAX_ITEMS}件まで指定できます。"
+            )
+
+        normalized: dict[str, str] = {}
+        for raw_key, raw_value in value.items():
+            if not isinstance(raw_key, str):
+                raise serializers.ValidationError("meta のキーは文字列で指定してください。")
+
+            key = raw_key.strip()
+            if key == "":
+                raise serializers.ValidationError("meta のキーは空文字にできません。")
+            if len(key) > USER_META_KEY_MAX_LENGTH:
+                raise serializers.ValidationError(
+                    f"meta のキーは{USER_META_KEY_MAX_LENGTH}文字以内で指定してください。"
+                )
+            if key in normalized:
+                raise serializers.ValidationError("meta のキーが重複しています。")
+
+            if not isinstance(raw_value, str):
+                raise serializers.ValidationError("meta の値は文字列で指定してください。")
+            value_text = raw_value.strip()
+            if value_text == "":
+                raise serializers.ValidationError("meta の値は空文字にできません。")
+            if len(value_text) > USER_META_VALUE_MAX_LENGTH:
+                raise serializers.ValidationError(
+                    f"meta の値は{USER_META_VALUE_MAX_LENGTH}文字以内で指定してください。"
+                )
+            normalized[key] = value_text
+
+        return normalized
 
 
 class UsersActivationIssueResponseSerializer(serializers.Serializer):
@@ -176,6 +246,10 @@ class ActivationUserDetailSerializer(serializers.Serializer):
     icon = serializers.CharField(allow_null=True, read_only=True)
     header_image = serializers.CharField(allow_null=True, read_only=True)
     profile = serializers.CharField(allow_null=True, read_only=True)
+    meta = serializers.DictField(
+        child=serializers.CharField(),
+        read_only=True,
+    )
 
 
 class RegistrationCompleteSerializer(serializers.Serializer):

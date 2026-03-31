@@ -5,7 +5,6 @@ import uuid
 
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.auth.models import PermissionsMixin
-from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 from django.db.models.functions import Lower
@@ -66,6 +65,12 @@ class User(AbstractBaseUser, PermissionsMixin):
         blank=True,
         verbose_name="ヘッダー画像URL",
     )
+    meta = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="任意メタ情報",
+        help_text="ユーザーが任意に追加するキー/値のメタ情報を保持する。",
+    )
     role = models.CharField(
         max_length=20,
         choices=UserRole.choices,
@@ -86,14 +91,6 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS: list[str] = []
-    ACTIVE_REQUIRED_FIELDS = (
-        "cf_access_sub",
-        "display_name",
-        "profile",
-        "icon",
-        "header_image",
-    )
-
     class Meta:
         verbose_name = "ユーザー"
         verbose_name_plural = "ユーザー"
@@ -150,19 +147,8 @@ class User(AbstractBaseUser, PermissionsMixin):
         if self.header_image is not None:
             self.header_image = self.header_image.strip() or None
 
-        if self.is_active:
-            missing_fields = []
-            for field_name in self.ACTIVE_REQUIRED_FIELDS:
-                if getattr(self, field_name) is None:
-                    missing_fields.append(field_name)
-
-            if missing_fields:
-                raise ValidationError(
-                    {
-                        field: "有効ユーザーにするには値が必要です。"
-                        for field in missing_fields
-                    }
-                )
+        if self.meta is None:
+            self.meta = {}
 
     @property
     def is_staff(self) -> bool:

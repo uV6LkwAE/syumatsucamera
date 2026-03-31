@@ -420,6 +420,12 @@ components:
           type:
             - string
             - "null"
+        meta:
+          type: object
+          additionalProperties:
+            type: string
+        meta_help_text:
+          type: string
         role:
           type: string
           enum:
@@ -938,6 +944,7 @@ components:
         - display_name
         - icon
         - header_image
+        - meta
         - role
         - is_active
         - last_login_at
@@ -960,6 +967,10 @@ components:
           type:
             - string
             - "null"
+        meta:
+          type: object
+          additionalProperties:
+            type: string
         role:
           type: string
           enum:
@@ -1051,6 +1062,10 @@ components:
           type:
             - string
             - "null"
+        meta:
+          type: object
+          additionalProperties:
+            type: string
     UsersUserList:
       type: object
       required:
@@ -1122,6 +1137,10 @@ components:
           format: binary
         profile:
           type: string
+        meta:
+          type: object
+          additionalProperties:
+            type: string
         role:
           type: string
           enum:

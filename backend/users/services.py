@@ -135,6 +135,7 @@ class UsersService:
         user: User,
         display_name: str,
         profile: str,
+        meta: dict[str, str],
         role: str,
         is_active: bool,
         icon: str | None,
@@ -171,6 +172,7 @@ class UsersService:
 
             user.display_name = display_name
             user.profile = profile
+            user.meta = meta
             user.role = role
             user.is_active = is_active
             user.icon = next_icon
@@ -181,6 +183,7 @@ class UsersService:
                 update_fields=[
                     "display_name",
                     "profile",
+                    "meta",
                     "role",
                     "is_active",
                     "icon",

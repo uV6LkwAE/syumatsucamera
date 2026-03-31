@@ -113,6 +113,7 @@ class UsersViewSet(ViewSet):
             user=user,
             display_name=validated_data["display_name"],
             profile=validated_data["profile"],
+            meta=validated_data["meta"] if "meta" in validated_data else user.meta,
             role=validated_data["role"],
             is_active=validated_data["is_active"],
             icon=validated_data["icon"] if "icon" in validated_data else user.icon,
