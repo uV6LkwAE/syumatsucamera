@@ -50,6 +50,17 @@ class CmsTagSummarySerializer(serializers.Serializer):
     slug = serializers.CharField(read_only=True)
 
 
+class CmsMediaAssetSerializer(serializers.Serializer):
+    """
+    記事メディアアセット要約を返す。
+    """
+
+    id = serializers.UUIDField(read_only=True)
+    file_name = serializers.CharField(read_only=True)
+    public_path = serializers.CharField(read_only=True)
+    is_thumbnail = serializers.BooleanField(read_only=True)
+
+
 class ArticleOptionSerializer(serializers.Serializer):
     """
     記事オプションを返す。
@@ -272,6 +283,7 @@ class CmsArticleSerializer(serializers.Serializer):
     twitter_card = serializers.ChoiceField(choices=TwitterCardType.choices, read_only=True)
     article_option = serializers.SerializerMethodField()
     tags = CmsTagSummarySerializer(many=True, read_only=True)
+    media_assets = serializers.SerializerMethodField()
     toc = serializers.SerializerMethodField()
     image_job_status = serializers.ChoiceField(choices=ImageJobStatus.choices, read_only=True)
     lock = serializers.SerializerMethodField()
@@ -291,6 +303,22 @@ class CmsArticleSerializer(serializers.Serializer):
         """
         return CmsTocNodeSerializer(obj.toc_json or [], many=True).data
 
+    def get_media_assets(self, obj) -> list:
+        """
+        記事に紐づくメディアアセット一覧を返す。
+        """
+        items = []
+        for asset in obj.media_assets.order_by("created_at"):
+            items.append(
+                {
+                    "id": asset.id,
+                    "file_name": asset.file_name,
+                    "public_path": self._build_public_path(file_name=asset.file_name),
+                    "is_thumbnail": str(asset.id) == str(obj.thumbnail_asset_id),
+                }
+            )
+        return CmsMediaAssetSerializer(items, many=True).data
+
     def get_lock(self, obj):
         """
         記事ロック情報を返す。
@@ -306,6 +334,14 @@ class CmsArticleSerializer(serializers.Serializer):
                 "lock_expires_at": obj.lock_expires_at,
             }
         ).data
+
+    def _build_public_path(self, *, file_name: str) -> str:
+        """
+        メディア公開用相対パスを返す。
+        """
+        shard_a = file_name[:2]
+        shard_b = file_name[2:4]
+        return f"{settings.MEDIA_URL}images/{shard_a}/{shard_b}/{file_name}"
 
 
 class CmsArticleMutationResponseSerializer(serializers.Serializer):

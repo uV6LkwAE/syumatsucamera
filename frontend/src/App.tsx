@@ -12,6 +12,9 @@ import {
 import { ApiError, apiRequest } from './api/client'
 import ConsoleNotice from './components/ConsoleNotice'
 import ContactsPage from './features/contacts/ContactsPage'
+import CmsArticleEditorPage from './features/cms/articles/CmsArticleEditorPage'
+import CmsArticlesPage from './features/cms/articles/CmsArticlesPage'
+import CmsCategoriesPage from './features/cms/categories/CmsCategoriesPage'
 import UsersPage from './features/users/UsersPage'
 
 function Home() {
@@ -305,6 +308,16 @@ function getCmsActiveTab(pathname: string): CmsTabKey {
   return 'articles'
 }
 
+function toCmsRoleLabel(role: CmsSessionUser['role'] | undefined): string {
+  if (role === 'admin') {
+    return '管理者'
+  }
+  if (role === 'author') {
+    return '執筆者'
+  }
+  return '未認証'
+}
+
 function CmsConsoleLayout() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [sessionUser, setSessionUser] = useState<CmsSessionUser | null>(null)
@@ -349,6 +362,7 @@ function CmsConsoleLayout() {
 
   const displayName = sessionUser?.display_name ?? ''
   const userLabel = displayName.trim() !== '' ? displayName : (sessionUser?.email ?? '未認証')
+  const roleLabel = toCmsRoleLabel(sessionUser?.role)
 
   return (
     <>
@@ -368,6 +382,9 @@ function CmsConsoleLayout() {
           </Link>
           <div className="console-header-right">
             <div className="console-header-user-link console-header-user-trigger">
+              <span className={`console-header-role-badge is-${sessionUser?.role ?? 'guest'}`}>
+                {roleLabel}
+              </span>
               <span className="console-header-user-name">{userLabel}</span>
             </div>
           </div>
@@ -437,17 +454,6 @@ function CmsTabPlaceholder({
         <p>{summary}</p>
       </div>
       <div className="console-placeholder">この機能は順次実装します。</div>
-    </div>
-  )
-}
-
-function CmsArticleCreatePage() {
-  return (
-    <div className="console-dashboard">
-      <CmsTabPlaceholder
-        title="記事作成"
-        summary="新規記事作成フォームはこの画面に実装します。"
-      />
     </div>
   )
 }
@@ -611,20 +617,10 @@ function CmsConsolePage() {
 
   function renderTabContent() {
     if (activeTab === 'articles') {
-      return (
-        <CmsTabPlaceholder
-          title="記事"
-          summary="記事一覧、編集、公開申請の機能をこのタブに集約します。"
-        />
-      )
+      return <CmsArticlesPage embedded />
     }
     if (activeTab === 'categories') {
-      return (
-        <CmsTabPlaceholder
-          title="カテゴリー"
-          summary="カテゴリーの作成、更新、並び替えをこのタブで管理します。"
-        />
-      )
+      return <CmsCategoriesPage embedded />
     }
     if (activeTab === 'contacts') {
       return <ContactsPage embedded />
@@ -988,7 +984,8 @@ export default function App() {
       <Route path="/cms/console" element={<CmsConsoleLayout />}>
         <Route index element={<Navigate to="/cms/console/articles" replace />} />
         <Route path="me" element={<Navigate to="/cms/console" replace />} />
-        <Route path="articles/new" element={<CmsArticleCreatePage />} />
+        <Route path="articles/new" element={<CmsArticleEditorPage />} />
+        <Route path="articles/:articleId/edit" element={<CmsArticleEditorPage />} />
         <Route
           path="articles"
           element={<CmsConsolePage />}
