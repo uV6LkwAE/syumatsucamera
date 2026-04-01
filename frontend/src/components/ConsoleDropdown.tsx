@@ -49,6 +49,7 @@ export default function ConsoleDropdown<T extends ConsoleDropdownValue>({
   const menuId = `${buttonId}-menu`
   const rootRef = useRef<HTMLDivElement | null>(null)
   const buttonRef = useRef<HTMLButtonElement | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
   const [open, setOpen] = useState(false)
   const [menuStyle, setMenuStyle] = useState<CSSProperties>({})
 
@@ -97,6 +98,9 @@ export default function ConsoleDropdown<T extends ConsoleDropdownValue>({
     function handlePointerDown(event: MouseEvent): void {
       const target = event.target as Node
       if (rootRef.current?.contains(target) === true) {
+        return
+      }
+      if (menuRef.current?.contains(target) === true) {
         return
       }
       setOpen(false)
@@ -184,6 +188,7 @@ export default function ConsoleDropdown<T extends ConsoleDropdownValue>({
       {open &&
         createPortal(
           <div
+            ref={menuRef}
             id={menuId}
             className={[
               'dropdown-menu',
