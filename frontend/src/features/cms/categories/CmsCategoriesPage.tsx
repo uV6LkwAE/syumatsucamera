@@ -159,6 +159,15 @@ export default function CmsCategoriesPage({ embedded = false }: CmsCategoriesPag
     }
   }
 
+  const hero = (
+    <ConsoleHeroCard
+      badge="カテゴリー"
+      title="カテゴリ管理"
+      subtitle="左から右へ階層を追いながら、親子関係を崩さず整理します。"
+      icon="bi-diagram-3"
+    />
+  )
+
   const content = (
     <>
       <ConsoleNotice message={message} onClose={() => setMessage('')} />
@@ -195,17 +204,18 @@ export default function CmsCategoriesPage({ embedded = false }: CmsCategoriesPag
   )
 
   if (embedded) {
-    return <div className="cms-tab-embedded">{content}</div>
+    return (
+      <div className="cms-tab-embedded">
+        {hero}
+        <hr className="cms-console-divider" />
+        {content}
+      </div>
+    )
   }
 
   return (
     <div className="console-dashboard">
-      <ConsoleHeroCard
-        badge="カテゴリー"
-        title="カテゴリ管理"
-        subtitle="ツリー構造と兄弟順を崩さずにカテゴリを整理します。"
-        icon="bi-diagram-3"
-      />
+      {hero}
       {content}
     </div>
   )

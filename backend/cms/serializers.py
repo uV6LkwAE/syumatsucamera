@@ -40,6 +40,29 @@ class CmsAuthorSummarySerializer(serializers.Serializer):
     header_image = serializers.CharField(allow_null=True, read_only=True)
 
 
+class CmsArticleAuthorOptionSerializer(serializers.Serializer):
+    """
+    記事一覧用の執筆者候補を返す。
+    """
+
+    id = serializers.UUIDField(read_only=True)
+    display_name = serializers.SerializerMethodField()
+
+    def get_display_name(self, obj) -> str:
+        """
+        執筆者表示名を返す。
+        """
+        return obj.display_name or obj.email
+
+
+class CmsArticleAuthorOptionListSerializer(serializers.Serializer):
+    """
+    記事一覧用の執筆者候補一覧を返す。
+    """
+
+    items = CmsArticleAuthorOptionSerializer(many=True, read_only=True)
+
+
 class CmsTagSummarySerializer(serializers.Serializer):
     """
     タグ要約情報を返す。

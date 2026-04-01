@@ -15,6 +15,7 @@ import {
   getApiLoadingSnapshot,
   subscribeApiLoading,
 } from './api/client'
+import ConsoleHeroCard from './components/ConsoleHeroCard'
 import ConsoleNotice from './components/ConsoleNotice'
 import ContactsPage from './features/contacts/ContactsPage'
 import CmsArticleEditorPage from './features/cms/articles/CmsArticleEditorPage'
@@ -448,16 +449,18 @@ function CmsConsoleLayout() {
 function CmsTabPlaceholder({
   title,
   summary,
+  badge,
+  icon,
 }: {
+  badge: string
+  icon: string
   title: string
   summary: string
 }) {
   return (
-    <div className="console-card">
-      <div className="console-card-header">
-        <h2>{title}</h2>
-        <p>{summary}</p>
-      </div>
+    <div className="cms-tab-embedded">
+      <ConsoleHeroCard badge={badge} title={title} subtitle={summary} icon={icon} />
+      <hr className="cms-console-divider" />
       <div className="console-placeholder">この機能は順次実装します。</div>
     </div>
   )
@@ -636,22 +639,26 @@ function CmsConsolePage() {
     if (activeTab === 'ogp') {
       return (
         <CmsTabPlaceholder
+          badge="OGP"
+          icon="bi-link-45deg"
           title="OGP"
-          summary="OGPキャッシュの確認、再取得、削除をこのタブで管理します。"
+          summary="公開前にリンクカードのキャッシュ状態をここで確認します。"
         />
       )
     }
     return (
       <CmsTabPlaceholder
+        badge="分析"
+        icon="bi-bar-chart-line"
         title="インプレッション"
-        summary="インプレッション分析APIの実装後、このタブで可視化します。"
+        summary="公開後の流入傾向をこのタブで追えるようにします。"
       />
     )
   }
 
   return (
     <div className="console-dashboard cms-profile-page">
-      <section className="console-card cms-profile-card">
+      <section className="cms-profile-card">
         <div
           className={`cms-profile-banner ${canPickProfileImages ? 'is-editing' : ''}`}
           style={
@@ -918,7 +925,7 @@ function CmsConsolePage() {
         </div>
       </section>
 
-      <section className="console-card cms-tabs-shell">
+      <section className="cms-tabs-shell">
         <div className="cms-tabs" role="tablist" aria-label="CMS tabs">
           {CMS_NAV_ITEMS.map((item) => {
             const tabKey = getCmsActiveTab(item.to)

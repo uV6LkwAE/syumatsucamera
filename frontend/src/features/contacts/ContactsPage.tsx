@@ -80,6 +80,15 @@ export default function ContactsPage({ embedded = false }: ContactsPageProps) {
     void fetchCmsContacts()
   }, [page, limit])
 
+  const hero = (
+    <ConsoleHeroCard
+      badge="お問い合わせ"
+      title="問い合わせ管理"
+      subtitle="新しい問い合わせから順に確認し、必要な内容を本文で追います。"
+      icon="bi-envelope"
+    />
+  )
+
   const content = (
     <>
       {errorMessage !== '' && <div className="console-error">{errorMessage}</div>}
@@ -175,17 +184,18 @@ export default function ContactsPage({ embedded = false }: ContactsPageProps) {
   )
 
   if (embedded) {
-    return <div className="cms-tab-embedded">{content}</div>
+    return (
+      <div className="cms-tab-embedded">
+        {hero}
+        <hr className="cms-console-divider" />
+        {content}
+      </div>
+    )
   }
 
   return (
     <div className="console-dashboard">
-      <ConsoleHeroCard
-        badge="お問い合わせ"
-        title="問い合わせ管理"
-        subtitle="届いた問い合わせを確認します。"
-        icon="bi-envelope"
-      />
+      {hero}
       {content}
     </div>
   )

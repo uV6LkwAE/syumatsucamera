@@ -239,6 +239,15 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
     }
   }
 
+  const hero = (
+    <ConsoleHeroCard
+      badge="Users"
+      title="ユーザー管理"
+      subtitle="まず一覧で対象を選び、詳細画面で権限と招待を整えます。"
+      icon="bi-people"
+    />
+  )
+
   const content = (
     <>
       <ConsoleNotice message={message} onClose={() => setMessage('')} />
@@ -485,17 +494,18 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
   )
 
   if (embedded) {
-    return <div className="cms-tab-embedded">{content}</div>
+    return (
+      <div className="cms-tab-embedded">
+        {hero}
+        <hr className="cms-console-divider" />
+        {content}
+      </div>
+    )
   }
 
   return (
     <div className="console-dashboard">
-      <ConsoleHeroCard
-        badge="Users"
-        title="ユーザー管理"
-        subtitle="仮登録・招待・権限更新を管理します。"
-        icon="bi-people"
-      />
+      {hero}
       {content}
     </div>
   )

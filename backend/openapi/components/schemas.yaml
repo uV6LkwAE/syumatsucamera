@@ -491,6 +491,27 @@ components:
             $ref: "#/components/schemas/CmsArticleSummary"
         pagination:
           $ref: "#/components/schemas/CommonPagination"
+    CmsArticleAuthorOption:
+      type: object
+      required:
+        - id
+        - display_name
+      properties:
+        id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+    CmsArticleAuthorOptionList:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/CmsArticleAuthorOption"
     ArticleOption:
       type: object
       required:

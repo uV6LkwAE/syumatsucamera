@@ -8,6 +8,7 @@ from rest_framework.viewsets import ViewSet
 
 from core.permissions.permissions import AdminOnlyReadWrite, AuthorAdminReadWrite
 from cms.serializers import (
+    CmsArticleAuthorOptionListSerializer,
     CmsArticleImageUploadRequestSerializer,
     CmsArticleImageUploadResponseSerializer,
     CmsArticleListQuerySerializer,
@@ -28,6 +29,7 @@ from cms.serializers import (
     CmsPublishRequestRejectRequestSerializer,
     CmsPublishRequestSerializer,
 )
+from cms.services.article_author_services import ArticleAuthorService
 from cms.services.article_save_log_services import ArticleSaveLogService
 from cms.services.article_services import ArticleService
 from cms.services.article_session_services import ArticleSessionService
@@ -131,6 +133,24 @@ class CmsArticlesViewSet(ViewSet):
         )
         response_serializer = CmsPublishRequestSerializer(publish_request)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+
+class CmsArticleAuthorsViewSet(ViewSet):
+    """
+    記事一覧の執筆者候補API。
+    """
+
+    permission_classes = [AuthorAdminReadWrite]
+
+    def list(self, request):
+        """
+        記事一覧の執筆者候補を返す。
+        """
+        payload = {
+            "items": ArticleAuthorService.list_authors(user=request.user),
+        }
+        response_serializer = CmsArticleAuthorOptionListSerializer(payload)
+        return Response(response_serializer.data)
 
 
 class CmsArticleSessionsViewSet(ViewSet):

@@ -24,6 +24,15 @@ export type CmsAuthorSummary = {
   header_image: string | null
 }
 
+export type CmsArticleAuthorOption = {
+  id: string
+  display_name: string
+}
+
+export type CmsArticleAuthorOptionListResponse = {
+  items: CmsArticleAuthorOption[]
+}
+
 export type CmsArticleOption = {
   is_pr: boolean
   is_ad: boolean
