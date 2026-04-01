@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { apiRequest } from '../../../api/client'
-import ConsoleHeroCard from '../../../components/ConsoleHeroCard'
+import CmsTabGuide from '../../../components/CmsTabGuide'
 import ConsoleNotice from '../../../components/ConsoleNotice'
 import CmsCategoryVisualPicker from '../components/CmsCategoryVisualPicker'
 import { flattenCmsCategoryTree, toApiMessage } from '../helpers'
@@ -30,7 +30,7 @@ export default function CmsCategoriesPage({ embedded = false }: CmsCategoriesPag
     }
 
     if (!flatCategories.some((category) => category.id === selectedCategoryId)) {
-      setSelectedCategoryId(flatCategories[0].id)
+      setSelectedCategoryId('')
     }
   }, [flatCategories, selectedCategoryId])
 
@@ -159,41 +159,27 @@ export default function CmsCategoriesPage({ embedded = false }: CmsCategoriesPag
     }
   }
 
-  const hero = (
-    <ConsoleHeroCard
-      badge="カテゴリー"
-      title="カテゴリ管理"
-      subtitle="左から右へ階層を追いながら、親子関係を崩さず整理します。"
-      icon="bi-diagram-3"
-    />
-  )
-
   const content = (
     <>
       <ConsoleNotice message={message} onClose={() => setMessage('')} />
       {errorMessage !== '' && <div className="console-error">{errorMessage}</div>}
+      <CmsTabGuide
+        title="カテゴリーの作成と編集"
+        helpLines={[
+          '拡大縮小ができます。',
+          'カテゴリーをホバーすることで編集, 追加, 削除ができます。',
+          '既に記事に紐づいているカテゴリーは削除できません。',
+        ]}
+      />
 
       <div className="console-card">
-        <div className="console-card-header">
-          <div className="cms-category-header-row">
-            <h2>カテゴリ構造</h2>
-            <button
-              type="button"
-              className="console-secondary console-icon-button"
-              onClick={() => void fetchCategories()}
-              disabled={loading}
-            >
-              <i className="bi bi-arrow-clockwise" aria-hidden="true" />
-              更新
-            </button>
-          </div>
-          <p>gradexpo のスクール/学部追加UIに合わせて、親子関係を見ながら追加と選択を行います。</p>
-        </div>
         <CmsCategoryVisualPicker
           items={tree}
           selectedId={selectedCategoryId}
           onSelect={setSelectedCategoryId}
           mode="manage"
+          onRefresh={fetchCategories}
+          refreshDisabled={loading}
           onCreateRoot={createRootCategory}
           onCreateChild={createChildCategory}
           onUpdateCategory={updateCategory}
@@ -204,18 +190,11 @@ export default function CmsCategoriesPage({ embedded = false }: CmsCategoriesPag
   )
 
   if (embedded) {
-    return (
-      <div className="cms-tab-embedded">
-        {hero}
-        <hr className="cms-console-divider" />
-        {content}
-      </div>
-    )
+    return <div className="cms-tab-embedded">{content}</div>
   }
 
   return (
     <div className="console-dashboard">
-      {hero}
       {content}
     </div>
   )

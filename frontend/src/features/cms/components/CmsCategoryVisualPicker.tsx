@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import ConsoleDropdown from '../../../components/ConsoleDropdown'
 import type { CmsCategoryNode } from '../types'
 
 type CmsCategoryVisualPickerProps = {
@@ -7,6 +8,8 @@ type CmsCategoryVisualPickerProps = {
   onSelect: (categoryId: string) => void
   mode?: 'select' | 'manage'
   disabled?: boolean
+  onRefresh?: () => Promise<void> | void
+  refreshDisabled?: boolean
   onCreateRoot?: (name: string) => Promise<void>
   onCreateChild?: (parentId: string, name: string) => Promise<void>
   onUpdateCategory?: (categoryId: string, name: string, parentId: string) => Promise<void>
@@ -27,13 +30,6 @@ type CategoryLine = {
 type CategoryConnection = {
   parentId: string
   childId: string
-}
-
-type ColumnSpec = {
-  key: string
-  title: string
-  parentNode: CmsCategoryNode | null
-  items: CmsCategoryNode[]
 }
 
 type ElementBox = {
@@ -100,86 +96,22 @@ function collectDescendantIds(item: CmsCategoryNode): Set<string> {
   return ids
 }
 
-function findRootId(items: CmsCategoryNode[], categoryId: string): string {
-  for (const item of items) {
-    if (item.id === categoryId) {
-      return item.id
-    }
-    if (findCategoryById(item.children, categoryId) !== null) {
-      return item.id
-    }
-  }
-  return items[0]?.id ?? ''
-}
-
-function pathMatchesPrefix(path: CmsCategoryNode[], prefix: CmsCategoryNode[]): boolean {
-  return prefix.every((node, index) => path[index]?.id === node.id)
-}
-
-function pickPreferredChild(
-  parentNode: CmsCategoryNode,
-  currentPath: CmsCategoryNode[],
-  preferredPaths: CmsCategoryNode[][],
-): CmsCategoryNode | null {
-  for (const preferredPath of preferredPaths) {
-    if (preferredPath.length <= currentPath.length) {
-      continue
-    }
-    if (!pathMatchesPrefix(preferredPath, currentPath)) {
-      continue
-    }
-
-    const candidate = preferredPath[currentPath.length]
-    if (candidate !== undefined && parentNode.children.some((child) => child.id === candidate.id)) {
-      return candidate
-    }
-  }
-
-  return parentNode.children[0] ?? null
-}
-
-function buildDisplayPath(basePath: CmsCategoryNode[], preferredPaths: CmsCategoryNode[][]): CmsCategoryNode[] {
-  if (basePath.length === 0) {
-    return []
-  }
-
-  const normalizedBasePath =
-    basePath.length > 1 && basePath[basePath.length - 1]?.children.length === 0
-      ? basePath.slice(0, -1)
-      : [...basePath]
-
-  const displayPath = [...normalizedBasePath]
-  let currentNode = displayPath[displayPath.length - 1] ?? null
-
-  while (currentNode !== null && currentNode.children.length > 0) {
-    const nextNode = pickPreferredChild(currentNode, displayPath, preferredPaths)
-    if (nextNode === null || nextNode.children.length === 0) {
-      break
-    }
-
-    displayPath.push(nextNode)
-    currentNode = nextNode
-  }
-
-  return displayPath
-}
-
-function buildColumnConnections(columns: ColumnSpec[]): CategoryConnection[] {
+function buildTreeConnections(items: CmsCategoryNode[]): CategoryConnection[] {
   const connections: CategoryConnection[] = []
 
-  for (const column of columns) {
-    if (column.parentNode === null) {
-      continue
-    }
-
-    for (const item of column.items) {
-      connections.push({
-        parentId: column.parentNode.id,
-        childId: item.id,
-      })
+  function walk(nodes: CmsCategoryNode[]): void {
+    for (const item of nodes) {
+      for (const child of item.children) {
+        connections.push({
+          parentId: item.id,
+          childId: child.id,
+        })
+      }
+      walk(item.children)
     }
   }
 
+  walk(items)
   return connections
 }
 
@@ -246,6 +178,8 @@ export default function CmsCategoryVisualPicker({
   onSelect,
   mode = 'select',
   disabled = false,
+  onRefresh,
+  refreshDisabled = false,
   onCreateRoot,
   onCreateChild,
   onUpdateCategory,
@@ -256,10 +190,16 @@ export default function CmsCategoryVisualPicker({
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const zoomScaleRef = useRef(1)
   const pinchStateRef = useRef<{ distance: number; scale: number } | null>(null)
+  const dragStateRef = useRef<{
+    pointerId: number
+    startX: number
+    startY: number
+    scrollLeft: number
+    scrollTop: number
+  } | null>(null)
 
   const [lines, setLines] = useState<CategoryLine[]>([])
   const [hoveredCategoryId, setHoveredCategoryId] = useState('')
-  const [previewCategoryId, setPreviewCategoryId] = useState('')
   const [editingCategoryId, setEditingCategoryId] = useState('')
   const [editingCategoryName, setEditingCategoryName] = useState('')
   const [editingParentId, setEditingParentId] = useState('')
@@ -269,83 +209,30 @@ export default function CmsCategoryVisualPicker({
   const [addingChildName, setAddingChildName] = useState('')
   const [zoomScale, setZoomScale] = useState(1)
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 })
+  const [isDraggingCanvas, setIsDraggingCanvas] = useState(false)
 
   const flatCategories = useMemo(() => flattenCategoryTree(items), [items])
-  const selectedPath = useMemo(() => (selectedId === '' ? [] : findCategoryPath(items, selectedId)), [items, selectedId])
-  const previewPath = useMemo(
-    () => (previewCategoryId === '' ? [] : findCategoryPath(items, previewCategoryId)),
-    [items, previewCategoryId],
-  )
+  const selectedPath = useMemo(() => {
+    if (selectedId.trim() === '') {
+      return []
+    }
+    return findCategoryPath(items, selectedId)
+  }, [items, selectedId])
+  const selectedPathText = selectedPath.length > 0
+    ? selectedPath.map((category) => category.name).join(' > ')
+    : 'カテゴリーを選択してください。'
 
   useEffect(() => {
     zoomScaleRef.current = zoomScale
   }, [zoomScale])
 
   useEffect(() => {
-    if (previewCategoryId !== '' && !flatCategories.some((category) => category.id === previewCategoryId)) {
-      setPreviewCategoryId('')
-    }
     if (hoveredCategoryId !== '' && !flatCategories.some((category) => category.id === hoveredCategoryId)) {
       setHoveredCategoryId('')
     }
-  }, [flatCategories, hoveredCategoryId, previewCategoryId])
+  }, [flatCategories, hoveredCategoryId])
 
-  const selectedRootId = useMemo(
-    () => (selectedId === '' ? items[0]?.id ?? '' : findRootId(items, selectedId)),
-    [items, selectedId],
-  )
-  const previewRootId = useMemo(
-    () => (previewCategoryId === '' ? '' : findRootId(items, previewCategoryId)),
-    [items, previewCategoryId],
-  )
-  const activeRootId = previewRootId !== '' ? previewRootId : selectedRootId
-  const activeRoot = items.find((item) => item.id === activeRootId) ?? items[0] ?? null
-  const selectedPathWithinRoot = useMemo(() => {
-    if (activeRoot === null || selectedPath.length === 0 || selectedPath[0]?.id !== activeRoot.id) {
-      return activeRoot === null ? [] : [activeRoot]
-    }
-    return selectedPath
-  }, [activeRoot, selectedPath])
-  const previewPathWithinRoot = useMemo(() => {
-    if (activeRoot === null || previewPath.length === 0 || previewPath[0]?.id !== activeRoot.id) {
-      return []
-    }
-    return previewPath
-  }, [activeRoot, previewPath])
-  const activePath = useMemo(() => {
-    if (previewPathWithinRoot.length > 0) {
-      return previewPathWithinRoot
-    }
-    return selectedPathWithinRoot
-  }, [previewPathWithinRoot, selectedPathWithinRoot])
-  const displayPath = useMemo(
-    () => buildDisplayPath(activePath, [previewPathWithinRoot, selectedPathWithinRoot]),
-    [activePath, previewPathWithinRoot, selectedPathWithinRoot],
-  )
-
-  const columns = useMemo<ColumnSpec[]>(() => {
-    const nextColumns: ColumnSpec[] = [
-      {
-        key: 'root',
-        title: '親カテゴリ',
-        parentNode: null,
-        items,
-      },
-    ]
-
-    for (const node of displayPath) {
-      nextColumns.push({
-        key: node.id,
-        title: `${node.name} 配下`,
-        parentNode: node,
-        items: node.children,
-      })
-    }
-
-    return nextColumns
-  }, [displayPath, items])
-
-  const connections = useMemo(() => buildColumnConnections(columns), [columns])
+  const connections = useMemo(() => buildTreeConnections(items), [items])
   const highlightedCategoryIds = useMemo(() => {
     if (hoveredCategoryId === '') {
       return new Set<string>()
@@ -402,7 +289,7 @@ export default function CmsCategoryVisualPicker({
     return () => {
       observer.disconnect()
     }
-  }, [columns, editingCategoryId, addingChildParentId, addingRootActive, zoomScale])
+  }, [items, editingCategoryId, addingChildParentId, addingRootActive, zoomScale])
 
   useLayoutEffect(() => {
     function updateLinePaths(): void {
@@ -443,7 +330,7 @@ export default function CmsCategoryVisualPicker({
     return () => {
       window.removeEventListener('resize', updateLinePaths)
     }
-  }, [activeConnectionKeys, columns, connections, editingCategoryId, hoveredCategoryId, zoomScale])
+  }, [activeConnectionKeys, connections, editingCategoryId, hoveredCategoryId, items, zoomScale])
 
   function applyZoom(nextScale: number, clientX: number, clientY: number): void {
     const viewportElement = previewRef.current
@@ -465,6 +352,76 @@ export default function CmsCategoryVisualPicker({
       viewportElement.scrollTop = contentY * clampedScale - (clientY - viewportRect.top)
     })
   }
+
+  function isInteractiveTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) {
+      return false
+    }
+
+    return target.closest('button, input, select, textarea, a, label, .cms-category-pill') !== null
+  }
+
+  useEffect(() => {
+    const viewportElement = previewRef.current
+    if (viewportElement === null) {
+      return
+    }
+
+    function handleWheel(event: WheelEvent): void {
+      if (isInteractiveTarget(event.target)) {
+        return
+      }
+
+      event.preventDefault()
+      applyZoom(
+        zoomScaleRef.current * Math.exp(-event.deltaY * 0.0025),
+        event.clientX,
+        event.clientY,
+      )
+    }
+
+    function handleTouchStart(event: TouchEvent): void {
+      if (event.touches.length === 2) {
+        pinchStateRef.current = {
+          distance: getTouchDistance(event.touches),
+          scale: zoomScaleRef.current,
+        }
+      }
+    }
+
+    function handleTouchMove(event: TouchEvent): void {
+      if (event.touches.length !== 2 || pinchStateRef.current === null) {
+        return
+      }
+
+      event.preventDefault()
+      const nextDistance = getTouchDistance(event.touches)
+      const midpoint = getTouchMidpoint(event.touches)
+      applyZoom(
+        pinchStateRef.current.scale * (nextDistance / pinchStateRef.current.distance),
+        midpoint.x,
+        midpoint.y,
+      )
+    }
+
+    function handleTouchEnd(): void {
+      pinchStateRef.current = null
+    }
+
+    viewportElement.addEventListener('wheel', handleWheel, { passive: false })
+    viewportElement.addEventListener('touchstart', handleTouchStart, { passive: true })
+    viewportElement.addEventListener('touchmove', handleTouchMove, { passive: false })
+    viewportElement.addEventListener('touchend', handleTouchEnd, { passive: true })
+    viewportElement.addEventListener('touchcancel', handleTouchEnd, { passive: true })
+
+    return () => {
+      viewportElement.removeEventListener('wheel', handleWheel)
+      viewportElement.removeEventListener('touchstart', handleTouchStart)
+      viewportElement.removeEventListener('touchmove', handleTouchMove)
+      viewportElement.removeEventListener('touchend', handleTouchEnd)
+      viewportElement.removeEventListener('touchcancel', handleTouchEnd)
+    }
+  }, [])
 
   async function submitRootCreate(): Promise<void> {
     if (onCreateRoot === undefined) {
@@ -528,10 +485,29 @@ export default function CmsCategoryVisualPicker({
     }
 
     return (
-      <div className="console-academic-pill-actions">
+      <div className="cms-category-pill-actions">
+        {onCreateChild !== undefined && (
+          <button
+            type="button"
+            className={`cms-category-pill-action${addingChildParentId === category.id ? ' is-active' : ''}`}
+            onClick={(event) => {
+              event.stopPropagation()
+              if (addingChildParentId === category.id) {
+                setAddingChildParentId('')
+                setAddingChildName('')
+                return
+              }
+              setAddingChildParentId(category.id)
+              setAddingChildName('')
+            }}
+            disabled={disabled}
+          >
+            <i className="bi bi-plus-lg" aria-hidden="true" />
+          </button>
+        )}
         <button
           type="button"
-          className="console-academic-pill-action"
+          className="cms-category-pill-action"
           onClick={(event) => {
             event.stopPropagation()
             startEdit(category)
@@ -542,7 +518,7 @@ export default function CmsCategoryVisualPicker({
         </button>
         <button
           type="button"
-          className="console-academic-pill-action is-danger"
+          className="cms-category-pill-action is-danger"
           onClick={(event) => {
             event.stopPropagation()
             void onDeleteCategory?.(category)
@@ -562,6 +538,7 @@ export default function CmsCategoryVisualPicker({
       (category) => category.id !== item.id && !excludedIds.has(category.id),
     )
     const selectedClass = mode === 'select' && selectedId === item.id ? ' is-selected' : ''
+    const currentClass = selectedId === item.id ? ' is-current' : ''
 
     return (
       <div
@@ -569,44 +546,41 @@ export default function CmsCategoryVisualPicker({
         ref={(element) => {
           itemRefs.current[item.id] = element
         }}
-        className={`console-academic-pill is-manage cms-category-tree-pill${selectedClass}${isEditing ? ' is-editing' : ''}${highlightedCategoryIds.has(item.id) ? ' is-related' : ''}`}
+        className={`cms-category-pill is-manage cms-category-tree-pill${selectedClass}${currentClass}${isEditing ? ' is-editing' : ''}${highlightedCategoryIds.has(item.id) ? ' is-related' : ''}`}
         onClick={() => {
           if (!isEditing) {
             onSelect(item.id)
-            setPreviewCategoryId(item.id)
           }
         }}
         onMouseEnter={() => {
           setHoveredCategoryId(item.id)
-          setPreviewCategoryId(item.id)
         }}
         onMouseLeave={() => setHoveredCategoryId('')}
       >
         {isEditing ? (
-          <div className="console-academic-pill-editor">
-            <select
-              className="console-academic-pill-select"
+          <div className="cms-category-pill-editor">
+            <ConsoleDropdown
+              className="cms-category-pill-select"
               value={editingParentId}
-              onChange={(event) => setEditingParentId(event.target.value)}
-            >
-              <option value="">ルート</option>
-              {selectableParents.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {'　'.repeat(category.depth)}
-                  {category.name}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: '', label: 'ルート' },
+                ...selectableParents.map((category) => ({
+                  value: category.id,
+                  label: `${'　'.repeat(category.depth)}${category.name}`,
+                })),
+              ]}
+              onChange={(nextValue) => setEditingParentId(nextValue)}
+            />
             <input
-              className="console-academic-pill-input"
+              className="cms-category-pill-input form-control"
               value={editingCategoryName}
               onChange={(event) => setEditingCategoryName(event.target.value)}
               placeholder="カテゴリ名"
             />
-            <div className="console-academic-pill-actions">
+            <div className="cms-category-pill-actions">
               <button
                 type="button"
-                className="console-academic-pill-action"
+                className="cms-category-pill-action"
                 onClick={(event) => {
                   event.stopPropagation()
                   void submitEdit(item.id)
@@ -616,7 +590,7 @@ export default function CmsCategoryVisualPicker({
               </button>
               <button
                 type="button"
-                className="console-academic-pill-action is-ghost"
+                className="cms-category-pill-action is-ghost"
                 onClick={(event) => {
                   event.stopPropagation()
                   cancelEdit()
@@ -628,7 +602,7 @@ export default function CmsCategoryVisualPicker({
           </div>
         ) : (
           <>
-            <span className="console-academic-pill-label">{item.name}</span>
+            <span className="cms-category-pill-label">{item.name}</span>
             {renderManageActions(item)}
           </>
         )}
@@ -641,200 +615,235 @@ export default function CmsCategoryVisualPicker({
       return null
     }
 
+    if (!addingRootActive) {
+      return (
+        <div className="cms-category-root-create">
+          <button
+            type="button"
+            className="console-secondary console-icon-button"
+            onClick={() => {
+              setAddingRootActive(true)
+            }}
+          >
+            <i className="bi bi-plus-lg" aria-hidden="true" />
+            親カテゴリを追加
+          </button>
+        </div>
+      )
+    }
+
     return (
-      <div
-        className="console-academic-pill is-manage is-add"
-        onClick={() => {
-          if (!addingRootActive) {
-            setAddingRootActive(true)
-          }
-        }}
-      >
-        {!addingRootActive ? (
-          <span className="console-academic-pill-add" role="button">
-            <i className="bi bi-plus" aria-hidden="true" />
-            追加
-          </span>
-        ) : (
-          <>
-            <input
-              className="console-academic-pill-input"
-              value={addingRootName}
-              onChange={(event) => setAddingRootName(event.target.value)}
-              placeholder="カテゴリ名"
-            />
-            <div className="console-academic-pill-actions">
-              <button
-                type="button"
-                className="console-academic-pill-action"
-                onClick={() => void submitRootCreate()}
-              >
-                <i className="bi bi-check" aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                className="console-academic-pill-action is-ghost"
-                onClick={() => {
-                  setAddingRootActive(false)
-                  setAddingRootName('')
-                }}
-              >
-                <i className="bi bi-x" aria-hidden="true" />
-              </button>
-            </div>
-          </>
-        )}
+      <div className="cms-category-inline-create is-root">
+        <input
+          className="cms-category-pill-input form-control"
+          value={addingRootName}
+          onChange={(event) => setAddingRootName(event.target.value)}
+          placeholder="カテゴリ名"
+        />
+        <div className="cms-category-pill-actions">
+          <button
+            type="button"
+            className="cms-category-pill-action"
+            onClick={() => void submitRootCreate()}
+          >
+            <i className="bi bi-check" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="cms-category-pill-action is-ghost"
+            onClick={() => {
+              setAddingRootActive(false)
+              setAddingRootName('')
+            }}
+          >
+            <i className="bi bi-x" aria-hidden="true" />
+          </button>
+        </div>
       </div>
     )
   }
 
   function renderChildCreateControl(parentNode: CmsCategoryNode): JSX.Element | null {
-    if (mode !== 'manage' || onCreateChild === undefined) {
+    if (mode !== 'manage' || onCreateChild === undefined || addingChildParentId !== parentNode.id) {
       return null
     }
 
     return (
-      <div
-        className="console-academic-pill is-manage is-add"
-        onClick={() => {
-          if (addingChildParentId !== parentNode.id) {
-            setAddingChildParentId(parentNode.id)
-            setAddingChildName('')
-          }
-        }}
-      >
-        {addingChildParentId === parentNode.id ? (
-          <>
-            <input
-              className="console-academic-pill-input"
-              value={addingChildName}
-              onChange={(event) => setAddingChildName(event.target.value)}
-              placeholder="カテゴリ名"
-            />
-            <div className="console-academic-pill-actions">
-              <button
-                type="button"
-                className="console-academic-pill-action"
-                onClick={() => void submitChildCreate(parentNode.id)}
-              >
-                <i className="bi bi-check" aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                className="console-academic-pill-action is-ghost"
-                onClick={() => {
-                  setAddingChildParentId('')
-                  setAddingChildName('')
-                }}
-              >
-                <i className="bi bi-x" aria-hidden="true" />
-              </button>
-            </div>
-          </>
-        ) : (
-          <span className="console-academic-pill-add" role="button">
-            <i className="bi bi-plus" aria-hidden="true" />
-            子カテゴリを追加
-          </span>
+      <div className="cms-category-inline-create">
+        <input
+          className="cms-category-pill-input form-control"
+          value={addingChildName}
+          onChange={(event) => setAddingChildName(event.target.value)}
+          placeholder="カテゴリ名"
+        />
+        <div className="cms-category-pill-actions">
+          <button
+            type="button"
+            className="cms-category-pill-action"
+            onClick={() => void submitChildCreate(parentNode.id)}
+          >
+            <i className="bi bi-check" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="cms-category-pill-action is-ghost"
+            onClick={() => {
+              setAddingChildParentId('')
+              setAddingChildName('')
+            }}
+          >
+            <i className="bi bi-x" aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  function renderBranch(item: CmsCategoryNode): JSX.Element {
+    return (
+      <div key={item.id} className="cms-category-branch">
+        <div className="cms-category-node-stack cms-category-tree-body">
+          {renderCategoryItem(item)}
+          {renderChildCreateControl(item)}
+        </div>
+        {item.children.length > 0 && (
+          <div className="cms-category-branch-children">
+            {item.children.map((child) => renderBranch(child))}
+          </div>
         )}
       </div>
     )
   }
 
-  function renderColumn(column: ColumnSpec): JSX.Element {
-    return (
-      <div key={column.key} className="console-academic-block">
-        <div className="console-academic-block-title">{column.title}</div>
-        <div className="console-academic-block-body cms-category-tree-body">
-          {column.items.length === 0 ? (
-            <div className="console-placeholder">カテゴリがありません。</div>
-          ) : (
-            column.items.map((item) => renderCategoryItem(item))
-          )}
-
-          {column.parentNode === null
-            ? renderRootCreateControl()
-            : renderChildCreateControl(column.parentNode)}
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div
-      ref={previewRef}
-      className="console-academic-preview cms-category-visual-picker"
-      onMouseLeave={() => {
-        setHoveredCategoryId('')
-        setPreviewCategoryId('')
-      }}
-      onWheel={(event) => {
-        if (!event.ctrlKey && !event.metaKey) {
-          return
-        }
-
-        event.preventDefault()
-        applyZoom(
-          zoomScaleRef.current * Math.exp(-event.deltaY * 0.0025),
-          event.clientX,
-          event.clientY,
-        )
-      }}
-      onTouchStart={(event) => {
-        if (event.touches.length === 2) {
-          pinchStateRef.current = {
-            distance: getTouchDistance(event.touches),
-            scale: zoomScaleRef.current,
-          }
-        }
-      }}
-      onTouchMove={(event) => {
-        if (event.touches.length !== 2 || pinchStateRef.current === null) {
-          return
-        }
-
-        event.preventDefault()
-        const nextDistance = getTouchDistance(event.touches)
-        const midpoint = getTouchMidpoint(event.touches)
-        applyZoom(
-          pinchStateRef.current.scale * (nextDistance / pinchStateRef.current.distance),
-          midpoint.x,
-          midpoint.y,
-        )
-      }}
-      onTouchEnd={() => {
-        pinchStateRef.current = null
-      }}
-    >
+    <div className="cms-category-picker-shell">
+      <div className={`cms-category-selected-path${selectedPath.length > 0 ? ' has-selection' : ''}`}>
+        <span className="cms-category-selected-path-label">選択中のカテゴリー</span>
+        <strong className="cms-category-selected-path-value">{selectedPathText}</strong>
+      </div>
       <div
-        className="cms-category-zoom-stage"
-        style={{
-          width: `${Math.max(canvasSize.width * zoomScale, canvasSize.width)}px`,
-          height: `${Math.max(canvasSize.height * zoomScale, canvasSize.height)}px`,
-        }}
+        className={`cms-category-preview-frame${mode === 'manage' && onRefresh !== undefined ? ' has-refresh-button' : ''}`}
       >
         <div
-          ref={canvasRef}
-          className="console-academic-canvas"
-          style={{
-            transform: `scale(${zoomScale})`,
-            transformOrigin: 'top left',
+          ref={previewRef}
+          className={`cms-category-preview cms-category-visual-picker${isDraggingCanvas ? ' is-dragging' : ''}`}
+          onMouseLeave={() => {
+            setHoveredCategoryId('')
+          }}
+          onPointerDown={(event) => {
+            if (event.pointerType !== 'mouse' || event.button !== 0 || isInteractiveTarget(event.target)) {
+              return
+            }
+
+            const viewportElement = previewRef.current
+            if (viewportElement === null) {
+              return
+            }
+
+            dragStateRef.current = {
+              pointerId: event.pointerId,
+              startX: event.clientX,
+              startY: event.clientY,
+              scrollLeft: viewportElement.scrollLeft,
+              scrollTop: viewportElement.scrollTop,
+            }
+            setIsDraggingCanvas(true)
+            viewportElement.setPointerCapture(event.pointerId)
+            event.preventDefault()
+          }}
+          onPointerMove={(event) => {
+            const viewportElement = previewRef.current
+            const dragState = dragStateRef.current
+            if (viewportElement === null || dragState === null || dragState.pointerId !== event.pointerId) {
+              return
+            }
+
+            viewportElement.scrollLeft = dragState.scrollLeft - (event.clientX - dragState.startX)
+            viewportElement.scrollTop = dragState.scrollTop - (event.clientY - dragState.startY)
+          }}
+          onPointerUp={(event) => {
+            const viewportElement = previewRef.current
+            if (dragStateRef.current?.pointerId !== event.pointerId) {
+              return
+            }
+
+            dragStateRef.current = null
+            setIsDraggingCanvas(false)
+            viewportElement?.releasePointerCapture(event.pointerId)
+          }}
+          onPointerCancel={(event) => {
+            const viewportElement = previewRef.current
+            if (dragStateRef.current?.pointerId !== event.pointerId) {
+              return
+            }
+
+            dragStateRef.current = null
+            setIsDraggingCanvas(false)
+            viewportElement?.releasePointerCapture(event.pointerId)
           }}
         >
-          <svg className="console-academic-lines" aria-hidden="true">
-            {lines.map((line, index) => (
-              <path
-                key={`${line.path}-${index}`}
-                d={line.path}
-                className={line.isActive ? 'is-active' : 'is-muted'}
-              />
-            ))}
-          </svg>
+          <div
+            className="cms-category-zoom-stage"
+            style={{
+              width: `${Math.max(canvasSize.width * zoomScale, canvasSize.width)}px`,
+              height: `${Math.max(canvasSize.height * zoomScale, canvasSize.height)}px`,
+            }}
+          >
+            <div
+              ref={canvasRef}
+              className="cms-category-canvas"
+              style={{
+                transform: `scale(${zoomScale})`,
+                transformOrigin: 'top left',
+              }}
+            >
+              <svg className="cms-category-lines" aria-hidden="true">
+                {lines.map((line, index) => (
+                  <path
+                    key={`${line.path}-${index}`}
+                    d={line.path}
+                    className={line.isActive ? 'is-active' : 'is-muted'}
+                  />
+                ))}
+              </svg>
 
-          <div className="console-academic-preview-columns">
-            {columns.map((column) => renderColumn(column))}
+              <div className="cms-category-root-list">
+                {items.length === 0 ? (
+                  <div className="console-placeholder">カテゴリがありません。</div>
+                ) : (
+                  items.map((item) => renderBranch(item))
+                )}
+                {renderRootCreateControl()}
+              </div>
+            </div>
           </div>
         </div>
+        <div className="cms-category-gesture-hint" aria-hidden="true">
+          <div className="cms-category-gesture-hint-icons">
+            <span className="cms-category-gesture-hint-icon is-touch">
+              <i className="bi bi-phone" />
+              <i className="bi bi-arrows-angle-expand cms-category-gesture-zoom-icon" />
+            </span>
+            <span className="cms-category-gesture-hint-icon is-pointer">
+              <i className="bi bi-mouse" />
+              <i className="bi bi-arrows-angle-expand cms-category-gesture-zoom-icon" />
+            </span>
+          </div>
+          <span className="cms-category-gesture-hint-copy">ピンチ / ホイールで拡大縮小</span>
+        </div>
+        {mode === 'manage' && onRefresh !== undefined && (
+          <button
+            type="button"
+            className="console-secondary console-icon-button cms-category-refresh-button"
+            onClick={() => {
+              void onRefresh()
+            }}
+            disabled={refreshDisabled}
+          >
+            <i className="bi bi-arrow-clockwise" aria-hidden="true" />
+            更新
+          </button>
+        )}
       </div>
     </div>
   )

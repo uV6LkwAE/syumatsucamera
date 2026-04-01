@@ -36,6 +36,18 @@ export type CmsArticleAuthorOptionListResponse = {
 export type CmsArticleOption = {
   is_pr: boolean
   is_ad: boolean
+  items: CmsArticleOptionItem[]
+}
+
+export type CmsArticleOptionItem = {
+  id: string
+  code: string
+  label: string
+  is_system: boolean
+}
+
+export type CmsArticleOptionListResponse = {
+  items: CmsArticleOptionItem[]
 }
 
 export type CmsTagSummary = {

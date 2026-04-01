@@ -3,6 +3,7 @@ import {
   Link,
   Navigate,
   Outlet,
+  matchPath,
   Route,
   Routes,
   useLocation,
@@ -15,6 +16,8 @@ import {
   getApiLoadingSnapshot,
   subscribeApiLoading,
 } from './api/client'
+import ConsoleSpinner from './components/ConsoleSpinner'
+import CmsTabGuide from './components/CmsTabGuide'
 import ConsoleHeroCard from './components/ConsoleHeroCard'
 import ConsoleNotice from './components/ConsoleNotice'
 import ContactsPage from './features/contacts/ContactsPage'
@@ -57,9 +60,19 @@ type CmsNavItem = {
 
 const CMS_NAV_ITEMS: CmsNavItem[] = [
   {
+    to: '/cms/console/profile',
+    label: 'プロフィール',
+    icon: 'bi-person-circle',
+  },
+  {
     to: '/cms/console/articles',
     label: '記事',
     icon: 'bi-file-earmark-text',
+  },
+  {
+    to: '/cms/console/articles/new',
+    label: '執筆',
+    icon: 'bi-pencil-square',
   },
   {
     to: '/cms/console/categories',
@@ -89,7 +102,9 @@ const CMS_NAV_ITEMS: CmsNavItem[] = [
 ]
 
 type CmsTabKey =
+  | 'profile'
   | 'articles'
+  | 'compose'
   | 'categories'
   | 'contacts'
   | 'users'
@@ -133,6 +148,8 @@ type ProfileValidationResult = {
 }
 
 const PROFILE_META_MAX_ITEMS = 20
+const PROFILE_DISPLAY_NAME_MAX_LENGTH = 100
+const PROFILE_BIO_MAX_LENGTH = 300
 const PROFILE_META_KEY_MAX_LENGTH = 50
 const PROFILE_META_VALUE_MAX_LENGTH = 300
 
@@ -225,10 +242,10 @@ function validateProfileForm(
       normalizedMeta: {},
     }
   }
-  if (normalizedDisplayName.length > 100) {
+  if (normalizedDisplayName.length > PROFILE_DISPLAY_NAME_MAX_LENGTH) {
     return {
       valid: false,
-      message: '表示名は100文字以内で入力してください。',
+      message: `表示名は${PROFILE_DISPLAY_NAME_MAX_LENGTH}文字以内で入力してください。`,
       normalizedMeta: {},
     }
   }
@@ -241,10 +258,10 @@ function validateProfileForm(
       normalizedMeta: {},
     }
   }
-  if (normalizedProfile.length > 300) {
+  if (normalizedProfile.length > PROFILE_BIO_MAX_LENGTH) {
     return {
       valid: false,
-      message: '自己紹介は300文字以内で入力してください。',
+      message: `自己紹介は${PROFILE_BIO_MAX_LENGTH}文字以内で入力してください。`,
       normalizedMeta: {},
     }
   }
@@ -293,6 +310,18 @@ function toApiMessage(error: unknown): string {
 }
 
 function getCmsActiveTab(pathname: string): CmsTabKey {
+  if (pathname.startsWith('/cms/console/profile')) {
+    return 'profile'
+  }
+  if (pathname === '/cms/console/articles/new') {
+    return 'compose'
+  }
+  if (matchPath('/cms/console/articles/:articleId/edit', pathname) !== null) {
+    return 'compose'
+  }
+  if (pathname === '/cms/console/articles') {
+    return 'articles'
+  }
   if (pathname.startsWith('/cms/console/articles')) {
     return 'articles'
   }
@@ -311,7 +340,7 @@ function getCmsActiveTab(pathname: string): CmsTabKey {
   if (pathname.startsWith('/cms/console/impressions')) {
     return 'impressions'
   }
-  return 'articles'
+  return 'profile'
 }
 
 function toCmsRoleLabel(role: CmsSessionUser['role'] | undefined): string {
@@ -325,13 +354,7 @@ function toCmsRoleLabel(role: CmsSessionUser['role'] | undefined): string {
 }
 
 function CmsConsoleLayout() {
-  const [menuOpen, setMenuOpen] = useState(false)
   const [sessionUser, setSessionUser] = useState<CmsSessionUser | null>(null)
-  const location = useLocation()
-
-  useEffect(() => {
-    setMenuOpen(false)
-  }, [location.pathname])
 
   useEffect(() => {
     let active = true
@@ -355,17 +378,6 @@ function CmsConsoleLayout() {
     }
   }, [])
 
-  useEffect(() => {
-    if (menuOpen) {
-      document.body.style.overflow = 'hidden'
-      return
-    }
-    document.body.style.overflow = ''
-    return () => {
-      document.body.style.overflow = ''
-    }
-  }, [menuOpen])
-
   const displayName = sessionUser?.display_name ?? ''
   const userLabel = displayName.trim() !== '' ? displayName : (sessionUser?.email ?? '未認証')
   const roleLabel = toCmsRoleLabel(sessionUser?.role)
@@ -373,20 +385,11 @@ function CmsConsoleLayout() {
   return (
     <>
       <header className="console-header">
-        <div className="console-header-content">
-          <button
-            className="console-menu-button"
-            type="button"
-            aria-label="メニュー"
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen((prev) => !prev)}
-          >
-            <i className="bi bi-list" aria-hidden="true" />
-          </button>
+        <div className="console-header-content container-xxl px-3 px-md-4 d-flex align-items-center justify-content-between gap-3">
           <Link className="console-header-booth" to="/cms/console">
-            週末カメラ - 管理画面
+            週末カメラ
           </Link>
-          <div className="console-header-right">
+          <div className="console-header-right d-flex align-items-center">
             <div className="console-header-user-link console-header-user-trigger">
               <span className={`console-header-role-badge is-${sessionUser?.role ?? 'guest'}`}>
                 {roleLabel}
@@ -398,40 +401,7 @@ function CmsConsoleLayout() {
       </header>
 
       <div className="console-shell">
-        {menuOpen && (
-          <>
-            <div className="console-sidebar-backdrop" onClick={() => setMenuOpen(false)} />
-            <aside className="console-sidebar">
-              <div className="console-sidebar-header">
-                <span>メニュー</span>
-                <button
-                  className="console-menu-button"
-                  type="button"
-                  aria-label="閉じる"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  <i className="bi bi-x-lg" aria-hidden="true" />
-                </button>
-              </div>
-              <nav className="console-sidebar-nav console-sidebar-cards">
-                {CMS_NAV_ITEMS.map((item) => (
-                  <Link
-                    key={item.to}
-                    className="console-tile console-sidebar-tile"
-                    to={item.to}
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    <div className="console-tile-icon">
-                      <i className={`bi ${item.icon}`} aria-hidden="true" />
-                    </div>
-                    <div className="console-tile-title">{item.label}</div>
-                  </Link>
-                ))}
-              </nav>
-            </aside>
-          </>
-        )}
-        <main className="console-page">
+        <main className="console-page container-xxl px-0">
           <Outlet context={{ sessionUser, setSessionUser }} />
         </main>
       </div>
@@ -448,19 +418,14 @@ function CmsConsoleLayout() {
 
 function CmsTabPlaceholder({
   title,
-  summary,
-  badge,
-  icon,
+  helpLines,
 }: {
-  badge: string
-  icon: string
   title: string
-  summary: string
+  helpLines: string[]
 }) {
   return (
     <div className="cms-tab-embedded">
-      <ConsoleHeroCard badge={badge} title={title} subtitle={summary} icon={icon} />
-      <hr className="cms-console-divider" />
+      <CmsTabGuide title={title} helpLines={helpLines} />
       <div className="console-placeholder">この機能は順次実装します。</div>
     </div>
   )
@@ -623,42 +588,9 @@ function CmsConsolePage() {
     }
   }
 
-  function renderTabContent() {
-    if (activeTab === 'articles') {
-      return <CmsArticlesPage embedded />
-    }
-    if (activeTab === 'categories') {
-      return <CmsCategoriesPage embedded />
-    }
-    if (activeTab === 'contacts') {
-      return <ContactsPage embedded />
-    }
-    if (activeTab === 'users') {
-      return <UsersPage embedded />
-    }
-    if (activeTab === 'ogp') {
-      return (
-        <CmsTabPlaceholder
-          badge="OGP"
-          icon="bi-link-45deg"
-          title="OGP"
-          summary="公開前にリンクカードのキャッシュ状態をここで確認します。"
-        />
-      )
-    }
+  function renderProfileHero(): JSX.Element {
     return (
-      <CmsTabPlaceholder
-        badge="分析"
-        icon="bi-bar-chart-line"
-        title="インプレッション"
-        summary="公開後の流入傾向をこのタブで追えるようにします。"
-      />
-    )
-  }
-
-  return (
-    <div className="console-dashboard cms-profile-page">
-      <section className="cms-profile-card">
+      <section className="console-card cms-profile-hero">
         <div
           className={`cms-profile-banner ${canPickProfileImages ? 'is-editing' : ''}`}
           style={
@@ -758,23 +690,33 @@ function CmsConsolePage() {
           </div>
 
           <div className="cms-profile-meta">
-            <div className="cms-profile-meta-top">
+            <div className="cms-profile-meta-top d-flex flex-column gap-2 align-items-start">
               {profileEditMode ? (
-                <input
-                  type="text"
-                  className="console-input cms-profile-input"
-                  id="profile-display-name"
-                  name="display_name"
-                  aria-label="表示名"
-                  value={profileForm.display_name}
-                  maxLength={100}
-                  onChange={(event) =>
-                    setProfileForm((prev) => ({
-                      ...prev,
-                      display_name: event.target.value,
-                    }))
-                  }
-                />
+                <div className="cms-profile-edit-section">
+                  <div className="cms-profile-field-head">
+                    <label className="cms-profile-field-label" htmlFor="profile-display-name">
+                      表示名
+                    </label>
+                    <span className="cms-profile-field-counter">
+                      {profileForm.display_name.length}/{PROFILE_DISPLAY_NAME_MAX_LENGTH}
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    className="console-input form-control cms-profile-input"
+                    id="profile-display-name"
+                    name="display_name"
+                    aria-label="表示名"
+                    value={profileForm.display_name}
+                    maxLength={PROFILE_DISPLAY_NAME_MAX_LENGTH}
+                    onChange={(event) =>
+                      setProfileForm((prev) => ({
+                        ...prev,
+                        display_name: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
               ) : (
                 <h1>{userLabel}</h1>
               )}
@@ -784,23 +726,38 @@ function CmsConsolePage() {
 
             {profileEditMode ? (
               <>
-                <textarea
-                  className="console-textarea cms-profile-textarea"
-                  id="profile-bio"
-                  name="profile"
-                  aria-label="自己紹介"
-                  value={profileForm.profile}
-                  maxLength={300}
-                  onChange={(event) =>
-                    setProfileForm((prev) => ({
-                      ...prev,
-                      profile: event.target.value,
-                    }))
-                  }
-                />
+                <div className="cms-profile-edit-section">
+                  <div className="cms-profile-field-head">
+                    <label className="cms-profile-field-label" htmlFor="profile-bio">
+                      自己紹介
+                    </label>
+                    <span className="cms-profile-field-counter">
+                      {profileForm.profile.length}/{PROFILE_BIO_MAX_LENGTH}
+                    </span>
+                  </div>
+                  <textarea
+                    className="console-textarea form-control cms-profile-textarea"
+                    id="profile-bio"
+                    name="profile"
+                    aria-label="自己紹介"
+                    value={profileForm.profile}
+                    maxLength={PROFILE_BIO_MAX_LENGTH}
+                    onChange={(event) =>
+                      setProfileForm((prev) => ({
+                        ...prev,
+                        profile: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
                 <div className="cms-profile-meta-editor">
-                  <div className="cms-profile-meta-editor-head">
-                    <h2 className="cms-profile-meta-editor-title">追加プロフィール項目</h2>
+                  <div className="cms-profile-meta-editor-head d-flex flex-column flex-md-row align-items-start justify-content-between gap-2">
+                    <div className="cms-profile-meta-editor-title-wrap d-flex flex-wrap align-items-baseline gap-2">
+                      <h2 className="cms-profile-meta-editor-title">追加プロフィール項目</h2>
+                      <span className="cms-profile-field-counter">
+                        {profileForm.meta_items.length}/{PROFILE_META_MAX_ITEMS}
+                      </span>
+                    </div>
                     <button
                       type="button"
                       className="console-secondary cms-profile-meta-add-button"
@@ -818,27 +775,57 @@ function CmsConsolePage() {
                     <div className="cms-profile-meta-empty">追加項目はまだありません。</div>
                   )}
                   {profileForm.meta_items.map((item) => (
-                    <div key={item.id} className="cms-profile-meta-row">
-                      <input
-                        type="text"
-                        className="console-input cms-profile-meta-key"
-                        placeholder="項目名（例: 使用機材）"
-                        value={item.key}
-                        maxLength={PROFILE_META_KEY_MAX_LENGTH}
-                        onChange={(event) =>
-                          updateProfileMetaItem(item.id, 'key', event.target.value)
-                        }
-                      />
-                      <input
-                        type="text"
-                        className="console-input cms-profile-meta-value"
-                        placeholder="内容（例: Nikon Zf）"
-                        value={item.value}
-                        maxLength={PROFILE_META_VALUE_MAX_LENGTH}
-                        onChange={(event) =>
-                          updateProfileMetaItem(item.id, 'value', event.target.value)
-                        }
-                      />
+                    <div key={item.id} className="cms-profile-meta-row d-flex flex-column flex-xl-row align-items-stretch gap-3">
+                      <div className="cms-profile-meta-row-field">
+                        <div className="cms-profile-field-head is-compact">
+                          <label
+                            className="cms-profile-field-label"
+                            htmlFor={`profile-meta-key-${item.id}`}
+                          >
+                            項目名
+                          </label>
+                          <span className="cms-profile-field-counter">
+                            {item.key.length}/{PROFILE_META_KEY_MAX_LENGTH}
+                          </span>
+                        </div>
+                        <input
+                          type="text"
+                          id={`profile-meta-key-${item.id}`}
+                          name={`meta_key_${item.id}`}
+                          className="console-input form-control cms-profile-meta-key"
+                          placeholder="項目名（例: 使用機材）"
+                          value={item.key}
+                          maxLength={PROFILE_META_KEY_MAX_LENGTH}
+                          onChange={(event) =>
+                            updateProfileMetaItem(item.id, 'key', event.target.value)
+                          }
+                        />
+                      </div>
+                      <div className="cms-profile-meta-row-field">
+                        <div className="cms-profile-field-head is-compact">
+                          <label
+                            className="cms-profile-field-label"
+                            htmlFor={`profile-meta-value-${item.id}`}
+                          >
+                            内容
+                          </label>
+                          <span className="cms-profile-field-counter">
+                            {item.value.length}/{PROFILE_META_VALUE_MAX_LENGTH}
+                          </span>
+                        </div>
+                        <input
+                          type="text"
+                          id={`profile-meta-value-${item.id}`}
+                          name={`meta_value_${item.id}`}
+                          className="console-input form-control cms-profile-meta-value"
+                          placeholder="内容（例: Nikon Zf）"
+                          value={item.value}
+                          maxLength={PROFILE_META_VALUE_MAX_LENGTH}
+                          onChange={(event) =>
+                            updateProfileMetaItem(item.id, 'value', event.target.value)
+                          }
+                        />
+                      </div>
                       <button
                         type="button"
                         className="console-secondary cms-profile-meta-remove-button"
@@ -871,9 +858,6 @@ function CmsConsolePage() {
                     setProfileHeaderImageFile(event.target.files?.[0] ?? null)
                   }
                 />
-                <div className="cms-profile-upload-hint">
-                  アイコンかヘッダー画像をクリックして画像を選択してください。
-                </div>
                 {(profileIconFile !== null || profileHeaderImageFile !== null) && (
                   <div className="cms-profile-upload-files">
                     {profileIconFile !== null && (
@@ -884,18 +868,6 @@ function CmsConsolePage() {
                     )}
                   </div>
                 )}
-                <div className="cms-profile-validation-row">
-                  <span>
-                    表示名 {profileForm.display_name.trim().length}/100
-                  </span>
-                  <span>
-                    自己紹介 {profileForm.profile.trim().length}/300
-                  </span>
-                  <span>
-                    追加項目 {Object.keys(profileValidation.normalizedMeta).length}
-                    /{PROFILE_META_MAX_ITEMS}
-                  </span>
-                </div>
                 {profileValidation.message !== '' && (
                   <div className="console-error">{profileValidation.message}</div>
                 )}
@@ -924,7 +896,149 @@ function CmsConsolePage() {
           </div>
         </div>
       </section>
+    )
+  }
 
+  function renderTabHero(): JSX.Element {
+    if (activeTab === 'profile') {
+      return (
+        <ConsoleHeroCard
+          badge="プロフィール"
+          title="プロフィール"
+          subtitle="表示名、自己紹介、画像、追加項目をここで管理します。"
+          icon="bi-person-circle"
+        />
+      )
+    }
+    if (activeTab === 'articles') {
+      return (
+        <ConsoleHeroCard
+          badge="記事"
+          title="記事管理"
+          subtitle="まず絞り込みで対象を見つけてから、編集や削除へ進みます。"
+          icon="bi-file-earmark-text"
+        />
+      )
+    }
+    if (activeTab === 'compose') {
+      return (
+        <ConsoleHeroCard
+          badge="執筆"
+          title="記事執筆"
+          subtitle="新規作成と既存記事の編集をここで行います。"
+          icon="bi-pencil-square"
+        />
+      )
+    }
+    if (activeTab === 'categories') {
+      return (
+        <ConsoleHeroCard
+          badge="カテゴリー"
+          title="カテゴリ管理"
+          subtitle="左から右へ階層を追いながら、親子関係を崩さず整理します。"
+          icon="bi-diagram-3"
+        />
+      )
+    }
+    if (activeTab === 'contacts') {
+      return (
+        <ConsoleHeroCard
+          badge="お問い合わせ"
+          title="問い合わせ管理"
+          subtitle="新しい問い合わせから順に確認し、必要な内容を本文で追います。"
+          icon="bi-envelope"
+        />
+      )
+    }
+    if (activeTab === 'users') {
+      return (
+        <ConsoleHeroCard
+          badge="Users"
+          title="ユーザー管理"
+          subtitle="まず一覧で対象を選び、詳細画面で権限と招待を整えます。"
+          icon="bi-people"
+        />
+      )
+    }
+    if (activeTab === 'ogp') {
+      return (
+        <ConsoleHeroCard
+          badge="OGP"
+          title="OGP"
+          subtitle="公開前にリンクカードのキャッシュ状態をここで確認します。"
+          icon="bi-link-45deg"
+        />
+      )
+    }
+    return (
+      <ConsoleHeroCard
+        badge="分析"
+        title="インプレッション"
+        subtitle="公開後の流入傾向をこのタブで追えるようにします。"
+        icon="bi-bar-chart-line"
+      />
+    )
+  }
+
+  function renderTabContent() {
+    if (activeTab === 'profile') {
+      return (
+        <div className="cms-tab-embedded">
+          <CmsTabGuide
+            title="プロフィールの作成と編集"
+            helpLines={[
+              '記事ページに執筆者の紹介として表示されます。',
+              'ヘッダー画像とアイコン画像を更新できます。',
+              '管理者のみプロフィールを編集できます。',
+              '追加項目は表示用プロフィールとして公開側でも利用できます。'
+            ]}
+          />
+          {renderProfileHero()}
+        </div>
+      )
+    }
+    if (activeTab === 'articles') {
+      return <CmsArticlesPage embedded />
+    }
+    if (activeTab === 'compose') {
+      return <CmsArticleEditorPage embedded />
+    }
+    if (activeTab === 'categories') {
+      return <CmsCategoriesPage embedded />
+    }
+    if (activeTab === 'contacts') {
+      return <ContactsPage embedded />
+    }
+    if (activeTab === 'users') {
+      return <UsersPage embedded />
+    }
+    if (activeTab === 'ogp') {
+      return (
+        <CmsTabPlaceholder
+          title="OGPキャッシュの確認"
+          helpLines={[
+            '公開前にタイトルや画像の取得結果を確認できます。',
+            '再取得や更新系の操作はこのタブに集約します。',
+            '未実装の機能は順次追加します。',
+          ]}
+        />
+      )
+    }
+    return (
+      <CmsTabPlaceholder
+        title="インプレッションの確認"
+        helpLines={[
+          'PVや流入傾向を一覧で確認できる想定です。',
+          '分析条件の切り替えはこのタブに集約します。',
+          '未実装の機能は順次追加します。',
+        ]}
+      />
+    )
+  }
+
+  return (
+    <div className="console-dashboard cms-profile-page">
+      {renderTabHero()}
       <section className="cms-tabs-shell">
         <div className="cms-tabs" role="tablist" aria-label="CMS tabs">
           {CMS_NAV_ITEMS.map((item) => {
@@ -995,17 +1109,11 @@ function GlobalApiLoadingIndicator() {
     getApiLoadingSnapshot,
   )
 
-  return (
-    <div
-      className={`global-api-spinner${isLoading ? ' is-visible' : ''}`}
-      aria-hidden={!isLoading}
-    >
-      <div className="global-api-spinner-chip" role="status" aria-live="polite" aria-label="通信中">
-        <span className="spinner-border spinner-border-sm" aria-hidden="true" />
-        <span className="visually-hidden">通信中</span>
-      </div>
-    </div>
-  )
+  if (!isLoading) {
+    return null
+  }
+
+  return <ConsoleSpinner mode="overlay" label="通信中" />
 }
 
 export default function App() {
@@ -1014,12 +1122,13 @@ export default function App() {
       <GlobalApiLoadingIndicator />
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/cms" element={<Navigate to="/cms/console/articles" replace />} />
+        <Route path="/cms" element={<Navigate to="/cms/console/profile" replace />} />
         <Route path="/cms/console" element={<CmsConsoleLayout />}>
-          <Route index element={<Navigate to="/cms/console/articles" replace />} />
-          <Route path="me" element={<Navigate to="/cms/console" replace />} />
-          <Route path="articles/new" element={<CmsArticleEditorPage />} />
-          <Route path="articles/:articleId/edit" element={<CmsArticleEditorPage />} />
+          <Route index element={<Navigate to="/cms/console/profile" replace />} />
+          <Route path="me" element={<Navigate to="/cms/console/profile" replace />} />
+          <Route path="profile" element={<CmsConsolePage />} />
+          <Route path="articles/new" element={<CmsConsolePage />} />
+          <Route path="articles/:articleId/edit" element={<CmsConsolePage />} />
           <Route
             path="articles"
             element={<CmsConsolePage />}

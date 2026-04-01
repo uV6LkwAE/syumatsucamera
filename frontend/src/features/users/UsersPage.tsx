@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { ApiError, apiRequest } from '../../api/client'
+import CmsTabGuide from '../../components/CmsTabGuide'
+import ConsoleDropdown, { ConsoleDropdownOption } from '../../components/ConsoleDropdown'
 import ConsoleNotice from '../../components/ConsoleNotice'
-import ConsoleHeroCard from '../../components/ConsoleHeroCard'
 
 type UserRole = 'admin' | 'author'
 
@@ -53,6 +54,11 @@ type UpdateForm = {
   icon: string
   header_image: string
 }
+
+const USER_ROLE_OPTIONS: Array<ConsoleDropdownOption<UserRole>> = [
+  { value: 'author', label: '執筆者' },
+  { value: 'admin', label: '管理者' },
+]
 
 function formatDate(value: string | null): string {
   if (value === null || value === '') {
@@ -239,30 +245,29 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
     }
   }
 
-  const hero = (
-    <ConsoleHeroCard
-      badge="Users"
-      title="ユーザー管理"
-      subtitle="まず一覧で対象を選び、詳細画面で権限と招待を整えます。"
-      icon="bi-people"
-    />
-  )
-
   const content = (
     <>
       <ConsoleNotice message={message} onClose={() => setMessage('')} />
       {errorMessage !== '' && <div className="console-error">{errorMessage}</div>}
+      <CmsTabGuide
+        title="ユーザーの作成と更新"
+        helpLines={[
+          '仮登録ユーザーを作成して招待URLを発行できます。',
+          '一覧から対象ユーザーを選ぶと詳細を更新できます。',
+          '権限や有効状態の変更もこのタブで行います。',
+        ]}
+      />
 
       <div className="console-card">
         <div className="console-card-header">
           <h2>仮登録ユーザー作成</h2>
           <p>招待対象ユーザーのメールアドレスと権限を登録します。</p>
         </div>
-        <form className="console-form-grid" onSubmit={(event) => void onSubmitCreate(event)}>
-          <label className="console-label">
+        <form className="console-form-grid row g-3" onSubmit={(event) => void onSubmitCreate(event)}>
+          <label className="console-label col-12 col-md-8">
             メールアドレス
             <input
-              className="console-input"
+              className="console-input form-control"
               type="email"
               required
               value={createForm.email}
@@ -271,20 +276,17 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
               }
             />
           </label>
-          <label className="console-label">
+          <label className="console-label col-12 col-md-4">
             権限
-            <select
-              className="console-select"
+            <ConsoleDropdown
               value={createForm.role}
-              onChange={(event) =>
-                setCreateForm((prev) => ({ ...prev, role: event.target.value as UserRole }))
+              options={USER_ROLE_OPTIONS}
+              onChange={(nextValue) =>
+                setCreateForm((prev) => ({ ...prev, role: nextValue }))
               }
-            >
-              <option value="author">執筆者</option>
-              <option value="admin">管理者</option>
-            </select>
+            />
           </label>
-          <div className="console-actions">
+          <div className="console-actions col-12 d-flex">
             <button type="submit" className="console-primary" disabled={submittingCreate}>
               {submittingCreate ? '作成中...' : '仮登録ユーザーを作成'}
             </button>
@@ -297,12 +299,12 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
           <h2>ユーザー一覧</h2>
           <p>登録済みユーザーの状態を確認し、詳細画面へ遷移します。</p>
         </div>
-        <div className="console-actions console-actions-spread">
-          <div className="console-actions">
-            <label className="console-inline-label">
+        <div className="console-actions console-actions-spread d-flex flex-column flex-lg-row align-items-stretch align-items-lg-center gap-3">
+          <div className="console-actions d-flex flex-column flex-md-row align-items-start align-items-md-center gap-3">
+            <label className="console-inline-label d-inline-flex align-items-center gap-2">
               表示件数
               <input
-                className="console-input"
+                className="console-input form-control"
                 type="number"
                 min={1}
                 max={100}
@@ -368,8 +370,10 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
       {selectedUser !== null && (
         <div className="console-card">
           <div className="console-card-header">
-            <h2>ユーザー詳細/更新</h2>
-            <p>{loadingDetail ? 'ユーザー情報を取得中です。' : 'プロフィール情報と権限を更新します。'}</p>
+            <div>
+              <h2>ユーザー詳細/更新</h2>
+              <p>プロフィール情報と権限を更新します。</p>
+            </div>
           </div>
           <div className="console-static-value">
             id: {selectedUser.id}
@@ -380,11 +384,11 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
             <br />
             更新日時: {formatDate(selectedUser.updated_at)}
           </div>
-          <form className="console-form-grid" onSubmit={(event) => void onSubmitUpdate(event)}>
-            <label className="console-label">
+          <form className="console-form-grid row g-3" onSubmit={(event) => void onSubmitUpdate(event)}>
+            <label className="console-label col-12 col-md-6">
               表示名
               <input
-                className="console-input"
+                className="console-input form-control"
                 required
                 value={updateForm.display_name}
                 onChange={(event) =>
@@ -392,10 +396,10 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
                 }
               />
             </label>
-            <label className="console-label">
+            <label className="console-label col-12">
               自己紹介
               <textarea
-                className="console-textarea"
+                className="console-textarea form-control"
                 required
                 value={updateForm.profile}
                 onChange={(event) =>
@@ -403,20 +407,17 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
                 }
               />
             </label>
-            <label className="console-label">
+            <label className="console-label col-12 col-md-6">
               権限
-              <select
-                className="console-select"
+              <ConsoleDropdown
                 value={updateForm.role}
-                onChange={(event) =>
-                  setUpdateForm((prev) => ({ ...prev, role: event.target.value as UserRole }))
+                options={USER_ROLE_OPTIONS}
+                onChange={(nextValue) =>
+                  setUpdateForm((prev) => ({ ...prev, role: nextValue }))
                 }
-              >
-                <option value="author">執筆者</option>
-                <option value="admin">管理者</option>
-              </select>
+              />
             </label>
-            <label className="console-inline-label">
+            <label className="console-inline-label col-12 d-inline-flex align-items-center gap-2">
               ユーザーを有効化
               <input
                 type="checkbox"
@@ -426,45 +427,45 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
                 }
               />
             </label>
-            <label className="console-label">
+            <label className="console-label col-12 col-md-6">
               アイコン画像URL（任意）
               <input
-                className="console-input"
+                className="console-input form-control"
                 value={updateForm.icon}
                 onChange={(event) =>
                   setUpdateForm((prev) => ({ ...prev, icon: event.target.value }))
                 }
               />
             </label>
-            <label className="console-label">
+            <label className="console-label col-12 col-md-6">
               ヘッダー画像URL（任意）
               <input
-                className="console-input"
+                className="console-input form-control"
                 value={updateForm.header_image}
                 onChange={(event) =>
                   setUpdateForm((prev) => ({ ...prev, header_image: event.target.value }))
                 }
               />
             </label>
-            <label className="console-label">
+            <label className="console-label col-12 col-md-6">
               アイコン画像アップロード（任意）
               <input
-                className="console-input"
+                className="console-input form-control"
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
                 onChange={(event) => setUpdateIconFile(event.target.files?.[0] ?? null)}
               />
             </label>
-            <label className="console-label">
+            <label className="console-label col-12 col-md-6">
               ヘッダー画像アップロード（任意）
               <input
-                className="console-input"
+                className="console-input form-control"
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
                 onChange={(event) => setUpdateHeaderFile(event.target.files?.[0] ?? null)}
               />
             </label>
-            <div className="console-actions">
+            <div className="console-actions col-12 d-flex">
               <button type="submit" className="console-primary" disabled={submittingUpdate}>
                 {submittingUpdate ? '更新中...' : 'ユーザー更新'}
               </button>
@@ -494,18 +495,11 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
   )
 
   if (embedded) {
-    return (
-      <div className="cms-tab-embedded">
-        {hero}
-        <hr className="cms-console-divider" />
-        {content}
-      </div>
-    )
+    return <div className="cms-tab-embedded">{content}</div>
   }
 
   return (
     <div className="console-dashboard">
-      {hero}
       {content}
     </div>
   )

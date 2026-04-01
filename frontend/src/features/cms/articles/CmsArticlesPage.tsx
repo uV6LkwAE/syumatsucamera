@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { apiRequest } from '../../../api/client'
-import ConsoleHeroCard from '../../../components/ConsoleHeroCard'
+import CmsTabGuide from '../../../components/CmsTabGuide'
+import ConsoleDropdown, { ConsoleDropdownOption } from '../../../components/ConsoleDropdown'
 import ConsoleNotice from '../../../components/ConsoleNotice'
 import { formatCmsDate, toApiMessage } from '../helpers'
 import type {
@@ -45,10 +46,10 @@ const ORDERING_OPTIONS = [
   { value: 'popular', label: '人気順' },
 ]
 
-const LIMIT_OPTIONS = [
-  { value: '20', label: '20件' },
-  { value: '50', label: '50件' },
-  { value: '100', label: '100件' },
+const LIMIT_OPTIONS: Array<ConsoleDropdownOption<number>> = [
+  { value: 20, label: '20件' },
+  { value: 50, label: '50件' },
+  { value: 100, label: '100件' },
 ]
 
 function toStatusLabel(status: CmsArticleStatus): string {
@@ -88,7 +89,7 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
   const [loadingAuthors, setLoadingAuthors] = useState(false)
   const [message, setMessage] = useState(locationState?.notice ?? '')
   const [errorMessage, setErrorMessage] = useState('')
-  const [authorOptions, setAuthorOptions] = useState<Array<{ value: string; label: string }>>([])
+  const [authorOptions, setAuthorOptions] = useState<Array<ConsoleDropdownOption<string>>>([])
   const [filters, setFilters] = useState<CmsArticleFilters>(DEFAULT_FILTERS)
   const [draftFilters, setDraftFilters] = useState<CmsArticleFilters>(DEFAULT_FILTERS)
   const [filtersExpanded, setFiltersExpanded] = useState(true)
@@ -120,7 +121,7 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
 
   const authorSelectOptions = useMemo(() => {
     if (loadingAuthors) {
-      return [{ value: '', label: '執筆者を取得中' }]
+      return [{ value: '', label: '執筆者を選択' }]
     }
 
     if (authorOptions.length === 0) {
@@ -220,19 +221,18 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
     }
   }
 
-  const hero = (
-    <ConsoleHeroCard
-      badge="記事"
-      title="記事管理"
-      subtitle="まず絞り込みで対象を見つけてから、編集や削除へ進みます。"
-      icon="bi-file-earmark-text"
-    />
-  )
-
   const content = (
     <>
       <ConsoleNotice message={message} onClose={() => setMessage('')} />
       {errorMessage !== '' && <div className="console-error">{errorMessage}</div>}
+      <CmsTabGuide
+        title="記事の確認と操作"
+        helpLines={[
+          '絞り込み条件で対象の記事を素早く見つけられます。',
+          '画像処理の完了状態やPVも一覧で確認できます。',
+          '編集と削除は各行の操作から実行できます。',
+        ]}
+      />
 
       <section className="cms-article-list-shell">
         <section className="cms-article-filter-panel">
@@ -244,7 +244,10 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
             aria-label={filtersExpanded ? '絞り込み条件を閉じる' : '絞り込み条件を開く'}
           >
             <span className="cms-article-filter-toggle-copy">
-              <strong>絞り込み条件</strong>
+              <strong>
+                <i className="bi bi-funnel-fill me-1" aria-hidden="true" />
+                絞り込み条件
+              </strong>
               <span>
                 {appliedFilterCount === 0
                   ? '条件を指定せず、一覧全体を表示しています。'
@@ -262,12 +265,14 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
             }`}
           >
             <div className="console-expandable-region-inner">
-              <div className="cms-article-filter-body">
-                <div className="console-form-grid cms-article-filter-grid">
-                  <label className="console-label">
+              <div className="cms-article-filter-body d-flex flex-column gap-3">
+                <div className="console-form-grid row g-3 cms-article-filter-grid">
+                  <label className="console-label col-12 col-md-6 col-xl-3">
                     タイトル
                     <input
-                      className="console-input"
+                      id="cms-article-filter-title"
+                      className="console-input form-control"
+                      name="title"
                       type="text"
                       value={draftFilters.title}
                       onChange={(event) =>
@@ -276,64 +281,52 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
                       placeholder="部分一致"
                     />
                   </label>
-                  <label className="console-label">
+                  <label className="console-label col-12 col-md-6 col-xl-3">
                     状態
-                    <select
-                      className="console-select"
+                    <ConsoleDropdown
+                      id="cms-article-filter-status"
+                      name="status"
                       value={draftFilters.status}
-                      onChange={(event) =>
+                      options={STATUS_OPTIONS}
+                      onChange={(nextValue) =>
                         setDraftFilters((prev) => ({
                           ...prev,
-                          status: event.target.value as CmsArticleFilters['status'],
+                          status: nextValue as CmsArticleFilters['status'],
                         }))
                       }
-                    >
-                      {STATUS_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </label>
-                  <label className="console-label">
+                  <label className="console-label col-12 col-md-6 col-xl-3">
                     並び順
-                    <select
-                      className="console-select"
+                    <ConsoleDropdown
+                      id="cms-article-filter-ordering"
+                      name="ordering"
                       value={draftFilters.ordering}
-                      onChange={(event) =>
+                      options={ORDERING_OPTIONS}
+                      onChange={(nextValue) =>
                         setDraftFilters((prev) => ({
                           ...prev,
-                          ordering: event.target.value as CmsArticleFilters['ordering'],
+                          ordering: nextValue as CmsArticleFilters['ordering'],
                         }))
                       }
-                    >
-                      {ORDERING_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </label>
-                  <label className="console-label">
+                  <label className="console-label col-12 col-md-6 col-xl-3">
                     執筆者
-                    <select
-                      className="console-select"
+                    <ConsoleDropdown
+                      id="cms-article-filter-author"
+                      name="author"
                       value={draftFilters.author}
-                      onChange={(event) =>
-                        setDraftFilters((prev) => ({ ...prev, author: event.target.value }))
+                      options={authorSelectOptions}
+                      onChange={(nextValue) =>
+                        setDraftFilters((prev) => ({ ...prev, author: nextValue }))
                       }
                       disabled={loadingAuthors || authorOptions.length === 0}
-                    >
-                      {authorSelectOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </label>
                 </div>
 
-                <div className="cms-article-filter-actions">
+                <div className="cms-article-filter-actions d-flex flex-wrap justify-content-end gap-2">
                   <button
                     type="button"
                     className="console-primary"
@@ -369,31 +362,28 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
 
         <hr className="cms-console-divider cms-article-section-divider" />
 
-        <div className="cms-article-toolbar">
-          <div className="cms-article-toolbar-meta">
+        <div className="cms-article-toolbar row g-3 align-items-center">
+          <div className="cms-article-toolbar-meta col-12 col-lg d-flex flex-column flex-md-row align-items-start align-items-md-center gap-3">
             <p className="cms-article-toolbar-stat">
               合計 {totalCount}件 / {page}ページ目 / 全{totalPages}ページ
             </p>
-            <label className="console-inline-label cms-article-limit-field">
+            <label className="console-inline-label cms-article-limit-field d-inline-flex align-items-center gap-2">
               <span>表示件数</span>
-              <select
-                className="console-select"
+              <ConsoleDropdown
+                id="cms-article-limit"
+                name="limit"
                 value={limit}
-                onChange={(event) => {
+                options={LIMIT_OPTIONS}
+                fullWidth={false}
+                onChange={(nextValue) => {
                   setPage(1)
-                  setLimit(Number(event.target.value))
+                  setLimit(nextValue)
                 }}
-              >
-                {LIMIT_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              />
             </label>
           </div>
 
-          <div className="cms-article-toolbar-actions">
+          <div className="cms-article-toolbar-actions col-12 col-lg-auto d-flex flex-wrap justify-content-start justify-content-lg-end gap-2">
             <button
               type="button"
               className="console-secondary console-icon-button"
@@ -495,18 +485,11 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
   )
 
   if (embedded) {
-    return (
-      <div className="cms-tab-embedded">
-        {hero}
-        <hr className="cms-console-divider" />
-        {content}
-      </div>
-    )
+    return <div className="cms-tab-embedded">{content}</div>
   }
 
   return (
     <div className="console-dashboard">
-      {hero}
       {content}
     </div>
   )

@@ -12,12 +12,12 @@ from cms.models import (
     ArticleStatus,
     ImageJobStatus,
     MediaAsset,
-    OptionCode,
     Tag,
 )
+from cms.services.article_option_services import ArticleOptionService
 from cms.services.article_save_log_services import ArticleSaveLogService
 from cms.services.article_session_services import ArticleSessionService
-from cms.services.common import build_pagination_payload, ensure_default_options, unique_slugify
+from cms.services.common import build_pagination_payload, unique_slugify
 from cms.services.media_services import MediaService
 from users.models import User, UserRole
 
@@ -294,16 +294,12 @@ class ArticleService:
         """
         記事オプションを同期する。
         """
-        option_map = ensure_default_options()
-        selected_codes: list[str] = []
-        if article_option["is_pr"]:
-            selected_codes.append(OptionCode.PR)
-        if article_option["is_ad"]:
-            selected_codes.append(OptionCode.AD)
+        selected_options = ArticleOptionService.resolve_options_for_upsert(
+            article_option=article_option,
+        )
+        selected_option_ids = [option.id for option in selected_options]
 
-        ArticleOption.objects.filter(article=article).exclude(
-            option__code__in=selected_codes
-        ).delete()
+        ArticleOption.objects.filter(article=article).exclude(option_id__in=selected_option_ids).delete()
 
-        for code in selected_codes:
-            ArticleOption.objects.get_or_create(article=article, option=option_map[code])
+        for option in selected_options:
+            ArticleOption.objects.get_or_create(article=article, option=option)

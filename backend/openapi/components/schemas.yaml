@@ -465,7 +465,7 @@ components:
         category:
           $ref: "#/components/schemas/CmsCategorySummary"
         article_option:
-          $ref: "#/components/schemas/ArticleOption"
+          $ref: "#/components/schemas/CmsArticleOptionResponse"
         views_total:
           type: integer
         image_job_status:
@@ -512,6 +512,33 @@ components:
           maxItems: 100
           items:
             $ref: "#/components/schemas/CmsArticleAuthorOption"
+    CmsArticleOptionItem:
+      type: object
+      required:
+        - id
+        - code
+        - label
+        - is_system
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        label:
+          type: string
+        is_system:
+          type: boolean
+    CmsArticleOptionList:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/CmsArticleOptionItem"
     ArticleOption:
       type: object
       required:
@@ -522,6 +549,44 @@ components:
           type: boolean
         is_ad:
           type: boolean
+    CmsArticleOptionResponse:
+      type: object
+      required:
+        - is_pr
+        - is_ad
+        - items
+      properties:
+        is_pr:
+          type: boolean
+        is_ad:
+          type: boolean
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/CmsArticleOptionItem"
+    CmsArticleOptionRequest:
+      type: object
+      required:
+        - is_pr
+        - is_ad
+      properties:
+        is_pr:
+          type: boolean
+        is_ad:
+          type: boolean
+        selected_option_ids:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+            format: uuid
+        custom_option_labels:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+            maxLength: 100
     MediaAssetImageProcessingOptions:
       type: object
       required:
@@ -654,7 +719,7 @@ components:
             - summary_large_image
           default: summary_large_image
         article_option:
-          $ref: "#/components/schemas/ArticleOption"
+          $ref: "#/components/schemas/CmsArticleOptionRequest"
         image_diff:
           $ref: "#/components/schemas/MediaAssetImageDiff"
     CmsArticleMutationResponse:
@@ -731,7 +796,7 @@ components:
             - summary
             - summary_large_image
         article_option:
-          $ref: "#/components/schemas/ArticleOption"
+          $ref: "#/components/schemas/CmsArticleOptionResponse"
         tags:
           type: array
           maxItems: 20

@@ -86,11 +86,52 @@ class CmsMediaAssetSerializer(serializers.Serializer):
 
 class ArticleOptionSerializer(serializers.Serializer):
     """
+    記事オプション要素を返す。
+    """
+
+    id = serializers.UUIDField(read_only=True)
+    code = serializers.CharField(read_only=True)
+    label = serializers.CharField(read_only=True)
+    is_system = serializers.BooleanField(read_only=True)
+
+
+class ArticleOptionResponseSerializer(serializers.Serializer):
+    """
     記事オプションを返す。
     """
 
     is_pr = serializers.BooleanField()
     is_ad = serializers.BooleanField()
+    items = ArticleOptionSerializer(many=True, read_only=True)
+
+
+class ArticleOptionRequestSerializer(serializers.Serializer):
+    """
+    記事オプション入力を検証する。
+    """
+
+    is_pr = serializers.BooleanField()
+    is_ad = serializers.BooleanField()
+    selected_option_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=False,
+        allow_empty=True,
+        default=list,
+    )
+    custom_option_labels = serializers.ListField(
+        child=serializers.CharField(max_length=100),
+        required=False,
+        allow_empty=True,
+        default=list,
+    )
+
+
+class CmsArticleOptionListSerializer(serializers.Serializer):
+    """
+    記事オプション一覧を返す。
+    """
+
+    items = ArticleOptionSerializer(many=True, read_only=True)
 
 
 class CmsTocNodeSerializer(serializers.Serializer):
@@ -137,9 +178,19 @@ class CmsArticleSummarySerializer(serializers.Serializer):
         オプション要約を返す。
         """
         option_codes = set(obj.article_options.values_list("option__code", flat=True))
+        items = [
+            {
+                "id": article_option.option_id,
+                "code": article_option.option.code,
+                "label": article_option.option.label,
+                "is_system": article_option.option.code in {"pr", "ad"},
+            }
+            for article_option in obj.article_options.all()
+        ]
         return {
             "is_pr": "pr" in option_codes,
             "is_ad": "ad" in option_codes,
+            "items": items,
         }
 
 
@@ -234,7 +285,7 @@ class CmsArticleUpsertRequestSerializer(serializers.Serializer):
         required=False,
         default=TwitterCardType.SUMMARY_LARGE_IMAGE,
     )
-    article_option = ArticleOptionSerializer()
+    article_option = ArticleOptionRequestSerializer()
     image_diff = MediaAssetImageDiffSerializer()
 
 
@@ -318,7 +369,20 @@ class CmsArticleSerializer(serializers.Serializer):
         オプション要約を返す。
         """
         option_codes = set(obj.article_options.values_list("option__code", flat=True))
-        return {"is_pr": "pr" in option_codes, "is_ad": "ad" in option_codes}
+        items = [
+            {
+                "id": article_option.option_id,
+                "code": article_option.option.code,
+                "label": article_option.option.label,
+                "is_system": article_option.option.code in {"pr", "ad"},
+            }
+            for article_option in obj.article_options.all()
+        ]
+        return {
+            "is_pr": "pr" in option_codes,
+            "is_ad": "ad" in option_codes,
+            "items": items,
+        }
 
     def get_toc(self, obj) -> list:
         """

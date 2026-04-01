@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react'
 import { ApiError, apiRequest } from '../../api/client'
-import ConsoleHeroCard from '../../components/ConsoleHeroCard'
+import CmsTabGuide from '../../components/CmsTabGuide'
+import ConsoleDropdown, { ConsoleDropdownOption } from '../../components/ConsoleDropdown'
+
+const CONTACT_LIMIT_OPTIONS: Array<ConsoleDropdownOption<number>> = [
+  { value: 20, label: '20件' },
+  { value: 50, label: '50件' },
+  { value: 100, label: '100件' },
+]
 
 type ContactSubjectType = 'review' | 'blog'
 
@@ -80,45 +87,41 @@ export default function ContactsPage({ embedded = false }: ContactsPageProps) {
     void fetchCmsContacts()
   }, [page, limit])
 
-  const hero = (
-    <ConsoleHeroCard
-      badge="お問い合わせ"
-      title="問い合わせ管理"
-      subtitle="新しい問い合わせから順に確認し、必要な内容を本文で追います。"
-      icon="bi-envelope"
-    />
-  )
-
   const content = (
     <>
       {errorMessage !== '' && <div className="console-error">{errorMessage}</div>}
+      <CmsTabGuide
+        title="問い合わせの確認"
+        helpLines={[
+          '新しい問い合わせから順に一覧で確認できます。',
+          '表示件数を切り替えながら必要な内容を追えます。',
+          '本文は改行を保ったまま一覧内で確認できます。',
+        ]}
+      />
       <div className="console-card">
         <div className="console-card-header">
           <h2>問い合わせ一覧</h2>
           <p>受信した問い合わせを時系列で確認します。</p>
         </div>
-        <div className="console-actions console-actions-spread">
-          <div className="console-actions">
-            <label className="console-inline-label">
+        <div className="console-actions console-actions-spread d-flex flex-column flex-lg-row align-items-stretch align-items-lg-center gap-3">
+          <div className="console-actions d-flex flex-column flex-md-row align-items-start align-items-md-center gap-3">
+            <label className="console-inline-label d-inline-flex align-items-center gap-2">
               表示件数
-              <select
-                className="console-select"
+              <ConsoleDropdown
                 value={limit}
-                onChange={(event) => {
+                options={CONTACT_LIMIT_OPTIONS}
+                fullWidth={false}
+                onChange={(nextValue) => {
                   setPage(1)
-                  setLimit(Number(event.target.value))
+                  setLimit(nextValue)
                 }}
-              >
-                <option value={20}>20件</option>
-                <option value={50}>50件</option>
-                <option value={100}>100件</option>
-              </select>
+              />
             </label>
             <div className="console-static-value">
               合計: {totalCount}件 / {page}ページ目（全{totalPages}ページ）
             </div>
           </div>
-          <div className="console-actions">
+          <div className="console-actions d-flex flex-wrap justify-content-start justify-content-lg-end">
             <button
               type="button"
               className="console-secondary console-icon-button"
@@ -184,18 +187,11 @@ export default function ContactsPage({ embedded = false }: ContactsPageProps) {
   )
 
   if (embedded) {
-    return (
-      <div className="cms-tab-embedded">
-        {hero}
-        <hr className="cms-console-divider" />
-        {content}
-      </div>
-    )
+    return <div className="cms-tab-embedded">{content}</div>
   }
 
   return (
     <div className="console-dashboard">
-      {hero}
       {content}
     </div>
   )

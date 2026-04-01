@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useOutletContext, useParams } from 'react-router-dom'
+import { useNavigate, useOutletContext, useParams } from 'react-router-dom'
 import JoditEditor from 'jodit-react'
 import 'jodit/es2021/jodit.min.css'
 import { apiRequest, getStoredAccessJwt } from '../../../api/client'
 import ConsoleNotice from '../../../components/ConsoleNotice'
+import ConsoleDropdown from '../../../components/ConsoleDropdown'
+import CmsTabGuide from '../../../components/CmsTabGuide'
 import CmsCategoryVisualPicker from '../components/CmsCategoryVisualPicker'
 import {
   formatCmsDate,
@@ -16,6 +18,8 @@ import type {
   CmsArticleDetail,
   CmsArticleMediaAsset,
   CmsArticleMutationResponse,
+  CmsArticleOptionItem,
+  CmsArticleOptionListResponse,
   CmsArticleSessionResponse,
   CmsCategoryTreeResponse,
   CmsImageUploadResponse,
@@ -51,8 +55,14 @@ type ArticleFormState = {
   twitterCard: CmsTwitterCard
   isPr: boolean
   isAd: boolean
+  selectedOptionIds: string[]
+  customOptionLabels: string[]
   tagIds: string[]
 }
+
+const ARTICLE_TITLE_MAX_LENGTH = 255
+const ARTICLE_SUMMARY_MAX_LENGTH = 200
+const ARTICLE_CUSTOM_OPTION_MAX_LENGTH = 100
 
 const DEFAULT_IMAGE_OPTIONS: ImageProcessingOptions = {
   resize: true,
@@ -71,10 +81,26 @@ const DEFAULT_ARTICLE_FORM: ArticleFormState = {
   twitterCard: 'summary_large_image',
   isPr: false,
   isAd: false,
+  selectedOptionIds: [],
+  customOptionLabels: [],
   tagIds: [],
 }
 
 const SESSION_REFRESH_INTERVAL_MS = 120_000
+
+const TWITTER_CARD_OPTIONS: Array<{
+  value: CmsTwitterCard
+  label: string
+}> = [
+  {
+    value: 'summary_large_image',
+    label: 'summary_large_image',
+  },
+  {
+    value: 'summary',
+    label: 'summary',
+  },
+]
 
 function createUuidFileName(name: string, mimeType: string): string {
   const extension = resolveFileExtension(name, mimeType)
@@ -136,7 +162,53 @@ function findCurrentThumbnail(assets: CmsArticleMediaAsset[]): CmsArticleMediaAs
   return assets.find((asset) => asset.is_thumbnail) ?? null
 }
 
-export default function CmsArticleEditorPage() {
+function CmsTwitterCardPreview({ mode }: { mode: CmsTwitterCard }) {
+  if (mode === 'summary_large_image') {
+    return (
+      <svg
+        viewBox="0 0 320 200"
+        className="cms-twitter-card-preview-svg"
+        aria-hidden="true"
+      >
+        <rect x="12" y="12" width="296" height="176" rx="20" fill="#ffffff" stroke="#cdd8e6" />
+        <rect x="28" y="28" width="264" height="96" rx="14" fill="#dbe9fb" />
+        <rect x="42" y="44" width="84" height="12" rx="6" fill="#8fb4e7" />
+        <rect x="42" y="64" width="116" height="10" rx="5" fill="#aac6ec" />
+        <rect x="28" y="140" width="188" height="14" rx="7" fill="#264f87" opacity="0.95" />
+        <rect x="28" y="162" width="144" height="10" rx="5" fill="#8b9bb1" />
+        <circle cx="270" cy="156" r="16" fill="#edf4fc" />
+        <path d="M264 156h12M270 150v12" stroke="#4a79b5" strokeWidth="2.5" strokeLinecap="round" />
+      </svg>
+    )
+  }
+
+  return (
+    <svg
+      viewBox="0 0 320 200"
+      className="cms-twitter-card-preview-svg"
+      aria-hidden="true"
+    >
+      <rect x="12" y="12" width="296" height="176" rx="20" fill="#ffffff" stroke="#cdd8e6" />
+      <rect x="28" y="36" width="96" height="96" rx="16" fill="#dbe9fb" />
+      <rect x="42" y="52" width="52" height="10" rx="5" fill="#8fb4e7" />
+      <rect x="42" y="70" width="68" height="10" rx="5" fill="#aac6ec" />
+      <rect x="144" y="42" width="118" height="14" rx="7" fill="#264f87" opacity="0.95" />
+      <rect x="144" y="68" width="132" height="10" rx="5" fill="#8b9bb1" />
+      <rect x="144" y="88" width="118" height="10" rx="5" fill="#9fb0c6" />
+      <rect x="144" y="116" width="88" height="24" rx="12" fill="#edf4fc" />
+      <circle cx="162" cy="128" r="6" fill="#4a79b5" />
+      <rect x="174" y="122" width="42" height="12" rx="6" fill="#4a79b5" opacity="0.92" />
+    </svg>
+  )
+}
+
+type CmsArticleEditorPageProps = {
+  embedded?: boolean
+}
+
+export default function CmsArticleEditorPage({
+  embedded = false,
+}: CmsArticleEditorPageProps) {
   const { articleId } = useParams()
   const navigate = useNavigate()
   const { sessionUser } = useOutletContext<CmsOutletContext>()
@@ -155,6 +227,7 @@ export default function CmsArticleEditorPage() {
   const [lockToken, setLockToken] = useState('')
   const [lockExpiresAt, setLockExpiresAt] = useState('')
   const [categories, setCategories] = useState<CmsCategoryTreeResponse['items']>([])
+  const [optionCatalog, setOptionCatalog] = useState<CmsArticleOptionItem[]>([])
   const [article, setArticle] = useState<CmsArticleDetail | null>(null)
   const [initialMediaAssets, setInitialMediaAssets] = useState<CmsArticleMediaAsset[]>([])
   const [currentThumbnailAsset, setCurrentThumbnailAsset] = useState<CmsArticleMediaAsset | null>(null)
@@ -163,9 +236,9 @@ export default function CmsArticleEditorPage() {
   const [uploadedImageOptions, setUploadedImageOptions] = useState<Record<string, ImageProcessingOptions>>({})
 
   const [thumbnailMode, setThumbnailMode] = useState<InternalThumbnailMode>('generate_from_title')
-  const [thumbnailTitleText, setThumbnailTitleText] = useState('')
   const [thumbnailUploadFileName, setThumbnailUploadFileName] = useState('')
   const [thumbnailPreviewPath, setThumbnailPreviewPath] = useState('')
+  const [customOptionDraft, setCustomOptionDraft] = useState('')
 
   const statusOptions = toStatusOptions(sessionUser?.role, form.status)
 
@@ -176,8 +249,9 @@ export default function CmsArticleEditorPage() {
       setLoading(true)
       setErrorMessage('')
       try {
-        const [categoryPayload, sessionPayload] = await Promise.all([
+        const [categoryPayload, optionPayload, sessionPayload] = await Promise.all([
           apiRequest<CmsCategoryTreeResponse>('/cms/categories?limit=200'),
+          apiRequest<CmsArticleOptionListResponse>('/cms/article-options'),
           apiRequest<CmsArticleSessionResponse>('/cms/article-sessions', {
             method: 'POST',
             body: isCreate ? {} : { article_id: articleId },
@@ -189,6 +263,7 @@ export default function CmsArticleEditorPage() {
         }
 
         setCategories(categoryPayload.items)
+        setOptionCatalog(optionPayload.items)
         setLockToken(sessionPayload.lock_token)
         setLockExpiresAt(sessionPayload.lock_expires_at)
 
@@ -210,18 +285,21 @@ export default function CmsArticleEditorPage() {
             twitterCard: detail.twitter_card,
             isPr: detail.article_option.is_pr,
             isAd: detail.article_option.is_ad,
+            selectedOptionIds: detail.article_option.items
+              .filter((item) => !item.is_system)
+              .map((item) => item.id),
+            customOptionLabels: [],
             tagIds: detail.tags.map((tag) => tag.id),
           })
           setThumbnailMode(thumbnailAsset === null ? 'generate_from_title' : 'keep_current')
-          setThumbnailTitleText(detail.title)
           setThumbnailUploadFileName('')
           setThumbnailPreviewPath(thumbnailAsset?.public_path ?? '')
         } else {
           setForm(DEFAULT_ARTICLE_FORM)
           setThumbnailMode('generate_from_title')
-          setThumbnailTitleText('')
           setThumbnailUploadFileName('')
           setThumbnailPreviewPath('')
+          setCustomOptionDraft('')
         }
       } catch (error) {
         if (active) {
@@ -334,7 +412,7 @@ export default function CmsArticleEditorPage() {
     if (thumbnailMode === 'generate_from_title') {
       return {
         mode: 'generate_from_title',
-        title_text: thumbnailTitleText.trim() !== '' ? thumbnailTitleText.trim() : form.title.trim(),
+        title_text: form.title.trim(),
       }
     }
 
@@ -389,6 +467,8 @@ export default function CmsArticleEditorPage() {
         article_option: {
           is_pr: form.isPr,
           is_ad: form.isAd,
+          selected_option_ids: form.selectedOptionIds,
+          custom_option_labels: form.customOptionLabels,
         },
         image_diff: {
           lock_token: lockToken,
@@ -445,224 +525,115 @@ export default function CmsArticleEditorPage() {
   }
 
   if (loading) {
-    return (
-      <div className="console-dashboard">
-        <div className="console-card">
-          <div className="console-placeholder">記事編集画面を読み込んでいます。</div>
-        </div>
-      </div>
-    )
+    if (embedded) {
+      return <div className="cms-tab-embedded cms-article-editor-page console-loading-shell" aria-hidden="true" />
+    }
+
+    return <div className="console-dashboard cms-article-editor-page console-loading-shell" aria-hidden="true" />
   }
 
   const previewThumbnailPath = thumbnailPreviewPath !== ''
     ? thumbnailPreviewPath
     : (thumbnailMode === 'keep_current' ? currentThumbnailAsset?.public_path ?? '' : '')
 
-  return (
-    <div className="console-dashboard cms-article-editor-page">
+  const selectableCustomOptions = optionCatalog.filter((option) => !option.is_system)
+
+  function toggleExistingOption(optionId: string): void {
+    setForm((prev) => {
+      if (prev.selectedOptionIds.includes(optionId)) {
+        return {
+          ...prev,
+          selectedOptionIds: prev.selectedOptionIds.filter((id) => id !== optionId),
+        }
+      }
+      return {
+        ...prev,
+        selectedOptionIds: [...prev.selectedOptionIds, optionId],
+      }
+    })
+  }
+
+  function addCustomOptionLabel(): void {
+    const normalizedLabel = customOptionDraft.trim()
+    if (normalizedLabel === '') {
+      return
+    }
+    if (normalizedLabel.length > ARTICLE_CUSTOM_OPTION_MAX_LENGTH) {
+      setErrorMessage(`記事オプション名は${ARTICLE_CUSTOM_OPTION_MAX_LENGTH}文字以内で入力してください。`)
+      return
+    }
+
+    const existingOption = optionCatalog.find(
+      (option) => option.label.trim().toLocaleLowerCase() === normalizedLabel.toLocaleLowerCase(),
+    )
+    if (existingOption !== undefined) {
+      setForm((prev) => ({
+        ...prev,
+        selectedOptionIds: prev.selectedOptionIds.includes(existingOption.id)
+          ? prev.selectedOptionIds
+          : [...prev.selectedOptionIds, existingOption.id],
+      }))
+      setCustomOptionDraft('')
+      return
+    }
+
+    setForm((prev) => {
+      const alreadyAdded = prev.customOptionLabels.some(
+        (label) => label.toLocaleLowerCase() === normalizedLabel.toLocaleLowerCase(),
+      )
+      if (alreadyAdded) {
+        return prev
+      }
+      return {
+        ...prev,
+        customOptionLabels: [...prev.customOptionLabels, normalizedLabel],
+      }
+    })
+    setCustomOptionDraft('')
+    setErrorMessage('')
+  }
+
+  const content = (
+    <>
       <ConsoleNotice message={message} onClose={() => setMessage('')} />
       {errorMessage !== '' && <div className="console-error">{errorMessage}</div>}
 
       <div className="console-card">
-        <div className="console-card-header">
-          <h2>{isCreate ? '記事作成' : '記事編集'}</h2>
-          <p>Jodit で本文を編集し、保存時に画像処理ジョブと OGP 取得を起動します。</p>
-        </div>
-        <div className="console-actions console-actions-spread">
-          <div className="console-actions">
-            <Link className="console-secondary" to="/cms/console/articles">
-              一覧へ戻る
-            </Link>
-            {!isCreate && (
-              <button
-                type="button"
-                className="console-secondary"
-                onClick={() => void submitPublishRequest()}
-                disabled={submittingPublishRequest}
-              >
-                {submittingPublishRequest ? '申請中...' : '公開申請'}
-              </button>
-            )}
-          </div>
-          <div className="console-static-value">
-            ロック有効期限: {formatCmsDate(lockExpiresAt)}
-          </div>
-        </div>
-      </div>
-
-      <div className="console-card">
-        <div className="console-form-grid cms-article-editor-grid">
-          <div className="cms-article-category-panel">
-            <div className="console-card-header">
-              <h2>カテゴリ</h2>
-              <p>親子関係を見ながら保存先カテゴリを選択します。</p>
-            </div>
-            {categories.length === 0 ? (
-              <div className="console-placeholder">カテゴリがまだありません。先にカテゴリ管理で作成してください。</div>
-            ) : (
-              <CmsCategoryVisualPicker
-                items={categories}
-                selectedId={form.categoryId}
-                onSelect={(categoryId) =>
-                  setForm((prev) => ({ ...prev, categoryId }))
-                }
-              />
-            )}
-          </div>
-
-          <label className="console-label">
-            公開状態
-            <select
-              className="console-select"
-              value={form.status}
-              onChange={(event) =>
-                setForm((prev) => ({
-                  ...prev,
-                  status: event.target.value as ArticleFormState['status'],
-                }))
-              }
-            >
-              {statusOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="console-label cms-article-editor-title">
-            タイトル
-            <input
-              className="console-input"
-              type="text"
-              value={form.title}
-              onChange={(event) => {
-                const nextTitle = event.target.value
-                setForm((prev) => ({ ...prev, title: nextTitle }))
-                if (thumbnailTitleText.trim() === '' || thumbnailTitleText === form.title) {
-                  setThumbnailTitleText(nextTitle)
-                }
-              }}
-              maxLength={255}
-            />
-          </label>
-
-          <label className="console-label cms-article-editor-summary">
-            要約
-            <textarea
-              className="console-textarea"
-              value={form.summary}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, summary: event.target.value }))
-              }
-              maxLength={200}
-            />
-          </label>
-
-          <label className="console-label">
-            Twitter Card
-            <select
-              className="console-select"
-              value={form.twitterCard}
-              onChange={(event) =>
-                setForm((prev) => ({
-                  ...prev,
-                  twitterCard: event.target.value as CmsTwitterCard,
-                }))
-              }
-            >
-              <option value="summary">summary</option>
-              <option value="summary_large_image">summary_large_image</option>
-            </select>
-          </label>
-
-          <div className="console-label">
-            記事オプション
-            <div className="cms-article-option-grid">
-              <label className="console-inline-label">
-                <input
-                  type="checkbox"
-                  checked={form.isPr}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, isPr: event.target.checked }))
-                  }
-                />
-                PR
-              </label>
-              <label className="console-inline-label">
-                <input
-                  type="checkbox"
-                  checked={form.isAd}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, isAd: event.target.checked }))
-                  }
-                />
-                AD
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <div className="cms-article-tag-box">
-          <strong>タグ</strong>
-          <div className="cms-article-tag-list">
-            {form.tagIds.length === 0 ? (
-              <span>タグは未設定です。</span>
-            ) : (
-              form.tagIds.map((tagId) => (
-                <span key={tagId} className="cms-tag-chip">
-                  {tagId}
-                </span>
-              ))
-            )}
-          </div>
-          <p className="cms-article-help-text">
-            タグ一覧 API が未実装のため、この画面では既存タグの保持のみを行います。
-          </p>
-        </div>
-      </div>
-
-      <div className="console-card">
-        <div className="console-card-header">
-          <h2>サムネイル</h2>
-          <p>保持、固定画像、タイトル生成、アップロード画像のいずれかで保存します。</p>
-        </div>
-        <div className="console-form-grid cms-thumbnail-grid">
-          <label className="console-label">
+        <CmsTabGuide
+          title="サムネイル"
+          helpLines={[
+            '以下からサムネイルを設定できます。',
+            '1. 固定デフォルト画像',
+            '2. タイトルから生成',
+            '3. オリジナル画像をアップロード',
+          ]}
+          compact
+          showDivider={false}
+        />
+        <div className="console-form-grid row g-3 cms-thumbnail-grid">
+          <label className="console-label col-12 col-lg-6">
             モード
-            <select
-              className="console-select"
+            <ConsoleDropdown
               value={thumbnailMode}
-              onChange={(event) =>
-                setThumbnailMode(event.target.value as InternalThumbnailMode)
+              options={[
+                ...(!isCreate && currentThumbnailAsset !== null
+                  ? [{ value: 'keep_current' as const, label: '現在のサムネイルを維持' }]
+                  : []),
+                { value: 'use_default' as const, label: '固定デフォルト画像' },
+                { value: 'generate_from_title' as const, label: 'タイトルから生成' },
+                { value: 'use_uploaded' as const, label: '画像をアップロード' },
+              ]}
+              onChange={(nextValue) =>
+                setThumbnailMode(nextValue as InternalThumbnailMode)
               }
-            >
-              {!isCreate && currentThumbnailAsset !== null && (
-                <option value="keep_current">現在のサムネイルを維持</option>
-              )}
-              <option value="use_default">固定デフォルト画像</option>
-              <option value="generate_from_title">タイトルから生成</option>
-              <option value="use_uploaded">画像をアップロード</option>
-            </select>
+            />
           </label>
-
-          {thumbnailMode === 'generate_from_title' && (
-            <label className="console-label">
-              生成文字列
-              <input
-                className="console-input"
-                type="text"
-                value={thumbnailTitleText}
-                onChange={(event) => setThumbnailTitleText(event.target.value)}
-              />
-            </label>
-          )}
 
           {thumbnailMode === 'use_uploaded' && (
-            <label className="console-label">
+            <label className="console-label col-12 col-lg-6">
               サムネイル画像
               <input
-                className="console-input"
+                className="console-input form-control"
                 type="file"
                 accept="image/jpeg,image/png,image/webp,image/gif"
                 onChange={(event) => {
@@ -692,10 +663,256 @@ export default function CmsArticleEditorPage() {
       </div>
 
       <div className="console-card">
-        <div className="console-card-header">
-          <h2>本文</h2>
-          <p>画像アップロードは Jodit から直接行えます。保存前に本文を確定してください。</p>
+        <CmsTabGuide
+          title="タイトル"
+          helpLines={[
+            '興味を引くタイトルを設定しましょう。',
+            '特殊文字は使用しないでください。',
+          ]}
+          compact
+          showDivider={false}
+        />
+        <label className="console-label cms-article-editor-title">
+          <span className="cms-article-field-head">
+            <span>タイトル</span>
+            <span className="cms-article-field-counter">
+              {form.title.length}/{ARTICLE_TITLE_MAX_LENGTH}
+            </span>
+          </span>
+          <input
+            className="console-input form-control"
+            type="text"
+            value={form.title}
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, title: event.target.value }))
+            }
+            maxLength={ARTICLE_TITLE_MAX_LENGTH}
+          />
+        </label>
+      </div>
+
+      <div className="console-card">
+        <CmsTabGuide
+          title="サマリー"
+          helpLines={[
+            'Googleなどの検索エンジンで表示される要約文です。',
+            '120字ほどが適切です。',
+          ]}
+          compact
+          showDivider={false}
+        />
+        <label className="console-label cms-article-editor-summary">
+          <span className="cms-article-field-head">
+            <span>サマリー</span>
+            <span className="cms-article-field-counter">
+              {form.summary.length}/{ARTICLE_SUMMARY_MAX_LENGTH}
+            </span>
+          </span>
+          <textarea
+            className="console-textarea form-control"
+            value={form.summary}
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, summary: event.target.value }))
+            }
+            maxLength={ARTICLE_SUMMARY_MAX_LENGTH}
+          />
+        </label>
+      </div>
+
+      <div className="console-card">
+        <CmsTabGuide
+          title="カテゴリー"
+          helpLines={[
+            '該当するカテゴリーを選択してください。',
+            '複数選択はできません。',
+          ]}
+          compact
+          showDivider={false}
+        />
+        <div className="cms-article-category-panel">
+          {categories.length === 0 ? (
+            <div className="console-placeholder">カテゴリがまだありません。先にカテゴリ管理で作成してください。</div>
+          ) : (
+            <CmsCategoryVisualPicker
+              items={categories}
+              selectedId={form.categoryId}
+              onSelect={(categoryId) =>
+                setForm((prev) => ({ ...prev, categoryId }))
+              }
+            />
+          )}
         </div>
+      </div>
+
+      <div className="console-card">
+        <CmsTabGuide
+          title="TwitterCard"
+          helpLines={[
+            'Xのサムネイルの表示方法を選択できます。',
+            'サムネイルを大きく見せたい場合、summary_large_imageを選択してください。'
+          ]}
+          compact
+          showDivider={false}
+        />
+        <fieldset className="cms-twitter-card-grid row g-3">
+          <legend className="visually-hidden">TwitterCard</legend>
+          {TWITTER_CARD_OPTIONS.map((option) => {
+            const inputId = `cms-twitter-card-${option.value}`
+            const isSelected = form.twitterCard === option.value
+
+            return (
+              <div key={option.value} className="col-12 col-lg-6">
+                <label
+                  className={`cms-twitter-card-option${
+                    isSelected ? ' is-selected' : ''
+                  }`}
+                  htmlFor={inputId}
+                >
+                  <div className="cms-twitter-card-preview">
+                    <CmsTwitterCardPreview mode={option.value} />
+                  </div>
+                  <div className="cms-twitter-card-radio-row">
+                    <input
+                      id={inputId}
+                      type="radio"
+                      name="twitter_card"
+                      value={option.value}
+                      checked={isSelected}
+                      onChange={(event) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          twitterCard: event.target.value as CmsTwitterCard,
+                        }))
+                      }
+                    />
+                    <span>{option.label}</span>
+                  </div>
+                </label>
+              </div>
+            )
+          })}
+        </fieldset>
+      </div>
+
+      <div className="console-card">
+        <CmsTabGuide title="公開状態" helpLines={[]} compact showDivider={false} />
+        <div className="console-form-grid row g-3">
+          <label className="console-label col-12">
+            公開状態
+            <ConsoleDropdown
+              value={form.status}
+              options={statusOptions}
+              onChange={(nextValue) =>
+                setForm((prev) => ({
+                  ...prev,
+                  status: nextValue as ArticleFormState['status'],
+                }))
+              }
+            />
+          </label>
+        </div>
+      </div>
+
+      <div className="console-card">
+        <CmsTabGuide
+          title="記事オプション"
+          helpLines={[
+            '既存のオプションを選択するか、自身で作成できます。',
+            '記事内にAmazonアフィリエイトリンクを挿入する場合はADを必ず選択してください。',
+            'メーカーより提供がある製品をレビューする場合PRを必ず選択してください。',
+          ]}
+          compact
+          showDivider={false}
+        />
+        <div className="cms-article-option-grid">
+          <label className="console-inline-label">
+            <input
+              type="checkbox"
+              checked={form.isPr}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, isPr: event.target.checked }))
+              }
+            />
+            PR
+          </label>
+          <label className="console-inline-label">
+            <input
+              type="checkbox"
+              checked={form.isAd}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, isAd: event.target.checked }))
+              }
+            />
+            AD
+          </label>
+        </div>
+        {selectableCustomOptions.length > 0 && (
+          <div className="cms-article-existing-options">
+            {selectableCustomOptions.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                className={`cms-article-option-chip${
+                  form.selectedOptionIds.includes(option.id) ? ' is-selected' : ''
+                }`}
+                onClick={() => toggleExistingOption(option.id)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="console-form-grid row g-3 cms-article-custom-option-row">
+          <label className="console-label col-12 col-lg">
+            <span className="cms-article-field-head">
+              <span>オプションを追加</span>
+              <span className="cms-article-field-counter">
+                {customOptionDraft.length}/{ARTICLE_CUSTOM_OPTION_MAX_LENGTH}
+              </span>
+            </span>
+            <input
+              className="console-input form-control"
+              type="text"
+              value={customOptionDraft}
+              onChange={(event) => setCustomOptionDraft(event.target.value)}
+              maxLength={ARTICLE_CUSTOM_OPTION_MAX_LENGTH}
+              placeholder="例: スポンサー提供"
+            />
+          </label>
+          <div className="col-12 col-lg-auto d-flex align-items-end">
+            <button
+              type="button"
+              className="console-secondary"
+              onClick={addCustomOptionLabel}
+            >
+              追加
+            </button>
+          </div>
+        </div>
+        {form.customOptionLabels.length > 0 && (
+          <div className="cms-article-custom-option-list">
+            {form.customOptionLabels.map((label) => (
+              <button
+                key={label}
+                type="button"
+                className="cms-article-option-chip is-selected"
+                onClick={() =>
+                  setForm((prev) => ({
+                    ...prev,
+                    customOptionLabels: prev.customOptionLabels.filter((item) => item !== label),
+                  }))
+                }
+              >
+                {label}
+                <i className="bi bi-x-lg" aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="console-card">
+        <CmsTabGuide title="本文" helpLines={[]} compact showDivider={false} />
         <JoditEditor
           value={form.bodyHtml}
           config={{
@@ -703,34 +920,6 @@ export default function CmsArticleEditorPage() {
             language: 'ja',
             height: 680,
             toolbarSticky: false,
-            buttons: [
-              'source',
-              '|',
-              'bold',
-              'italic',
-              'underline',
-              'strikethrough',
-              '|',
-              'ul',
-              'ol',
-              '|',
-              'font',
-              'fontsize',
-              'brush',
-              'paragraph',
-              '|',
-              'image',
-              'link',
-              'table',
-              '|',
-              'align',
-              'undo',
-              'redo',
-              '|',
-              'hr',
-              'eraser',
-              'fullsize',
-            ],
             uploader: {
               insertImageAsBase64URI: false,
               imagesExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
@@ -783,11 +972,18 @@ export default function CmsArticleEditorPage() {
           onChange={() => undefined}
         />
 
-        <div className="cms-article-editor-footer">
-          <div className="console-static-value">
-            文字数: {form.bodyHtml.replace(/<[^>]+>/g, '').trim().length}
-          </div>
-          <div className="console-actions">
+        <div className="cms-article-editor-footer d-flex justify-content-end">
+          <div className="console-actions d-flex flex-wrap justify-content-end">
+            {!isCreate && (
+              <button
+                type="button"
+                className="console-secondary"
+                onClick={() => void submitPublishRequest()}
+                disabled={submittingPublishRequest}
+              >
+                {submittingPublishRequest ? '申請中...' : '公開申請'}
+              </button>
+            )}
             <button
               type="button"
               className="console-primary"
@@ -806,29 +1002,40 @@ export default function CmsArticleEditorPage() {
             <h2>現在の状態</h2>
             <p>記事 ID、更新日時、画像後処理状態を確認できます。</p>
           </div>
-          <div className="cms-article-meta-grid">
-            <div>
+          <div className="cms-article-meta-grid row g-3">
+            <div className="col-12 col-md-6">
               <strong>記事ID</strong>
               <span>{article.id}</span>
             </div>
-            <div>
+            <div className="col-12 col-md-6">
               <strong>スラッグ</strong>
               <span>{article.slug}</span>
             </div>
-            <div>
+            <div className="col-12 col-md-6">
               <strong>更新日時</strong>
               <span>{formatCmsDate(article.updated_at)}</span>
             </div>
-            <div>
+            <div className="col-12 col-md-6">
               <strong>画像処理</strong>
               <span>{article.image_job_status}</span>
             </div>
           </div>
           <div className="cms-article-help-text">
-            保存後は編集ロックがバックグラウンドジョブ側で解放されます。続けて編集する場合は一覧から再度開いてください。
+            保存後は編集ロックがバックグラウンドジョブ側で解放されます。
+            続けて編集する場合は記事タブの一覧から再度開いてください。
           </div>
         </div>
       )}
+    </>
+  )
+
+  if (embedded) {
+    return <div className="cms-tab-embedded cms-article-editor-page">{content}</div>
+  }
+
+  return (
+    <div className="console-dashboard cms-article-editor-page">
+      {content}
     </div>
   )
 }

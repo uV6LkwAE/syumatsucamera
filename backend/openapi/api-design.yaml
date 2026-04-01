@@ -333,6 +333,29 @@ paths:
             application/json:
               schema:
                 $ref: "./components/schemas.yaml#/components/schemas/CmsArticleAuthorOptionList"
+  /api/cms/article-options:
+    get:
+      tags:
+        - cms
+      summary: CMS記事オプション候補を返す
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin または author
+        permission_class: AuthorAdminReadWrite
+      operationId: listCmsArticleOptions
+      security:
+        - CloudflareAccessJwt:
+            - admin
+        - CloudflareAccessJwt:
+            - author
+      x-permission-class: AuthorAdminReadWrite
+      responses:
+        "200":
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CmsArticleOptionList"
   /api/cms/articles/{article_id}:
     get:
       tags:

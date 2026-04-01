@@ -14,6 +14,7 @@ from cms.serializers import (
     CmsArticleListQuerySerializer,
     CmsArticleListSerializer,
     CmsArticleMutationResponseSerializer,
+    CmsArticleOptionListSerializer,
     CmsArticleSaveLogListSerializer,
     CmsArticleSaveLogQuerySerializer,
     CmsArticleSerializer,
@@ -30,6 +31,7 @@ from cms.serializers import (
     CmsPublishRequestSerializer,
 )
 from cms.services.article_author_services import ArticleAuthorService
+from cms.services.article_option_services import ArticleOptionService
 from cms.services.article_save_log_services import ArticleSaveLogService
 from cms.services.article_services import ArticleService
 from cms.services.article_session_services import ArticleSessionService
@@ -150,6 +152,24 @@ class CmsArticleAuthorsViewSet(ViewSet):
             "items": ArticleAuthorService.list_authors(user=request.user),
         }
         response_serializer = CmsArticleAuthorOptionListSerializer(payload)
+        return Response(response_serializer.data)
+
+
+class CmsArticleOptionsViewSet(ViewSet):
+    """
+    記事オプション候補API。
+    """
+
+    permission_classes = [AuthorAdminReadWrite]
+
+    def list(self, request):
+        """
+        記事オプション候補を返す。
+        """
+        payload = {
+            "items": ArticleOptionService.list_options(),
+        }
+        response_serializer = CmsArticleOptionListSerializer(payload)
         return Response(response_serializer.data)
 
 
