@@ -49,6 +49,8 @@ services:
     command: ["/bin/sh", "-ec", "python manage.py migrate --noinput && exec python manage.py runserver 0.0.0.0:8000"]
     volumes:
       - ../backend:/app
+    ports:
+      - "8000:8000"
     expose:
       - "8000"
     depends_on:
