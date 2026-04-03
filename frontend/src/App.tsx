@@ -57,6 +57,7 @@ type CmsNavItem = {
   to: string
   label: string
   icon: string
+  allowedRoles: Array<CmsSessionUser['role']>
 }
 
 const CMS_NAV_ITEMS: CmsNavItem[] = [
@@ -64,46 +65,55 @@ const CMS_NAV_ITEMS: CmsNavItem[] = [
     to: '/cms/console/profile',
     label: 'プロフィール',
     icon: 'bi-person-circle',
+    allowedRoles: ['admin', 'author'],
   },
   {
     to: '/cms/console/articles',
     label: '記事',
     icon: 'bi-file-earmark-text',
+    allowedRoles: ['admin', 'author'],
   },
   {
     to: '/cms/console/articles/new',
     label: '執筆',
     icon: 'bi-pencil-square',
+    allowedRoles: ['admin', 'author'],
   },
   {
     to: '/cms/console/requests',
     label: 'リクエスト',
     icon: 'bi-inbox',
+    allowedRoles: ['admin'],
   },
   {
     to: '/cms/console/categories',
     label: 'カテゴリー',
     icon: 'bi-diagram-3',
+    allowedRoles: ['admin'],
   },
   {
     to: '/cms/console/contacts',
     label: '問い合わせ',
     icon: 'bi-envelope',
+    allowedRoles: ['admin'],
   },
   {
     to: '/cms/console/users',
     label: 'ユーザー',
     icon: 'bi-people',
+    allowedRoles: ['admin'],
   },
   {
     to: '/cms/console/ogp',
     label: 'OGP',
     icon: 'bi-link-45deg',
+    allowedRoles: ['admin'],
   },
   {
     to: '/cms/console/impressions',
     label: 'インプレッション',
     icon: 'bi-bar-chart-line',
+    allowedRoles: ['admin'],
   },
 ]
 
@@ -134,6 +144,7 @@ type CmsSessionUser = {
 type CmsOutletContext = {
   sessionUser: CmsSessionUser | null
   setSessionUser: (user: CmsSessionUser | null) => void
+  sessionResolved: boolean
 }
 
 type ProfileMetaItem = {
@@ -353,6 +364,21 @@ function getCmsActiveTab(pathname: string): CmsTabKey {
   return 'profile'
 }
 
+function canAccessCmsTab(
+  tabKey: CmsTabKey,
+  role: CmsSessionUser['role'] | undefined,
+): boolean {
+  if (role === undefined) {
+    return tabKey === 'profile'
+  }
+
+  return CMS_NAV_ITEMS.some(
+    (item) =>
+      getCmsActiveTab(item.to) === tabKey
+      && item.allowedRoles.includes(role),
+  )
+}
+
 function toCmsRoleLabel(role: CmsSessionUser['role'] | undefined): string {
   if (role === 'admin') {
     return '管理者'
@@ -365,6 +391,7 @@ function toCmsRoleLabel(role: CmsSessionUser['role'] | undefined): string {
 
 function CmsConsoleLayout() {
   const [sessionUser, setSessionUser] = useState<CmsSessionUser | null>(null)
+  const [sessionResolved, setSessionResolved] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -378,6 +405,10 @@ function CmsConsoleLayout() {
       } catch {
         if (active) {
           setSessionUser(null)
+        }
+      } finally {
+        if (active) {
+          setSessionResolved(true)
         }
       }
     }
@@ -412,7 +443,7 @@ function CmsConsoleLayout() {
 
       <div className="console-shell">
         <main className="console-page container-xxl px-0">
-          <Outlet context={{ sessionUser, setSessionUser }} />
+          <Outlet context={{ sessionUser, setSessionUser, sessionResolved }} />
         </main>
       </div>
       <footer className="console-fixed-footer">
@@ -441,10 +472,24 @@ function CmsTabPlaceholder({
   )
 }
 
+function CmsPermissionLockedPanel() {
+  return (
+    <div className="cms-tab-embedded">
+      <div className="cms-permission-locked-panel">
+        <i className="bi bi-shield-lock" aria-hidden="true" />
+        <div className="cms-permission-locked-copy">
+          <strong>管理者のみ操作できます</strong>
+          <span>このタブの操作権限が必要な場合は、管理者へ権限付与を依頼してください。</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function CmsConsolePage() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { sessionUser, setSessionUser } = useOutletContext<CmsOutletContext>()
+  const { sessionUser, setSessionUser, sessionResolved } = useOutletContext<CmsOutletContext>()
   const activeTab = getCmsActiveTab(location.pathname)
   const [profileEditMode, setProfileEditMode] = useState(false)
   const [profileSaving, setProfileSaving] = useState(false)
@@ -1001,6 +1046,14 @@ function CmsConsolePage() {
   }
 
   function renderTabContent() {
+    if (!sessionResolved) {
+      return <div className="console-loading-shell" />
+    }
+
+    if (!canAccessCmsTab(activeTab, sessionUser?.role)) {
+      return <CmsPermissionLockedPanel />
+    }
+
     if (activeTab === 'profile') {
       return (
         <div className="cms-tab-embedded">

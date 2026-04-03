@@ -1596,6 +1596,41 @@ body {
   font-size: 13px;
 }
 
+.cms-permission-locked-panel {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.35rem 1.4rem;
+  border-radius: 1rem;
+  border: 1px solid #d9e4f2;
+  background: #f7fbff;
+  color: #334e6d;
+}
+
+.cms-permission-locked-panel .bi {
+  flex-shrink: 0;
+  font-size: 1.8rem;
+  color: #2f5c9f;
+}
+
+.cms-permission-locked-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.cms-permission-locked-copy strong {
+  font-size: 0.98rem;
+  line-height: 1.4;
+  color: #17314f;
+}
+
+.cms-permission-locked-copy span {
+  font-size: 0.82rem;
+  line-height: 1.7;
+  color: #6b7f95;
+}
+
 .console-loading-shell {
   min-height: 12rem;
 }
