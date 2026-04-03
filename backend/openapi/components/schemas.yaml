@@ -864,6 +864,7 @@ components:
       required:
         - id
         - article_id
+        - article
         - requested_by
         - requested_at
         - status
@@ -874,6 +875,8 @@ components:
         article_id:
           type: string
           format: uuid
+        article:
+          $ref: "#/components/schemas/CmsArticleSummary"
         requested_by_id:
           type: string
           format: uuid
@@ -898,6 +901,19 @@ components:
           format: date-time
         note:
           type: string
+    CmsPublishRequestList:
+      type: object
+      required:
+        - items
+        - pagination
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/CmsPublishRequest"
+        pagination:
+          $ref: "#/components/schemas/CommonPagination"
     CmsArticleSaveLog:
       type: object
       required:

@@ -27,6 +27,8 @@ from cms.serializers import (
     CmsCategoryTreeSerializer,
     CmsCategoryUpdateRequestSerializer,
     CmsPublishRequestCreateRequestSerializer,
+    CmsPublishRequestListQuerySerializer,
+    CmsPublishRequestListSerializer,
     CmsPublishRequestRejectRequestSerializer,
     CmsPublishRequestSerializer,
 )
@@ -274,6 +276,20 @@ class CmsPublishRequestsViewSet(ViewSet):
 
     permission_classes = [AdminOnlyReadWrite]
     lookup_value_regex = "[0-9a-fA-F-]{36}"
+
+    def list(self, request):
+        """
+        公開申請一覧を返す。
+        """
+        query_serializer = CmsPublishRequestListQuerySerializer(data=request.query_params)
+        query_serializer.is_valid(raise_exception=True)
+        payload = PublishRequestService.list_requests(
+            page=query_serializer.validated_data["page"],
+            limit=query_serializer.validated_data["limit"],
+            status=query_serializer.validated_data.get("status"),
+        )
+        response_serializer = CmsPublishRequestListSerializer(payload)
+        return Response(response_serializer.data)
 
     @action(detail=True, methods=["post"], url_path="approve")
     def approve(self, request, pk=None):

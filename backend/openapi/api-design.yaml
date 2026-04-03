@@ -669,6 +669,31 @@ paths:
             application/json:
               schema:
                 $ref: "./components/schemas.yaml#/components/schemas/CmsArticleSaveLogList"
+  /api/cms/publish-requests:
+    get:
+      tags:
+        - cms
+      summary: 公開申請一覧を返す
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin
+        permission_class: AdminOnlyReadWrite
+      operationId: listCmsPublishRequests
+      security:
+        - CloudflareAccessJwt:
+            - admin
+      x-permission-class: AdminOnlyReadWrite
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/CmsPublishRequestStatus"
+      responses:
+        "200":
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CmsPublishRequestList"
   /api/cms/publish-requests/{publish_request_id}/approve:
     post:
       tags:
@@ -1345,6 +1370,16 @@ components:
       schema:
         type: string
         format: uuid
+    CmsPublishRequestStatus:
+      name: status
+      in: query
+      required: false
+      schema:
+        type: string
+        enum:
+          - pending
+          - approved
+          - rejected
     LockToken:
       name: lock_token
       in: path

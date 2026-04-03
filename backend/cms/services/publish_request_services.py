@@ -12,6 +12,7 @@ from cms.models import (
     ImageJobStatus,
     PublishRequestStatus,
 )
+from cms.services.common import build_pagination_payload
 from users.models import User, UserRole
 
 
@@ -19,6 +20,24 @@ class PublishRequestService:
     """
     公開申請フローの業務ロジックを扱う。
     """
+
+    @staticmethod
+    def list_requests(*, page: int, limit: int, status: str | None) -> dict:
+        """
+        公開申請一覧を返す。
+        """
+        queryset = ArticlePublishRequest.objects.select_related(
+            "article",
+            "article__author",
+            "article__category",
+            "requested_by",
+            "handled_by",
+        ).prefetch_related(
+            "article__article_options__option",
+        ).order_by("-requested_at")
+        if status is not None:
+            queryset = queryset.filter(status=status)
+        return build_pagination_payload(page=page, limit=limit, queryset=queryset)
 
     @staticmethod
     @transaction.atomic

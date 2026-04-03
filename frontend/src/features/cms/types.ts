@@ -2,6 +2,8 @@ export type CmsArticleStatus = 'draft' | 'publish' | 'private'
 
 export type CmsImageJobStatus = 'pending' | 'processing' | 'completed' | 'failed'
 
+export type CmsPublishRequestStatus = 'pending' | 'approved' | 'rejected'
+
 export type CmsTwitterCard = 'summary' | 'summary_large_image'
 
 export type CmsCategoryNode = {
@@ -155,6 +157,30 @@ export type CmsSaveLogItem = {
 
 export type CmsSaveLogListResponse = {
   items: CmsSaveLogItem[]
+  pagination: {
+    page: number
+    page_size: number
+    total_count: number
+    total_pages: number
+  }
+}
+
+export type CmsPublishRequestItem = {
+  id: string
+  article_id: string
+  article: CmsArticleSummary
+  requested_by_id: string
+  requested_by: CmsAuthorSummary
+  requested_at: string
+  status: CmsPublishRequestStatus
+  handled_by_id: string | null
+  handled_by: CmsAuthorSummary | null
+  handled_at: string | null
+  note: string | null
+}
+
+export type CmsPublishRequestListResponse = {
+  items: CmsPublishRequestItem[]
   pagination: {
     page: number
     page_size: number

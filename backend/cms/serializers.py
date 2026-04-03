@@ -485,6 +485,7 @@ class CmsPublishRequestSerializer(serializers.Serializer):
 
     id = serializers.UUIDField(read_only=True)
     article_id = serializers.UUIDField(read_only=True)
+    article = CmsArticleSummarySerializer(read_only=True)
     requested_by_id = serializers.UUIDField(read_only=True)
     requested_by = CmsAuthorSummarySerializer(read_only=True)
     requested_at = serializers.DateTimeField(read_only=True)
@@ -493,6 +494,30 @@ class CmsPublishRequestSerializer(serializers.Serializer):
     handled_by = CmsAuthorSummarySerializer(allow_null=True, read_only=True)
     handled_at = serializers.DateTimeField(allow_null=True, read_only=True)
     note = serializers.CharField(allow_null=True, read_only=True)
+
+
+class CmsPublishRequestListQuerySerializer(serializers.Serializer):
+    """
+    公開申請一覧クエリを検証する。
+    """
+
+    page = serializers.IntegerField(required=False, min_value=1, default=1)
+    limit = serializers.IntegerField(
+        required=False,
+        min_value=1,
+        max_value=100,
+        default=settings.REST_FRAMEWORK.get("PAGE_SIZE", 20),
+    )
+    status = serializers.ChoiceField(choices=PublishRequestStatus.choices, required=False)
+
+
+class CmsPublishRequestListSerializer(serializers.Serializer):
+    """
+    公開申請一覧レスポンスを返す。
+    """
+
+    items = CmsPublishRequestSerializer(many=True, read_only=True)
+    pagination = CommonPaginationSerializer(read_only=True)
 
 
 class CmsArticleSaveLogQuerySerializer(serializers.Serializer):

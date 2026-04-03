@@ -1835,6 +1835,73 @@ body {
   font-size: 1rem;
 }
 
+.cms-request-list-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.cms-request-table-scroll {
+  margin-top: 0;
+}
+
+.cms-request-table th {
+  white-space: nowrap;
+}
+
+.cms-request-article-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 18rem;
+}
+
+.cms-request-article-cell span {
+  font-size: 0.75rem;
+  color: #60768e;
+  word-break: break-all;
+}
+
+.cms-request-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.375rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.cms-request-status-badge.is-pending {
+  background: #fff4d6;
+  color: #946200;
+}
+
+.cms-request-status-badge.is-approved {
+  background: #e5f8ec;
+  color: #1c7b45;
+}
+
+.cms-request-status-badge.is-rejected {
+  background: #ffe7e7;
+  color: #b42318;
+}
+
+.cms-request-note-cell {
+  min-width: 14rem;
+  color: #445b76;
+  white-space: pre-wrap;
+}
+
+.cms-request-actions-cell {
+  min-width: 16rem;
+}
+
+.cms-request-action-state {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #7a8ba2;
+}
+
 .cms-category-picker-shell {
   display: flex;
   flex-direction: column;

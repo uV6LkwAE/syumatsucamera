@@ -24,6 +24,7 @@ import ContactsPage from './features/contacts/ContactsPage'
 import CmsArticleEditorPage from './features/cms/articles/CmsArticleEditorPage'
 import CmsArticlesPage from './features/cms/articles/CmsArticlesPage'
 import CmsCategoriesPage from './features/cms/categories/CmsCategoriesPage'
+import CmsPublishRequestsPage from './features/cms/requests/CmsPublishRequestsPage'
 import UsersPage from './features/users/UsersPage'
 
 function Home() {
@@ -75,6 +76,11 @@ const CMS_NAV_ITEMS: CmsNavItem[] = [
     icon: 'bi-pencil-square',
   },
   {
+    to: '/cms/console/requests',
+    label: 'リクエスト',
+    icon: 'bi-inbox',
+  },
+  {
     to: '/cms/console/categories',
     label: 'カテゴリー',
     icon: 'bi-diagram-3',
@@ -105,6 +111,7 @@ type CmsTabKey =
   | 'profile'
   | 'articles'
   | 'compose'
+  | 'requests'
   | 'categories'
   | 'contacts'
   | 'users'
@@ -324,6 +331,9 @@ function getCmsActiveTab(pathname: string): CmsTabKey {
   }
   if (pathname.startsWith('/cms/console/articles')) {
     return 'articles'
+  }
+  if (pathname.startsWith('/cms/console/requests')) {
+    return 'requests'
   }
   if (pathname.startsWith('/cms/console/categories')) {
     return 'categories'
@@ -940,6 +950,16 @@ function CmsConsolePage() {
         />
       )
     }
+    if (activeTab === 'requests') {
+      return (
+        <ConsoleHeroCard
+          badge="リクエスト"
+          title="公開申請"
+          subtitle="公開前の記事を確認し、承認または却下でステータスを整理します。"
+          icon="bi-inbox"
+        />
+      )
+    }
     if (activeTab === 'contacts') {
       return (
         <ConsoleHeroCard
@@ -1005,6 +1025,9 @@ function CmsConsolePage() {
     }
     if (activeTab === 'categories') {
       return <CmsCategoriesPage embedded />
+    }
+    if (activeTab === 'requests') {
+      return <CmsPublishRequestsPage embedded />
     }
     if (activeTab === 'contacts') {
       return <ContactsPage embedded />
@@ -1135,6 +1158,10 @@ export default function App() {
           />
           <Route
             path="categories"
+            element={<CmsConsolePage />}
+          />
+          <Route
+            path="requests"
             element={<CmsConsolePage />}
           />
           <Route
