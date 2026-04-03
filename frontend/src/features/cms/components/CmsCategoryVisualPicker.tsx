@@ -749,7 +749,6 @@ export default function CmsCategoryVisualPicker({
             }
             setIsDraggingCanvas(true)
             viewportElement.setPointerCapture(event.pointerId)
-            event.preventDefault()
           }}
           onPointerMove={(event) => {
             const viewportElement = previewRef.current

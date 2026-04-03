@@ -10,7 +10,7 @@ from pathlib import Path
 from bs4 import BeautifulSoup
 from django.conf import settings
 from django.utils.text import slugify
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 from rest_framework.exceptions import ValidationError
 
 from cms.models import (
@@ -25,6 +25,9 @@ class MediaService:
     """
     記事画像の保存と処理を扱う。
     """
+
+    THUMBNAIL_WIDTH = 1200
+    THUMBNAIL_HEIGHT = 630
 
     @staticmethod
     def validate_uploaded_image(*, uploaded_file) -> None:
@@ -238,13 +241,74 @@ class MediaService:
         return asset
 
     @staticmethod
-    def generate_thumbnail_image(*, asset: MediaAsset, title_text: str) -> MediaAsset:
+    def generate_thumbnail_image(
+        *,
+        asset: MediaAsset,
+        title_text: str,
+        author_display_name: str,
+        author_icon_path: str | None,
+    ) -> MediaAsset:
         """
         文字列ベースのサムネイル画像を生成する。
         """
-        image = Image.new("RGB", (1200, 630), color=(245, 240, 232))
+        title_font = MediaService._load_thumbnail_font(
+            font_path=settings.CMS_THUMBNAIL_FONT_BOLD_PATH,
+            size=64,
+        )
+        author_font = MediaService._load_thumbnail_font(
+            font_path=settings.CMS_THUMBNAIL_FONT_BOLD_PATH,
+            size=34,
+        )
+        image = MediaService._create_thumbnail_background()
         draw = ImageDraw.Draw(image)
-        draw.text((48, 280), title_text[:60], fill=(35, 35, 35))
+
+        title_lines = MediaService._wrap_thumbnail_text(
+            draw=draw,
+            text=title_text.strip() or settings.CMS_THUMBNAIL_BRAND_NAME,
+            font=title_font,
+            max_width=930,
+            max_lines=3,
+        )
+
+        current_y = 108
+        for line in title_lines:
+            draw.text((110, current_y), line, fill=(16, 24, 40), font=title_font)
+            line_height = MediaService._measure_text_box(
+                draw=draw,
+                text=line,
+                font=title_font,
+            )[3]
+            current_y += line_height + 20
+
+        avatar = MediaService._build_author_avatar(
+            stored_path=author_icon_path,
+            size=74,
+            display_name=author_display_name,
+        )
+        avatar_x = 110
+        avatar_y = 474
+        image.paste(avatar, (avatar_x, avatar_y), avatar)
+        author_name = author_display_name.strip()
+        author_text_box = MediaService._measure_text_box(
+            draw=draw,
+            text=author_name,
+            font=author_font,
+        )
+        author_text_height = author_text_box[3] - author_text_box[1]
+        author_text_x = avatar_x + 94
+        author_text_y = avatar_y + ((74 - author_text_height) / 2) - author_text_box[1]
+        draw.text(
+            (author_text_x, author_text_y),
+            author_name,
+            fill=(28, 41, 61),
+            font=author_font,
+        )
+
+        MediaService._draw_brand_logo(
+            image=image,
+            canvas_width=image.width,
+            canvas_height=image.height,
+        )
 
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
@@ -260,8 +324,8 @@ class MediaService:
         with public_path.open("wb") as destination:
             destination.write(raw)
 
-        asset.width = 1200
-        asset.height = 630
+        asset.width = MediaService.THUMBNAIL_WIDTH
+        asset.height = MediaService.THUMBNAIL_HEIGHT
         asset.checksum_sha256 = checksum
         asset.exif_json = None
         asset.save(
@@ -274,6 +338,230 @@ class MediaService:
             ]
         )
         return asset
+
+    @staticmethod
+    def _load_thumbnail_font(*, font_path: Path, size: int) -> ImageFont.FreeTypeFont:
+        """
+        サムネイル生成用フォントを読み込む。
+        """
+        if not font_path.exists():
+            raise RuntimeError(f"サムネイル用フォントが存在しません: {font_path}")
+        return ImageFont.truetype(str(font_path), size=size)
+
+    @staticmethod
+    def _create_thumbnail_background() -> Image.Image:
+        """
+        サムネイル背景を生成する。
+        """
+        image = Image.new(
+            "RGBA",
+            (MediaService.THUMBNAIL_WIDTH, MediaService.THUMBNAIL_HEIGHT),
+        )
+        pixels = image.load()
+
+        for y in range(MediaService.THUMBNAIL_HEIGHT):
+            vertical_ratio = y / max(1, MediaService.THUMBNAIL_HEIGHT - 1)
+            for x in range(MediaService.THUMBNAIL_WIDTH):
+                red = int(247 + (234 - 247) * vertical_ratio)
+                green = int(250 + (241 - 250) * vertical_ratio)
+                blue = int(254 + (250 - 254) * vertical_ratio)
+                pixels[x, y] = (red, green, blue, 255)
+
+        draw = ImageDraw.Draw(image)
+        draw.rounded_rectangle(
+            (50, 34, 1150, 596),
+            radius=30,
+            fill=(255, 255, 255, 255),
+            outline=(211, 221, 237, 255),
+            width=3,
+        )
+        draw.rounded_rectangle(
+            (76, 58, 86, 572),
+            radius=5,
+            fill=(47, 92, 159, 255),
+        )
+        return image.convert("RGB")
+
+    @staticmethod
+    def _measure_text_box(
+        *,
+        draw: ImageDraw.ImageDraw,
+        text: str,
+        font: ImageFont.FreeTypeFont,
+    ) -> tuple[int, int, int, int]:
+        """
+        テキスト描画領域を返す。
+        """
+        return draw.textbbox((0, 0), text, font=font)
+
+    @staticmethod
+    def _wrap_thumbnail_text(
+        *,
+        draw: ImageDraw.ImageDraw,
+        text: str,
+        font: ImageFont.FreeTypeFont,
+        max_width: int,
+        max_lines: int,
+    ) -> list[str]:
+        """
+        サムネイル用にテキストを折り返す。
+        """
+        normalized_text = " ".join(text.replace("\n", " ").split())
+        if normalized_text == "":
+            return [settings.CMS_THUMBNAIL_BRAND_NAME]
+
+        lines: list[str] = []
+        current_line = ""
+
+        for character in normalized_text:
+            candidate = f"{current_line}{character}"
+            width = MediaService._measure_text_box(
+                draw=draw,
+                text=candidate,
+                font=font,
+            )[2]
+            if current_line != "" and width > max_width:
+                lines.append(current_line)
+                current_line = character
+            else:
+                current_line = candidate
+
+        if current_line != "":
+            lines.append(current_line)
+
+        if len(lines) <= max_lines:
+            return lines
+
+        clamped_lines = lines[:max_lines]
+        while clamped_lines[-1] != "":
+            candidate = f"{clamped_lines[-1]}…"
+            width = MediaService._measure_text_box(
+                draw=draw,
+                text=candidate,
+                font=font,
+            )[2]
+            if width <= max_width:
+                clamped_lines[-1] = candidate
+                return clamped_lines
+            clamped_lines[-1] = clamped_lines[-1][:-1]
+
+        clamped_lines[-1] = "…"
+        return clamped_lines
+
+    @staticmethod
+    def _resolve_media_absolute_path(*, stored_path: str | None) -> Path:
+        """
+        /media/ 配下の保存パスを絶対パスへ変換する。
+        """
+        if stored_path is None or not stored_path.startswith(settings.MEDIA_URL):
+            raise RuntimeError("執筆者アイコン画像の保存パスが不正です。")
+
+        media_root = Path(settings.MEDIA_ROOT).resolve()
+        candidate = (media_root / stored_path.removeprefix(settings.MEDIA_URL)).resolve()
+        try:
+            candidate.relative_to(media_root)
+        except ValueError as exc:
+            raise RuntimeError("執筆者アイコン画像の保存パスが media 配下にありません。") from exc
+        if not candidate.exists():
+            raise RuntimeError(f"執筆者アイコン画像が存在しません: {candidate}")
+        return candidate
+
+    @staticmethod
+    def _build_author_avatar(
+        *,
+        stored_path: str | None,
+        size: int,
+        display_name: str,
+    ) -> Image.Image:
+        """
+        執筆者アイコンを円形アバターへ変換する。
+        """
+        try:
+            source_path = MediaService._resolve_media_absolute_path(stored_path=stored_path)
+            with Image.open(source_path) as source_image:
+                avatar = ImageOps.fit(
+                    source_image.convert("RGBA"),
+                    (size, size),
+                    centering=(0.5, 0.5),
+                )
+        except Exception:
+            avatar = MediaService._build_placeholder_avatar(
+                size=size,
+                display_name=display_name,
+            )
+
+        mask = Image.new("L", (size, size), 0)
+        mask_draw = ImageDraw.Draw(mask)
+        mask_draw.ellipse((0, 0, size - 1, size - 1), fill=255)
+
+        ring = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        ring_draw = ImageDraw.Draw(ring)
+        ring_draw.ellipse(
+            (1, 1, size - 2, size - 2),
+            outline=(255, 255, 255, 255),
+            width=4,
+        )
+
+        avatar.putalpha(mask)
+        avatar.alpha_composite(ring)
+        return avatar
+
+    @staticmethod
+    def _build_placeholder_avatar(*, size: int, display_name: str) -> Image.Image:
+        """
+        アイコン未設定時のプレースホルダーアバターを生成する。
+        """
+        avatar = Image.new("RGBA", (size, size), (223, 235, 252, 255))
+        draw = ImageDraw.Draw(avatar)
+        draw.ellipse((0, 0, size - 1, size - 1), fill=(223, 235, 252, 255))
+
+        marker = (display_name.strip()[:1] or "週").upper()
+        font = MediaService._load_thumbnail_font(
+            font_path=settings.CMS_THUMBNAIL_FONT_BOLD_PATH,
+            size=max(26, size // 2),
+        )
+        text_box = MediaService._measure_text_box(
+            draw=draw,
+            text=marker,
+            font=font,
+        )
+        text_width = text_box[2] - text_box[0]
+        text_height = text_box[3] - text_box[1]
+        draw.text(
+            ((size - text_width) / 2, (size - text_height) / 2 - 4),
+            marker,
+            fill=(47, 95, 177),
+            font=font,
+        )
+        return avatar
+
+    @staticmethod
+    def _draw_brand_logo(
+        *,
+        image: Image.Image,
+        canvas_width: int,
+        canvas_height: int,
+    ) -> None:
+        """
+        週末カメラのロゴを描画する。
+        """
+        brand_logo_path = settings.CMS_THUMBNAIL_BRAND_IMAGE_PATH
+        if not brand_logo_path.exists():
+            raise RuntimeError(f"ブランドロゴPNGが存在しません: {brand_logo_path}")
+
+        with Image.open(brand_logo_path) as source_logo:
+            brand_logo = source_logo.convert("RGBA")
+
+        target_width = 300
+        source_width, source_height = brand_logo.size
+        target_height = max(1, round(source_height * (target_width / source_width)))
+        resized_logo = brand_logo.resize((target_width, target_height), Image.Resampling.LANCZOS)
+
+        margin_right = 92
+        margin_bottom = 70
+        paste_x = canvas_width - margin_right - target_width
+        paste_y = canvas_height - margin_bottom - target_height
+        image.paste(resized_logo, (paste_x, paste_y), resized_logo)
 
     @staticmethod
     def build_final_paths(*, file_name: str) -> tuple[Path, Path]:

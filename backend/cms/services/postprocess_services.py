@@ -26,7 +26,7 @@ class ArticlePostprocessService:
         """
         記事保存後処理を実行する。
         """
-        article = Article.objects.select_related("thumbnail_asset").get(id=article_id)
+        article = Article.objects.select_related("thumbnail_asset", "author").get(id=article_id)
         lock_token = str(image_diff["lock_token"])
         overall_failed = False
 
@@ -177,11 +177,15 @@ class ArticlePostprocessService:
             MediaService.generate_thumbnail_image(
                 asset=asset,
                 title_text=thumbnail_request.get("title_text") or article.title,
+                author_display_name=article.author.display_name or article.author.email,
+                author_icon_path=article.author.icon,
             )
         else:
             MediaService.generate_thumbnail_image(
                 asset=asset,
                 title_text="週末カメラ",
+                author_display_name=article.author.display_name or article.author.email,
+                author_icon_path=article.author.icon,
             )
 
         ArticleSaveLogService.create_log(

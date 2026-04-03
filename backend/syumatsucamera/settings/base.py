@@ -206,6 +206,10 @@ STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+CMS_THUMBNAIL_FONT_REGULAR_PATH = BASE_DIR / "cms" / "assets" / "fonts" / "NotoSansJP-Regular.otf"
+CMS_THUMBNAIL_FONT_BOLD_PATH = BASE_DIR / "cms" / "assets" / "fonts" / "NotoSansJP-Bold.otf"
+CMS_THUMBNAIL_BRAND_NAME = "週末カメラ"
+CMS_THUMBNAIL_BRAND_IMAGE_PATH = BASE_DIR / "cms" / "assets" / "brand" / "syumatsucamera-logo.png"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CORS_ALLOW_ALL_ORIGINS = True

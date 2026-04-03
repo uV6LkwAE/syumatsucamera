@@ -43,6 +43,22 @@ class ArticleSessionService:
         """
         編集セッションを作成して返す。
         """
+        ArticleSessionService._prune_stale_tmp_dirs()
+
+        if article_id is None:
+            reusable_session = ArticleSessionService._find_reusable_draft_session(user=user)
+            if reusable_session is not None:
+                expires_at = timezone.now() + timedelta(
+                    seconds=settings.CMS_ARTICLE_SESSION_TTL_SECONDS
+                )
+                reusable_session.lock_expires_at = expires_at.isoformat()
+                ArticleSessionService._store_session(reusable_session)
+                ArticleSessionService._ensure_tmp_dir(lock_token=reusable_session.lock_token)
+                return ArticleSessionService._build_response(
+                    session=reusable_session,
+                    article=None,
+                )
+
         article = None
         if article_id is not None:
             try:
@@ -268,13 +284,7 @@ class ArticleSessionService:
         raw = get_redis_client().get(ArticleSessionService._session_key(lock_token))
         if raw is None:
             return None
-        payload = json.loads(raw)
-        return ArticleSessionPayload(
-            lock_token=payload["lock_token"],
-            locked_by_id=payload["locked_by_id"],
-            article_id=payload.get("article_id"),
-            lock_expires_at=payload["lock_expires_at"],
-        )
+        return ArticleSessionService._deserialize_session(raw)
 
     @staticmethod
     def _delete_session(*, lock_token: str) -> None:
@@ -306,6 +316,85 @@ class ArticleSessionService:
             lock_expires_at=None,
             updated_at=timezone.now(),
         )
+
+    @staticmethod
+    def _deserialize_session(raw: str | bytes) -> ArticleSessionPayload:
+        """
+        Redis 取得値をセッション表現へ変換する。
+        """
+        payload = json.loads(raw)
+        return ArticleSessionPayload(
+            lock_token=payload["lock_token"],
+            locked_by_id=payload["locked_by_id"],
+            article_id=payload.get("article_id"),
+            lock_expires_at=payload["lock_expires_at"],
+        )
+
+    @staticmethod
+    def _find_reusable_draft_session(*, user: User) -> ArticleSessionPayload | None:
+        """
+        同一ユーザーの未記事紐付けセッションを再利用対象として返す。
+        """
+        redis_client = get_redis_client()
+        candidate: ArticleSessionPayload | None = None
+        duplicate_sessions: list[ArticleSessionPayload] = []
+
+        for key in redis_client.scan_iter(match=ArticleSessionService._session_key("*")):
+            raw = redis_client.get(key)
+            if raw is None:
+                continue
+
+            session = ArticleSessionService._deserialize_session(raw)
+            if session.locked_by_id != str(user.id) or session.article_id is not None:
+                continue
+
+            if candidate is None:
+                candidate = session
+                continue
+
+            candidate_expires_at = datetime.fromisoformat(candidate.lock_expires_at)
+            session_expires_at = datetime.fromisoformat(session.lock_expires_at)
+            if session_expires_at > candidate_expires_at:
+                duplicate_sessions.append(candidate)
+                candidate = session
+                continue
+
+            duplicate_sessions.append(session)
+
+        for duplicate_session in duplicate_sessions:
+            ArticleSessionService._delete_session(lock_token=duplicate_session.lock_token)
+            ArticleSessionService._cleanup_temp_dir(lock_token=duplicate_session.lock_token)
+
+        return candidate
+
+    @staticmethod
+    def _prune_stale_tmp_dirs() -> None:
+        """
+        TTL切れ後に残った tmp ディレクトリを削除する。
+        """
+        tmp_root = Path(settings.MEDIA_ROOT) / "tmp"
+        if not tmp_root.exists():
+            return
+
+        now_timestamp = timezone.now().timestamp()
+
+        for path in tmp_root.iterdir():
+            if not path.is_dir():
+                continue
+
+            try:
+                uuid.UUID(path.name)
+            except ValueError:
+                continue
+
+            if ArticleSessionService._get_session(lock_token=path.name) is not None:
+                continue
+
+            age_seconds = now_timestamp - path.stat().st_mtime
+            if age_seconds < settings.CMS_ARTICLE_SESSION_TTL_SECONDS:
+                continue
+
+            shutil.rmtree(path)
 
     @staticmethod
     def _session_key(lock_token: str) -> str:

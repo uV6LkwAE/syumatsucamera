@@ -12,7 +12,7 @@ from cms.models import (
     ImageJobStatus,
     PublishRequestStatus,
 )
-from users.models import User
+from users.models import User, UserRole
 
 
 class PublishRequestService:
@@ -26,6 +26,8 @@ class PublishRequestService:
         """
         公開申請を作成する。
         """
+        if user.role == UserRole.ADMIN:
+            raise ValidationError("管理者は公開申請ではなく公開状態を直接変更してください。")
         if article.status == ArticleStatus.PUBLISH and article.published_at is not None:
             raise ValidationError("すでに公開済みの記事には公開申請できません。")
         if article.publish_requests.filter(status=PublishRequestStatus.PENDING).exists():

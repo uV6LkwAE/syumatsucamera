@@ -60,6 +60,19 @@ type ArticleFormState = {
   tagIds: string[]
 }
 
+type ArticleEditorBootstrapPayload = {
+  categories: CmsCategoryTreeResponse['items']
+  optionCatalog: CmsArticleOptionItem[]
+  session: CmsArticleSessionResponse
+  article: CmsArticleDetail | null
+}
+
+type ArticleEditorBootstrapCacheEntry = {
+  consumers: number
+  lockToken: string
+  promise: Promise<ArticleEditorBootstrapPayload>
+}
+
 const ARTICLE_TITLE_MAX_LENGTH = 255
 const ARTICLE_SUMMARY_MAX_LENGTH = 200
 const ARTICLE_CUSTOM_OPTION_MAX_LENGTH = 100
@@ -101,6 +114,126 @@ const TWITTER_CARD_OPTIONS: Array<{
     label: 'summary',
   },
 ]
+
+const articleEditorBootstrapCache = new Map<string, ArticleEditorBootstrapCacheEntry>()
+
+function buildArticleEditorBootstrapKey(isCreate: boolean, articleId: string | undefined): string {
+  if (isCreate) {
+    return 'new'
+  }
+  return `article:${articleId ?? ''}`
+}
+
+async function fetchArticleEditorBootstrap(
+  isCreate: boolean,
+  articleId: string | undefined,
+): Promise<ArticleEditorBootstrapPayload> {
+  const [categoryPayload, optionPayload, sessionPayload] = await Promise.all([
+    apiRequest<CmsCategoryTreeResponse>('/cms/categories?limit=200'),
+    apiRequest<CmsArticleOptionListResponse>('/cms/article-options'),
+    apiRequest<CmsArticleSessionResponse>('/cms/article-sessions', {
+      method: 'POST',
+      body: isCreate ? {} : { article_id: articleId },
+    }),
+  ])
+
+  let article: CmsArticleDetail | null = null
+  if (!isCreate && articleId !== undefined) {
+    article = await apiRequest<CmsArticleDetail>(`/cms/articles/${articleId}`)
+  }
+
+  return {
+    categories: categoryPayload.items,
+    optionCatalog: optionPayload.items,
+    session: sessionPayload,
+    article,
+  }
+}
+
+function getArticleEditorBootstrapEntry(
+  isCreate: boolean,
+  articleId: string | undefined,
+): {
+  cacheKey: string
+  entry: ArticleEditorBootstrapCacheEntry
+} {
+  const cacheKey = buildArticleEditorBootstrapKey(isCreate, articleId)
+  const existingEntry = articleEditorBootstrapCache.get(cacheKey)
+  if (existingEntry !== undefined) {
+    return {
+      cacheKey,
+      entry: existingEntry,
+    }
+  }
+
+  const entry: ArticleEditorBootstrapCacheEntry = {
+    consumers: 0,
+    lockToken: '',
+    promise: Promise.resolve()
+      .then(() => fetchArticleEditorBootstrap(isCreate, articleId))
+      .then((payload) => {
+        const currentEntry = articleEditorBootstrapCache.get(cacheKey)
+        if (currentEntry === entry) {
+          currentEntry.lockToken = payload.session.lock_token
+          if (currentEntry.consumers === 0) {
+            void apiRequest(`/cms/article-sessions/${payload.session.lock_token}`, {
+              method: 'DELETE',
+            })
+              .catch(() => undefined)
+              .finally(() => {
+                if (articleEditorBootstrapCache.get(cacheKey) === currentEntry) {
+                  articleEditorBootstrapCache.delete(cacheKey)
+                }
+              })
+          }
+        }
+        return payload
+      })
+      .catch((error) => {
+        if (articleEditorBootstrapCache.get(cacheKey) === entry) {
+          articleEditorBootstrapCache.delete(cacheKey)
+        }
+        throw error
+      }),
+  }
+
+  articleEditorBootstrapCache.set(cacheKey, entry)
+  return {
+    cacheKey,
+    entry,
+  }
+}
+
+function releaseArticleEditorBootstrapEntry(
+  cacheKey: string,
+  releaseSessionOnLeave: boolean,
+  lockToken: string,
+): void {
+  const entry = articleEditorBootstrapCache.get(cacheKey)
+  if (entry === undefined) {
+    return
+  }
+
+  entry.consumers = Math.max(0, entry.consumers - 1)
+  if (entry.consumers > 0) {
+    return
+  }
+
+  if (!releaseSessionOnLeave) {
+    articleEditorBootstrapCache.delete(cacheKey)
+    return
+  }
+
+  const effectiveLockToken = lockToken.trim() !== '' ? lockToken : entry.lockToken
+  if (effectiveLockToken === '') {
+    return
+  }
+
+  articleEditorBootstrapCache.delete(cacheKey)
+  void apiRequest(`/cms/article-sessions/${effectiveLockToken}`, {
+    method: 'DELETE',
+  }).catch(() => undefined)
+}
 
 function createUuidFileName(name: string, mimeType: string): string {
   const extension = resolveFileExtension(name, mimeType)
@@ -217,6 +350,7 @@ export default function CmsArticleEditorPage({
   const releaseSessionOnLeaveRef = useRef(true)
   const sessionRefreshTimerRef = useRef<number | null>(null)
   const lockTokenRef = useRef('')
+  const bootstrapCacheKeyRef = useRef('')
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -244,57 +378,52 @@ export default function CmsArticleEditorPage({
 
   useEffect(() => {
     let active = true
+    const { cacheKey, entry } = getArticleEditorBootstrapEntry(isCreate, articleId)
+    bootstrapCacheKeyRef.current = cacheKey
+    entry.consumers += 1
 
     async function bootstrap(): Promise<void> {
       setLoading(true)
       setErrorMessage('')
       try {
-        const [categoryPayload, optionPayload, sessionPayload] = await Promise.all([
-          apiRequest<CmsCategoryTreeResponse>('/cms/categories?limit=200'),
-          apiRequest<CmsArticleOptionListResponse>('/cms/article-options'),
-          apiRequest<CmsArticleSessionResponse>('/cms/article-sessions', {
-            method: 'POST',
-            body: isCreate ? {} : { article_id: articleId },
-          }),
-        ])
+        const payload = await entry.promise
 
         if (!active) {
           return
         }
 
-        setCategories(categoryPayload.items)
-        setOptionCatalog(optionPayload.items)
-        setLockToken(sessionPayload.lock_token)
-        setLockExpiresAt(sessionPayload.lock_expires_at)
+        setCategories(payload.categories)
+        setOptionCatalog(payload.optionCatalog)
+        setLockToken(payload.session.lock_token)
+        setLockExpiresAt(payload.session.lock_expires_at)
 
-        if (!isCreate && articleId !== undefined) {
-          const detail = await apiRequest<CmsArticleDetail>(`/cms/articles/${articleId}`)
-          if (!active) {
-            return
-          }
-          const thumbnailAsset = findCurrentThumbnail(detail.media_assets)
-          setArticle(detail)
-          setInitialMediaAssets(detail.media_assets)
+        if (payload.article !== null) {
+          const thumbnailAsset = findCurrentThumbnail(payload.article.media_assets)
+          setArticle(payload.article)
+          setInitialMediaAssets(payload.article.media_assets)
           setCurrentThumbnailAsset(thumbnailAsset)
           setForm({
-            categoryId: detail.category_id,
-            title: detail.title,
-            summary: detail.summary,
-            bodyHtml: normalizeStoredArticleHtml(detail.body_html),
-            status: detail.status,
-            twitterCard: detail.twitter_card,
-            isPr: detail.article_option.is_pr,
-            isAd: detail.article_option.is_ad,
-            selectedOptionIds: detail.article_option.items
+            categoryId: payload.article.category_id,
+            title: payload.article.title,
+            summary: payload.article.summary,
+            bodyHtml: normalizeStoredArticleHtml(payload.article.body_html),
+            status: payload.article.status,
+            twitterCard: payload.article.twitter_card,
+            isPr: payload.article.article_option.is_pr,
+            isAd: payload.article.article_option.is_ad,
+            selectedOptionIds: payload.article.article_option.items
               .filter((item) => !item.is_system)
               .map((item) => item.id),
             customOptionLabels: [],
-            tagIds: detail.tags.map((tag) => tag.id),
+            tagIds: payload.article.tags.map((tag) => tag.id),
           })
           setThumbnailMode(thumbnailAsset === null ? 'generate_from_title' : 'keep_current')
           setThumbnailUploadFileName('')
           setThumbnailPreviewPath(thumbnailAsset?.public_path ?? '')
         } else {
+          setArticle(null)
+          setInitialMediaAssets([])
+          setCurrentThumbnailAsset(null)
           setForm(DEFAULT_ARTICLE_FORM)
           setThumbnailMode('generate_from_title')
           setThumbnailUploadFileName('')
@@ -316,6 +445,11 @@ export default function CmsArticleEditorPage({
 
     return () => {
       active = false
+      releaseArticleEditorBootstrapEntry(
+        cacheKey,
+        releaseSessionOnLeaveRef.current,
+        lockTokenRef.current,
+      )
     }
   }, [articleId, isCreate])
 
@@ -328,11 +462,6 @@ export default function CmsArticleEditorPage({
       if (sessionRefreshTimerRef.current !== null) {
         window.clearInterval(sessionRefreshTimerRef.current)
         sessionRefreshTimerRef.current = null
-      }
-      if (releaseSessionOnLeaveRef.current && lockTokenRef.current !== '') {
-        void apiRequest(`/cms/article-sessions/${lockTokenRef.current}`, {
-          method: 'DELETE',
-        }).catch(() => undefined)
       }
     }
   }, [])
@@ -535,6 +664,11 @@ export default function CmsArticleEditorPage({
   const previewThumbnailPath = thumbnailPreviewPath !== ''
     ? thumbnailPreviewPath
     : (thumbnailMode === 'keep_current' ? currentThumbnailAsset?.public_path ?? '' : '')
+  const canSubmitPublishRequest = (
+    article !== null
+    && sessionUser?.role === 'author'
+    && article.status !== 'publish'
+  )
 
   const selectableCustomOptions = optionCatalog.filter((option) => !option.is_system)
 
@@ -725,6 +859,7 @@ export default function CmsArticleEditorPage({
           helpLines={[
             '該当するカテゴリーを選択してください。',
             '複数選択はできません。',
+            'カテゴリーの作成, 編集, 削除はカテゴリータブから操作してください。',
           ]}
           compact
           showDivider={false}
@@ -974,7 +1109,7 @@ export default function CmsArticleEditorPage({
 
         <div className="cms-article-editor-footer d-flex justify-content-end">
           <div className="console-actions d-flex flex-wrap justify-content-end">
-            {!isCreate && (
+            {canSubmitPublishRequest && (
               <button
                 type="button"
                 className="console-secondary"
