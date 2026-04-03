@@ -1,12 +1,16 @@
 """
 DRF の例外レスポンスをプロジェクト標準形式へ整形する。
 """
+import logging
 from collections.abc import Mapping
 from typing import Any
 
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
+
+
+logger = logging.getLogger("django.request")
 
 
 def _stringify(value: Any) -> str:
@@ -81,6 +85,19 @@ def api_exception_handler(exc, context):
     """
     response = exception_handler(exc, context)
     if response is None:
+        request = context.get("request")
+        view = context.get("view")
+        request_path = getattr(request, "path", "-")
+        request_method = getattr(request, "method", "-")
+        view_name = view.__class__.__name__ if view is not None else "-"
+        logger.log(
+            logging.ERROR,
+            "Unhandled API exception path=%s method=%s view=%s",
+            request_path,
+            request_method,
+            view_name,
+            exc_info=exc,
+        )
         return Response(
             {
                 "detail": "サーバー内部でエラーが発生しました。",

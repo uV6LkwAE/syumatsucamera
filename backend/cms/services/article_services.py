@@ -126,13 +126,13 @@ class ArticleService:
             raise PermissionDenied("対象記事の削除権限がありません。")
 
         assets = list(article.media_assets.all())
-        thumbnail_asset = article.thumbnail_asset
+        article.thumbnail_asset = None
+        article.save(update_fields=["thumbnail_asset", "updated_at"])
         article.delete()
 
-        for asset in assets:
-            MediaService.delete_media_asset_files(asset=asset)
-        if thumbnail_asset is not None:
-            MediaService.delete_media_asset_files(asset=thumbnail_asset)
+        transaction.on_commit(
+            lambda: ArticleService._delete_article_asset_files(assets)
+        )
 
     @staticmethod
     def _upsert_article(*, user: User, article: Article, payload: dict, is_create: bool) -> ArticleMutationResult:
@@ -238,6 +238,14 @@ class ArticleService:
         """
         MediaService.delete_media_asset_files(asset=asset)
         asset.delete()
+
+    @staticmethod
+    def _delete_article_asset_files(assets: list[MediaAsset]) -> None:
+        """
+        削除済み記事に紐づいていたメディア実体を削除する。
+        """
+        for asset in assets:
+            MediaService.delete_media_asset_files(asset=asset)
 
     @staticmethod
     def _get_category(*, category_id):
