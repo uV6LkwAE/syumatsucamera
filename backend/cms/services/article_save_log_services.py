@@ -3,7 +3,7 @@
 """
 import uuid
 
-from django.utils import timezone
+from django.db.models import Q
 
 from cms.models import ArticleSaveLog, SaveLogStatus
 from cms.services.common import build_pagination_payload
@@ -19,6 +19,7 @@ class ArticleSaveLogService:
     def create_log(
         *,
         request_user_id,
+        article_id=None,
         lock_token: str,
         status: str,
         target: str | None = None,
@@ -29,6 +30,7 @@ class ArticleSaveLogService:
         """
         return ArticleSaveLog.objects.create(
             request_user_id=request_user_id,
+            article_id=article_id,
             lock_token=uuid.UUID(str(lock_token)),
             target=target,
             status=status,
@@ -41,6 +43,7 @@ class ArticleSaveLogService:
         user: User,
         page: int,
         limit: int,
+        article_id=None,
         request_user_id=None,
         occurred_at_from=None,
         occurred_at_to=None,
@@ -58,6 +61,13 @@ class ArticleSaveLogService:
         elif request_user_id is not None:
             queryset = queryset.filter(request_user_id=request_user_id)
 
+        if article_id is not None:
+            article_lock_tokens = queryset.filter(
+                article_id=article_id,
+            ).values_list("lock_token", flat=True)
+            queryset = queryset.filter(
+                Q(article_id=article_id) | Q(lock_token__in=article_lock_tokens),
+            )
         if occurred_at_from is not None:
             queryset = queryset.filter(occurred_at__gte=occurred_at_from)
         if occurred_at_to is not None:

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { apiRequest } from '../../../api/client'
 import CmsTabGuide from '../../../components/CmsTabGuide'
@@ -9,6 +9,8 @@ import type {
   CmsArticleAuthorOptionListResponse,
   CmsArticleListResponse,
   CmsArticleStatus,
+  CmsSaveLogItem,
+  CmsSaveLogListResponse,
 } from '../types'
 
 type CmsArticlesPageProps = {
@@ -24,6 +26,8 @@ type CmsArticleFilters = {
 
 type CmsArticleLocationState = {
   notice?: string
+  saveLogLockToken?: string
+  saveLogArticleTitle?: string
 }
 
 const DEFAULT_FILTERS: CmsArticleFilters = {
@@ -51,6 +55,7 @@ const LIMIT_OPTIONS: Array<ConsoleDropdownOption<number>> = [
   { value: 50, label: '50件' },
   { value: 100, label: '100件' },
 ]
+const SAVE_LOG_REFRESH_INTERVAL_MS = 10_000
 
 function toStatusLabel(status: CmsArticleStatus): string {
   if (status === 'draft') {
@@ -75,10 +80,31 @@ function toImageJobStatusLabel(status: string): string {
   return '失敗'
 }
 
+function toSaveLogStatusLabel(status: CmsSaveLogItem['status']): string {
+  if (status === 'started') {
+    return '開始'
+  }
+  if (status === 'completed') {
+    return '完了'
+  }
+  return '失敗'
+}
+
+function toSaveLogStatusIcon(status: CmsSaveLogItem['status']): string {
+  if (status === 'started') {
+    return 'bi-play-circle'
+  }
+  if (status === 'completed') {
+    return 'bi-check-circle'
+  }
+  return 'bi-exclamation-triangle'
+}
+
 export default function CmsArticlesPage({ embedded = false }: CmsArticlesPageProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const locationState = location.state as CmsArticleLocationState | null
+  const saveLogPollingTimerRef = useRef<number | null>(null)
 
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(20)
@@ -93,13 +119,44 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
   const [filters, setFilters] = useState<CmsArticleFilters>(DEFAULT_FILTERS)
   const [draftFilters, setDraftFilters] = useState<CmsArticleFilters>(DEFAULT_FILTERS)
   const [filtersExpanded, setFiltersExpanded] = useState(true)
+  const [saveLogOverlayOpen, setSaveLogOverlayOpen] = useState(
+    (locationState?.saveLogLockToken ?? '').trim() !== '',
+  )
+  const [saveLogPanelOpen, setSaveLogPanelOpen] = useState(true)
+  const [saveLogLockToken, setSaveLogLockToken] = useState(
+    locationState?.saveLogLockToken ?? '',
+  )
+  const [saveLogArticleTitle, setSaveLogArticleTitle] = useState(
+    locationState?.saveLogArticleTitle ?? '',
+  )
+  const [saveLogs, setSaveLogs] = useState<CmsSaveLogItem[]>([])
+  const [saveLogErrorMessage, setSaveLogErrorMessage] = useState('')
 
   useEffect(() => {
-    if (locationState?.notice === undefined) {
+    if (
+      locationState?.notice === undefined
+      && locationState?.saveLogLockToken === undefined
+      && locationState?.saveLogArticleTitle === undefined
+    ) {
       return
     }
     navigate(location.pathname, { replace: true, state: null })
-  }, [location.pathname, locationState?.notice, navigate])
+  }, [
+    location.pathname,
+    locationState?.notice,
+    locationState?.saveLogArticleTitle,
+    locationState?.saveLogLockToken,
+    navigate,
+  ])
+
+  useEffect(() => {
+    return () => {
+      if (saveLogPollingTimerRef.current !== null) {
+        window.clearInterval(saveLogPollingTimerRef.current)
+        saveLogPollingTimerRef.current = null
+      }
+    }
+  }, [])
 
   async function fetchAuthorOptions(): Promise<void> {
     setLoadingAuthors(true)
@@ -181,6 +238,28 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
     }
   }
 
+  async function fetchSaveLogs(currentLockToken: string): Promise<void> {
+    if (currentLockToken.trim() === '') {
+      return
+    }
+
+    const searchParams = new URLSearchParams({
+      page: '1',
+      limit: '100',
+      lock_token: currentLockToken,
+    })
+
+    try {
+      const payload = await apiRequest<CmsSaveLogListResponse>(
+        `/cms/article-save-logs?${searchParams.toString()}`,
+      )
+      setSaveLogs(payload.items)
+      setSaveLogErrorMessage('')
+    } catch (error) {
+      setSaveLogErrorMessage(toApiMessage(error))
+    }
+  }
+
   useEffect(() => {
     void fetchAuthorOptions()
   }, [])
@@ -188,6 +267,29 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
   useEffect(() => {
     void fetchArticles()
   }, [page, limit, filters])
+
+  useEffect(() => {
+    if (!saveLogOverlayOpen || saveLogLockToken.trim() === '') {
+      return
+    }
+
+    void fetchSaveLogs(saveLogLockToken)
+
+    if (saveLogPollingTimerRef.current !== null) {
+      window.clearInterval(saveLogPollingTimerRef.current)
+    }
+
+    saveLogPollingTimerRef.current = window.setInterval(() => {
+      void fetchSaveLogs(saveLogLockToken)
+    }, SAVE_LOG_REFRESH_INTERVAL_MS)
+
+    return () => {
+      if (saveLogPollingTimerRef.current !== null) {
+        window.clearInterval(saveLogPollingTimerRef.current)
+        saveLogPollingTimerRef.current = null
+      }
+    }
+  }, [saveLogLockToken, saveLogOverlayOpen])
 
   useEffect(() => {
     if (authorOptions.some((option) => option.value === draftFilters.author)) {
@@ -220,6 +322,29 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
       setErrorMessage(toApiMessage(error))
     }
   }
+
+  function closeSaveLogOverlay(): void {
+    setSaveLogOverlayOpen(false)
+    setSaveLogPanelOpen(true)
+    setSaveLogLockToken('')
+    setSaveLogArticleTitle('')
+    setSaveLogs([])
+    setSaveLogErrorMessage('')
+  }
+
+  const saveLogPeriodLabel = useMemo(() => {
+    if (saveLogs.length === 0) {
+      return 'ログ反映待ち'
+    }
+
+    const startedAt = saveLogs[saveLogs.length - 1]?.occurred_at
+    const endedAt = saveLogs[0]?.occurred_at
+    if (startedAt === undefined || endedAt === undefined) {
+      return 'ログ反映待ち'
+    }
+
+    return `${formatCmsDate(startedAt)} - ${formatCmsDate(endedAt)}`
+  }, [saveLogs])
 
   const content = (
     <>
@@ -481,6 +606,103 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
           </table>
         </div>
       </section>
+
+      {saveLogOverlayOpen && (
+        <div className="cms-save-log-modal-backdrop" role="dialog" aria-modal="true">
+          <div className="cms-save-log-modal-card">
+            <div className="cms-save-log-modal-head">
+              <div className="cms-save-log-modal-title-wrap">
+                <span className="cms-save-log-modal-badge">
+                  <i className="bi bi-journal-text" aria-hidden="true" />
+                </span>
+                <div className="cms-save-log-modal-title-copy">
+                  <strong>保存後処理ログ</strong>
+                  <span>{saveLogArticleTitle.trim() || '記事保存後処理'}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className={`cms-save-log-modal-toggle${
+                  saveLogPanelOpen ? ' is-expanded' : ''
+                }`}
+                onClick={() => setSaveLogPanelOpen((prev) => !prev)}
+                aria-expanded={saveLogPanelOpen}
+                aria-label={saveLogPanelOpen ? 'ログを閉じる' : 'ログを開く'}
+              >
+                <i className="bi bi-chevron-down" aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="cms-save-log-modal-meta">
+              <div>
+                <span>lock token</span>
+                <strong>{saveLogLockToken}</strong>
+              </div>
+              <div>
+                <span>ログ期間</span>
+                <strong>{saveLogPeriodLabel}</strong>
+              </div>
+            </div>
+
+            {saveLogErrorMessage !== '' && (
+              <div className="console-error">{saveLogErrorMessage}</div>
+            )}
+
+            <div
+              className={`console-expandable-region cms-save-log-modal-region${
+                saveLogPanelOpen ? ' is-expanded' : ''
+              }`}
+            >
+              <div className="console-expandable-region-inner">
+                <div className="cms-save-log-modal-list" aria-live="polite">
+                  {saveLogs.length === 0 ? (
+                    <div className="cms-save-log-modal-empty">
+                      <i className="bi bi-hourglass-split" aria-hidden="true" />
+                      <span>保存ログの反映を待っています。</span>
+                    </div>
+                  ) : (
+                    saveLogs.map((saveLog) => (
+                      <article
+                        key={`${saveLog.occurred_at}-${saveLog.target ?? '-'}-${saveLog.status}`}
+                        className={`cms-save-log-modal-item is-${saveLog.status}`}
+                      >
+                        <div className="cms-save-log-modal-item-icon">
+                          <i
+                            className={`bi ${toSaveLogStatusIcon(saveLog.status)}`}
+                            aria-hidden="true"
+                          />
+                        </div>
+                        <div className="cms-save-log-modal-item-body">
+                          <div className="cms-save-log-modal-item-top">
+                            <strong>{toSaveLogStatusLabel(saveLog.status)}</strong>
+                            <time>{formatCmsDate(saveLog.occurred_at)}</time>
+                          </div>
+                          <div className="cms-save-log-modal-item-target">
+                            対象: {saveLog.target?.trim() || '-'}
+                          </div>
+                          {saveLog.message !== null && saveLog.message.trim() !== '' && (
+                            <p className="cms-save-log-modal-item-message">{saveLog.message}</p>
+                          )}
+                        </div>
+                      </article>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="cms-save-log-modal-actions">
+              <button
+                type="button"
+                className="console-secondary"
+                onClick={closeSaveLogOverlay}
+              >
+                閉じる
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 

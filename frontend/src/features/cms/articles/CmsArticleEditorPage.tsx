@@ -622,6 +622,8 @@ export default function CmsArticleEditorPage({
         replace: true,
         state: {
           notice: `${response.postprocess_job.job_name} を受け付けました。保存後処理はバックグラウンドで続行します。`,
+          saveLogLockToken: lockToken,
+          saveLogArticleTitle: response.article.title,
         },
       })
     } catch (error) {

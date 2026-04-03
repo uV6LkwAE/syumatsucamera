@@ -200,6 +200,7 @@ class ArticleService:
 
         ArticleSaveLogService.create_log(
             request_user_id=user.id,
+            article_id=article.id,
             lock_token=str(image_diff["lock_token"]),
             target="article",
             status="started",

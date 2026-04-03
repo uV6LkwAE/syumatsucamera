@@ -656,6 +656,7 @@ paths:
       parameters:
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/ArticleIdQuery"
         - $ref: "#/components/parameters/RequestUserId"
         - $ref: "#/components/parameters/OccurredAtFrom"
         - $ref: "#/components/parameters/OccurredAtTo"
@@ -1339,6 +1340,13 @@ components:
       name: article_id
       in: path
       required: true
+      schema:
+        type: string
+        format: uuid
+    ArticleIdQuery:
+      name: article_id
+      in: query
+      required: false
       schema:
         type: string
         format: uuid

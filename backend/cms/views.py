@@ -258,6 +258,7 @@ class CmsArticleSaveLogsViewSet(ViewSet):
             user=request.user,
             page=query_serializer.validated_data["page"],
             limit=query_serializer.validated_data["limit"],
+            article_id=query_serializer.validated_data.get("article_id"),
             request_user_id=query_serializer.validated_data.get("request_user_id"),
             occurred_at_from=query_serializer.validated_data.get("occurred_at_from"),
             occurred_at_to=query_serializer.validated_data.get("occurred_at_to"),

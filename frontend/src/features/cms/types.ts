@@ -147,6 +147,7 @@ export type CmsImageUploadResponse = {
 
 export type CmsSaveLogItem = {
   occurred_at: string
+  article_id: string | null
   request_user_id: string
   request_user: CmsAuthorSummary
   lock_token: string

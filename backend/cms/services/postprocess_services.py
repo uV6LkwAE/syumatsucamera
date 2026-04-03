@@ -64,6 +64,7 @@ class ArticlePostprocessService:
             article.save(update_fields=["toc_json", "image_job_status", "published_at", "updated_at"])
             ArticleSaveLogService.create_log(
                 request_user_id=request_user_id,
+                article_id=article.id,
                 lock_token=lock_token,
                 target="article",
                 status=SaveLogStatus.COMPLETED,
@@ -75,6 +76,7 @@ class ArticlePostprocessService:
             article.save(update_fields=["image_job_status", "updated_at"])
             ArticleSaveLogService.create_log(
                 request_user_id=request_user_id,
+                article_id=article.id,
                 lock_token=lock_token,
                 target="article",
                 status=SaveLogStatus.FAILED,
@@ -90,6 +92,7 @@ class ArticlePostprocessService:
                 if not overall_failed:
                     ArticleSaveLogService.create_log(
                         request_user_id=request_user_id,
+                        article_id=article.id,
                         lock_token=lock_token,
                         target="lock",
                         status=SaveLogStatus.FAILED,
@@ -113,6 +116,7 @@ class ArticlePostprocessService:
             asset.delete()
             ArticleSaveLogService.create_log(
                 request_user_id=request_user_id,
+                article_id=article.id,
                 lock_token=lock_token,
                 target=target,
                 status=SaveLogStatus.COMPLETED,
@@ -136,6 +140,7 @@ class ArticlePostprocessService:
                 )
                 ArticleSaveLogService.create_log(
                     request_user_id=request_user_id,
+                    article_id=article.id,
                     lock_token=lock_token,
                     target=stored_file_name,
                     status=SaveLogStatus.COMPLETED,
@@ -144,6 +149,7 @@ class ArticlePostprocessService:
             except Exception as exc:
                 ArticleSaveLogService.create_log(
                     request_user_id=request_user_id,
+                    article_id=article.id,
                     lock_token=lock_token,
                     target=stored_file_name,
                     status=SaveLogStatus.FAILED,
@@ -190,6 +196,7 @@ class ArticlePostprocessService:
 
         ArticleSaveLogService.create_log(
             request_user_id=request_user_id,
+            article_id=article.id,
             lock_token=lock_token,
             target=asset.file_name,
             status=SaveLogStatus.COMPLETED,

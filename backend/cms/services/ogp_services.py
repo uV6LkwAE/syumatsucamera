@@ -48,6 +48,7 @@ class OgpService:
                     )
                 ArticleSaveLogService.create_log(
                     request_user_id=request_user_id,
+                    article_id=article.id,
                     lock_token=lock_token,
                     target=url,
                     status=SaveLogStatus.COMPLETED,
@@ -67,6 +68,7 @@ class OgpService:
                     )
                 ArticleSaveLogService.create_log(
                     request_user_id=request_user_id,
+                    article_id=article.id,
                     lock_token=lock_token,
                     target=url,
                     status=SaveLogStatus.FAILED,

@@ -532,6 +532,7 @@ class CmsArticleSaveLogQuerySerializer(serializers.Serializer):
         max_value=100,
         default=settings.REST_FRAMEWORK.get("PAGE_SIZE", 20),
     )
+    article_id = serializers.UUIDField(required=False)
     request_user_id = serializers.UUIDField(required=False)
     occurred_at_from = serializers.DateTimeField(required=False)
     occurred_at_to = serializers.DateTimeField(required=False)
@@ -546,6 +547,7 @@ class CmsArticleSaveLogSerializer(serializers.Serializer):
     """
 
     occurred_at = serializers.DateTimeField(read_only=True)
+    article_id = serializers.UUIDField(allow_null=True, read_only=True)
     request_user_id = serializers.UUIDField(read_only=True)
     request_user = CmsAuthorSummarySerializer(read_only=True)
     lock_token = serializers.UUIDField(read_only=True)

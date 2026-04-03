@@ -918,6 +918,7 @@ components:
       type: object
       required:
         - occurred_at
+        - article_id
         - request_user_id
         - request_user
         - lock_token
@@ -926,6 +927,11 @@ components:
         occurred_at:
           type: string
           format: date-time
+        article_id:
+          type:
+            - string
+            - "null"
+          format: uuid
         request_user_id:
           type: string
           format: uuid

@@ -450,6 +450,14 @@ class ArticleSaveLog(models.Model):
         related_name="article_save_logs",
         verbose_name="実行ユーザー",
     )
+    article = models.ForeignKey(
+        Article,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="save_logs",
+        verbose_name="記事",
+    )
     lock_token = models.UUIDField(verbose_name="ロックトークン")
     target = models.CharField(max_length=255, null=True, blank=True, verbose_name="対象")
     status = models.CharField(

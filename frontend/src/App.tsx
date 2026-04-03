@@ -24,6 +24,7 @@ import ContactsPage from './features/contacts/ContactsPage'
 import CmsArticleEditorPage from './features/cms/articles/CmsArticleEditorPage'
 import CmsArticlesPage from './features/cms/articles/CmsArticlesPage'
 import CmsCategoriesPage from './features/cms/categories/CmsCategoriesPage'
+import CmsArticleSaveLogsPage from './features/cms/logs/CmsArticleSaveLogsPage'
 import CmsPublishRequestsPage from './features/cms/requests/CmsPublishRequestsPage'
 import UsersPage from './features/users/UsersPage'
 
@@ -80,6 +81,12 @@ const CMS_NAV_ITEMS: CmsNavItem[] = [
     allowedRoles: ['admin', 'author'],
   },
   {
+    to: '/cms/console/logs',
+    label: 'ログ',
+    icon: 'bi-journal-text',
+    allowedRoles: ['admin', 'author'],
+  },
+  {
     to: '/cms/console/requests',
     label: 'リクエスト',
     icon: 'bi-inbox',
@@ -121,6 +128,7 @@ type CmsTabKey =
   | 'profile'
   | 'articles'
   | 'compose'
+  | 'logs'
   | 'requests'
   | 'categories'
   | 'contacts'
@@ -336,6 +344,9 @@ function getCmsActiveTab(pathname: string): CmsTabKey {
   }
   if (matchPath('/cms/console/articles/:articleId/edit', pathname) !== null) {
     return 'compose'
+  }
+  if (pathname.startsWith('/cms/console/logs')) {
+    return 'logs'
   }
   if (pathname === '/cms/console/articles') {
     return 'articles'
@@ -995,6 +1006,16 @@ function CmsConsolePage() {
         />
       )
     }
+    if (activeTab === 'logs') {
+      return (
+        <ConsoleHeroCard
+          badge="ログ"
+          title="保存ログ"
+          subtitle="記事ごとの保存後処理ログを確認し、lock token 単位で実行履歴を追跡します。"
+          icon="bi-journal-text"
+        />
+      )
+    }
     if (activeTab === 'requests') {
       return (
         <ConsoleHeroCard
@@ -1075,6 +1096,9 @@ function CmsConsolePage() {
     }
     if (activeTab === 'compose') {
       return <CmsArticleEditorPage embedded />
+    }
+    if (activeTab === 'logs') {
+      return <CmsArticleSaveLogsPage embedded />
     }
     if (activeTab === 'categories') {
       return <CmsCategoriesPage embedded />
@@ -1207,6 +1231,14 @@ export default function App() {
           <Route path="articles/:articleId/edit" element={<CmsConsolePage />} />
           <Route
             path="articles"
+            element={<CmsConsolePage />}
+          />
+          <Route
+            path="logs"
+            element={<CmsConsolePage />}
+          />
+          <Route
+            path="logs/:articleId"
             element={<CmsConsolePage />}
           />
           <Route
