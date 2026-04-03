@@ -17,13 +17,22 @@ Including another URLconf
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
+from django.contrib.sitemaps.views import sitemap
 from django.urls import include, path
 
+from cms.sitemaps import ArticleSitemap, CategorySitemap, StaticViewSitemap
 from .views import health
 from users.views import DevelopmentAccessTokenView
 
+sitemaps = {
+    "static": StaticViewSitemap,
+    "articles": ArticleSitemap,
+    "categories": CategorySitemap,
+}
+
 urlpatterns = [
     path("health", health),
+    path("sitemap.xml", sitemap, {"sitemaps": sitemaps}, name="django-sitemap"),
     path(
         "api/system/dev-access-token",
         DevelopmentAccessTokenView.as_view(),
