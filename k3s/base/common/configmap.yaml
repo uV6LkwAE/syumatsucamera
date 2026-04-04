@@ -21,3 +21,4 @@ data:
   APP_LOG_LEVEL: "INFO"
   LOG_FILE_INFO: "info.log"
   LOG_FILE_CRITICAL: "critical.log"
+  CDN_BASE_URL: "https://media.syumatsucamera.com/"
