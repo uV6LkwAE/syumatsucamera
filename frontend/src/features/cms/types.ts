@@ -189,3 +189,29 @@ export type CmsPublishRequestListResponse = {
     total_pages: number
   }
 }
+
+export type CmsOgpRecord = {
+  id: string
+  article_id: string
+  url: string
+  title: string | null
+  summary: string | null
+  thumbnail: string | null
+  site_name: string | null
+  updated_at: string
+}
+
+export type CmsOgpRecordListResponse = {
+  items: CmsOgpRecord[]
+  pagination: {
+    page: number
+    page_size: number
+    total_count: number
+    total_pages: number
+  }
+}
+
+export type CmsAcceptedJob = {
+  job_name: string
+  status: 'accepted'
+}

@@ -220,8 +220,8 @@ export default function CmsPublishRequestsPage({
           </div>
         </div>
 
-        <div className="console-table-scroll cms-request-table-scroll">
-          <table className="console-table-basic cms-request-table">
+        <div className="table-responsive console-table-scroll cms-request-table-scroll">
+          <table className="table table-hover align-middle mb-0 console-table-basic cms-request-table">
             <thead>
               <tr>
                 <th>記事</th>

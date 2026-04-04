@@ -25,6 +25,7 @@ import CmsArticleEditorPage from './features/cms/articles/CmsArticleEditorPage'
 import CmsArticlesPage from './features/cms/articles/CmsArticlesPage'
 import CmsCategoriesPage from './features/cms/categories/CmsCategoriesPage'
 import CmsArticleSaveLogsPage from './features/cms/logs/CmsArticleSaveLogsPage'
+import CmsOgpRecordsPage from './features/cms/ogp/CmsOgpRecordsPage'
 import CmsPublishRequestsPage from './features/cms/requests/CmsPublishRequestsPage'
 import UsersPage from './features/users/UsersPage'
 
@@ -1113,16 +1114,7 @@ function CmsConsolePage() {
       return <UsersPage embedded />
     }
     if (activeTab === 'ogp') {
-      return (
-        <CmsTabPlaceholder
-          title="OGPキャッシュの確認"
-          helpLines={[
-            '公開前にタイトルや画像の取得結果を確認できます。',
-            '再取得や更新系の操作はこのタブに集約します。',
-            '未実装の機能は順次追加します。',
-          ]}
-        />
-      )
+      return <CmsOgpRecordsPage embedded />
     }
     return (
       <CmsTabPlaceholder

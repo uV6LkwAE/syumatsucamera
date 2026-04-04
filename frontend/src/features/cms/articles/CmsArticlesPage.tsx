@@ -544,8 +544,8 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
 
         <hr className="cms-console-divider cms-article-section-divider" />
 
-        <div className="console-table-scroll cms-article-table-scroll">
-          <table className="console-table-basic cms-article-table">
+        <div className="table-responsive console-table-scroll cms-article-table-scroll">
+          <table className="table table-hover align-middle mb-0 console-table-basic cms-article-table">
             <thead>
               <tr>
                 <th>タイトル</th>

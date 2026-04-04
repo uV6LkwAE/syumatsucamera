@@ -324,8 +324,8 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
             再読み込み
           </button>
         </div>
-        <div className="console-table-scroll">
-          <table className="console-table-basic">
+        <div className="table-responsive console-table-scroll">
+          <table className="table table-hover align-middle mb-0 console-table-basic">
             <thead>
               <tr>
                 <th>メールアドレス</th>

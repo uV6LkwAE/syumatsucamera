@@ -122,6 +122,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "mptt",
     "cms",
+    "ogp",
     "users",
     "contacts",
 ]
@@ -181,7 +182,7 @@ CLOUDFLARE_ACCESS_CERTS_URL = f"{CLOUDFLARE_ACCESS_ISSUER}/cdn-cgi/access/certs"
 CLOUDFLARE_ACCESS_PROTECTED_PATH_PREFIXES = (
     "/api/cms/",
     "/api/users/",
-    "/api/ogp/",
+    "/api/ogp",
 )
 TURNSTILE_SITE_KEY = _env("TURNSTILE_SITE_KEY")
 TURNSTILE_SECRET_KEY = _env("TURNSTILE_SECRET_KEY")
