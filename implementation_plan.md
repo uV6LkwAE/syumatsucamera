@@ -80,13 +80,8 @@
 - 公開側 SPA が必要とする read API を揃える
 
 実装対象:
-- トップ
-- 新着一覧
-- 人気一覧
+- 公開記事一覧
 - 記事詳細
-- カテゴリ一覧
-- タグ一覧
-- 検索
 
 完了条件:
 - `publish` 記事だけが返る
@@ -201,16 +196,12 @@
 
 ### Phase 6: public
 
-1. `GET /api/public/articles/new`
-2. `GET /api/public/articles/popular`
-3. `GET /api/public/home`
-4. `GET /api/public/articles/{category_slug}/{article_slug}`
-5. `GET /api/public/categories/{category_slug}/articles`
-6. `GET /api/public/tags/{tag_slug}/articles`
-7. `GET /api/public/search`
+1. `GET /api/public/articles`
+2. `GET /api/public/articles/{category_slug}/{article_slug}`
 
 補足:
 - 公開APIは `publish` 記事のみ返す
+- 新着/人気/カテゴリ/タグ/タイトル検索/著者絞り込みは `GET /api/public/articles` のクエリで表現する
 - 記事詳細で Redis PV 加算を入れる
 - 記事詳細は `path`、`category.path`、`article_option`、`toc`、`ogp_by_url` を返す
 
@@ -265,13 +256,8 @@
 
 ### public
 
-1. `GET /api/public/articles/new`
-2. `GET /api/public/articles/popular`
-3. `GET /api/public/home`
-4. `GET /api/public/articles/{category_slug}/{article_slug}`
-5. `GET /api/public/categories/{category_slug}/articles`
-6. `GET /api/public/tags/{tag_slug}/articles`
-7. `GET /api/public/search`
+1. `GET /api/public/articles`
+2. `GET /api/public/articles/{category_slug}/{article_slug}`
 
 ### contacts
 

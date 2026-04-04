@@ -40,6 +40,7 @@ urlpatterns = [
     ),
     path("api/", include("contacts.urls")),
     path("api/", include("ogp.urls")),
+    path("api/", include("public.urls")),
     path("api/cms/", include("cms.urls")),
     path("api/users/", include("users.urls")),
     path("admin/", admin.site.urls),

@@ -164,6 +164,7 @@ components:
         - published_at
         - views_total
         - category
+        - author
         - thumbnail_url
         - path
         - article_option
@@ -187,6 +188,8 @@ components:
           type: string
         category:
           $ref: "#/components/schemas/PublicCategorySummary"
+        author:
+          $ref: "#/components/schemas/UsersAuthorSummary"
         article_option:
           $ref: "#/components/schemas/ArticleOption"
     PublicArticleList:
@@ -202,22 +205,6 @@ components:
             $ref: "#/components/schemas/PublicArticleSummary"
         pagination:
           $ref: "#/components/schemas/CommonPagination"
-    PublicHome:
-      type: object
-      required:
-        - popular_articles
-        - latest_articles
-      properties:
-        popular_articles:
-          type: array
-          maxItems: 6
-          items:
-            $ref: "#/components/schemas/PublicArticleSummary"
-        latest_articles:
-          type: array
-          maxItems: 6
-          items:
-            $ref: "#/components/schemas/PublicArticleSummary"
     CmsTocNode:
       type: object
       required:

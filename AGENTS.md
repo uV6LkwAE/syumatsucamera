@@ -469,13 +469,20 @@ AmazonリンクをOGP対象外とする理由:
 ## 3.4 カテゴリ一覧
 - 指定カテゴリの子孫を含む公開記事を一覧表示。
 - 12件ページング。
+- 公開記事一覧APIは `GET /api/public/articles?category_slug={categorySlug}` を使う。
 
 ## 3.5 タグ一覧
 - 公開記事を一覧表示する。
 - 12件ページング。
+- 公開記事一覧APIは `GET /api/public/articles?tag_slug={tagSlug}` を使う。
 
 ## 3.6 検索
 - クエリパラメータ `q` を記事タイトルで部分一致検索。
+- 新着/人気/カテゴリ/タグ/タイトル検索/著者絞り込みは `GET /api/public/articles` のクエリへ統合する。
+  - `ordering=newest|popular`
+  - `category_slug`
+  - `tag_slug`
+  - `author_id`
 
 ## 3.7 sitemap.xml（SEO）
 - `django.contrib.sitemaps` を利用して `sitemap.xml` を生成する。

@@ -77,49 +77,24 @@ paths:
             application/json:
               schema:
                 $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
-  /api/public/home:
+  /api/public/articles:
     get:
       tags:
         - public
-      summary: トップページ用の人気記事と新着記事を返す
-      operationId: getPublicHome
-      security: []
-      parameters:
-        - $ref: "#/components/parameters/Limit"
-      responses:
-        "200":
-          description: 正常
-          content:
-            application/json:
-              schema:
-                $ref: "./components/schemas.yaml#/components/schemas/PublicHome"
-  /api/public/articles/new:
-    get:
-      tags:
-        - public
-      summary: 公開記事の新着一覧を返す
-      operationId: listNewArticles
+      summary: 公開記事一覧を返す
+      description: |
+        公開状態の記事のみを返す。
+        トップページの新着/人気、カテゴリ一覧、タグ一覧、タイトル検索、著者別一覧はこのAPIのクエリで表現する。
+      operationId: listPublicArticles
       security: []
       parameters:
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/Limit"
-      responses:
-        "200":
-          description: 正常
-          content:
-            application/json:
-              schema:
-                $ref: "./components/schemas.yaml#/components/schemas/PublicArticleList"
-  /api/public/articles/popular:
-    get:
-      tags:
-        - public
-      summary: 公開記事の人気一覧を返す
-      operationId: listPopularArticles
-      security: []
-      parameters:
-        - $ref: "#/components/parameters/Page"
-        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/PublicArticleSearchQuery"
+        - $ref: "#/components/parameters/PublicArticleOrdering"
+        - $ref: "#/components/parameters/PublicCategorySlugQuery"
+        - $ref: "#/components/parameters/PublicTagSlugQuery"
+        - $ref: "#/components/parameters/PublicAuthorIdQuery"
       responses:
         "200":
           description: 正常
@@ -150,72 +125,6 @@ paths:
             application/json:
               schema:
                 $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
-  /api/public/categories/{category_slug}/articles:
-    get:
-      tags:
-        - public
-      summary: 指定カテゴリと子孫カテゴリに属する公開記事一覧を返す
-      operationId: listCategoryArticles
-      security: []
-      parameters:
-        - $ref: "#/components/parameters/CategorySlug"
-        - $ref: "#/components/parameters/Page"
-        - $ref: "#/components/parameters/Limit"
-      responses:
-        "200":
-          description: 正常
-          content:
-            application/json:
-              schema:
-                $ref: "./components/schemas.yaml#/components/schemas/PublicArticleList"
-        "404":
-          description: カテゴリが存在しない
-          content:
-            application/json:
-              schema:
-                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
-  /api/public/tags/{tag_slug}/articles:
-    get:
-      tags:
-        - public
-      summary: 指定タグに属する公開記事一覧を返す
-      operationId: listTagArticles
-      security: []
-      parameters:
-        - $ref: "#/components/parameters/TagSlug"
-        - $ref: "#/components/parameters/Page"
-        - $ref: "#/components/parameters/Limit"
-      responses:
-        "200":
-          description: 正常
-          content:
-            application/json:
-              schema:
-                $ref: "./components/schemas.yaml#/components/schemas/PublicArticleList"
-        "404":
-          description: タグが存在しない
-          content:
-            application/json:
-              schema:
-                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
-  /api/public/search:
-    get:
-      tags:
-        - public
-      summary: タイトル部分一致で公開記事を検索する
-      operationId: searchArticles
-      security: []
-      parameters:
-        - $ref: "#/components/parameters/SearchQuery"
-        - $ref: "#/components/parameters/Page"
-        - $ref: "#/components/parameters/Limit"
-      responses:
-        "200":
-          description: 正常
-          content:
-            application/json:
-              schema:
-                $ref: "./components/schemas.yaml#/components/schemas/PublicArticleList"
   /api/users/session/me:
     get:
       tags:
@@ -1301,6 +1210,41 @@ components:
       schema:
         type: string
         minLength: 1
+    PublicArticleSearchQuery:
+      name: q
+      in: query
+      required: false
+      schema:
+        type: string
+    PublicArticleOrdering:
+      name: ordering
+      in: query
+      required: false
+      schema:
+        type: string
+        enum:
+          - newest
+          - popular
+        default: newest
+    PublicCategorySlugQuery:
+      name: category_slug
+      in: query
+      required: false
+      schema:
+        type: string
+    PublicTagSlugQuery:
+      name: tag_slug
+      in: query
+      required: false
+      schema:
+        type: string
+    PublicAuthorIdQuery:
+      name: author_id
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
     CmsArticleOrdering:
       name: ordering
       in: query

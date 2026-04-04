@@ -122,6 +122,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "mptt",
     "cms",
+    "public",
     "ogp",
     "users",
     "contacts",
