@@ -8,7 +8,6 @@ import ConsoleDropdown from '../../../components/ConsoleDropdown'
 import CmsTabGuide from '../../../components/CmsTabGuide'
 import CmsCategoryVisualPicker from '../components/CmsCategoryVisualPicker'
 import {
-  formatCmsDate,
   normalizeStoredArticleHtml,
   resolveDeleteImageIds,
   toApiMessage,
@@ -1132,37 +1131,6 @@ export default function CmsArticleEditorPage({
           </div>
         </div>
       </div>
-
-      {article !== null && (
-        <div className="console-card">
-          <div className="console-card-header">
-            <h2>現在の状態</h2>
-            <p>記事 ID、更新日時、画像後処理状態を確認できます。</p>
-          </div>
-          <div className="cms-article-meta-grid row g-3">
-            <div className="col-12 col-md-6">
-              <strong>記事ID</strong>
-              <span>{article.id}</span>
-            </div>
-            <div className="col-12 col-md-6">
-              <strong>スラッグ</strong>
-              <span>{article.slug}</span>
-            </div>
-            <div className="col-12 col-md-6">
-              <strong>更新日時</strong>
-              <span>{formatCmsDate(article.updated_at)}</span>
-            </div>
-            <div className="col-12 col-md-6">
-              <strong>画像処理</strong>
-              <span>{article.image_job_status}</span>
-            </div>
-          </div>
-          <div className="cms-article-help-text">
-            保存後は編集ロックがバックグラウンドジョブ側で解放されます。
-            続けて編集する場合は記事タブの一覧から再度開いてください。
-          </div>
-        </div>
-      )}
     </>
   )
 
