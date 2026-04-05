@@ -27,33 +27,20 @@ import CmsCategoriesPage from './features/cms/categories/CmsCategoriesPage'
 import CmsArticleSaveLogsPage from './features/cms/logs/CmsArticleSaveLogsPage'
 import CmsOgpRecordsPage from './features/cms/ogp/CmsOgpRecordsPage'
 import CmsPublishRequestsPage from './features/cms/requests/CmsPublishRequestsPage'
+import {
+  PublicArticleDetailPage,
+  PublicCategoryArticlesPage,
+  PublicContactPage,
+  PublicHomePage,
+  PublicLayout,
+  PublicNewestArticlesPage,
+  PublicNotFoundPage,
+  PublicPopularArticlesPage,
+  PublicSearchPage,
+  PublicServerErrorPage,
+  PublicTagArticlesPage,
+} from './features/public/PublicPages'
 import UsersPage from './features/users/UsersPage'
-
-function Home() {
-  return (
-    <main className="page">
-      <h1>週末カメラ</h1>
-      <p>
-        ご覧いただきありがとうございます。
-        <br />
-        現在、週末カメラは新サイトへ移行作業中です。
-        <br />
-        ご不便をおかけしますが、再開まで今しばらくお待ちください。
-        <br />
-        再開は5月中を予定しています。
-        <br />
-        <br />
-        お問い合わせは以下のメールアドレスより受け付けております。
-        <br />
-        <br />
-        syumatsu.camera[*]gmail.com
-        <br />
-        <br />
-        *を@に置き換えてください。
-      </p>
-    </main>
-  )
-}
 
 type CmsNavItem = {
   to: string
@@ -1185,13 +1172,7 @@ function CmsNotFound() {
 }
 
 function NotFound() {
-  return (
-    <main className="page">
-      <h1>404</h1>
-      <p>ページが見つかりませんでした。</p>
-      <Link to="/">トップへ戻る</Link>
-    </main>
-  )
+  return <PublicNotFoundPage />
 }
 
 function GlobalApiLoadingIndicator() {
@@ -1213,7 +1194,6 @@ export default function App() {
     <>
       <GlobalApiLoadingIndicator />
       <Routes>
-        <Route path="/" element={<Home />} />
         <Route path="/cms" element={<Navigate to="/cms/console/profile" replace />} />
         <Route path="/cms/console" element={<CmsConsoleLayout />}>
           <Route index element={<Navigate to="/cms/console/profile" replace />} />
@@ -1256,7 +1236,25 @@ export default function App() {
           <Route path="impressions" element={<CmsConsolePage />} />
         </Route>
         <Route path="/cms/*" element={<CmsNotFound />} />
-        <Route path="*" element={<NotFound />} />
+        <Route element={<PublicLayout />}>
+          <Route path="/" element={<PublicHomePage />} />
+          <Route path="/articles/new" element={<PublicNewestArticlesPage />} />
+          <Route path="/articles/popular" element={<PublicPopularArticlesPage />} />
+          <Route
+            path="/articles/:categorySlug/:articleSlug"
+            element={<PublicArticleDetailPage />}
+          />
+          <Route
+            path="/category/:categorySlug"
+            element={<PublicCategoryArticlesPage />}
+          />
+          <Route path="/tag/:tagSlug" element={<PublicTagArticlesPage />} />
+          <Route path="/search" element={<PublicSearchPage />} />
+          <Route path="/contact" element={<PublicContactPage />} />
+          <Route path="/error/404" element={<PublicNotFoundPage />} />
+          <Route path="/error/500" element={<PublicServerErrorPage />} />
+          <Route path="*" element={<PublicNotFoundPage />} />
+        </Route>
       </Routes>
     </>
   )
