@@ -3,10 +3,14 @@ cms アプリのモデルを定義する。
 """
 import uuid
 
+from django.contrib.postgres.fields import ArrayField
+from django.contrib.postgres.indexes import GinIndex
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Q
+from django.db.models.deletion import ProtectedError
+from django.db.models.signals import pre_delete, pre_save
 from django.db.models.functions import Lower
+from django.dispatch import receiver
 from mptt.models import MPTTModel, TreeForeignKey
 
 from users.models import User
@@ -154,7 +158,7 @@ class Option(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     code = models.CharField(max_length=64, unique=True, verbose_name="コード")
     label = models.CharField(max_length=100, verbose_name="表示名")
-    default_text = models.TextField(null=True, blank=True, verbose_name="既定文言")
+    description = models.TextField(null=True, blank=True, verbose_name="説明文")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="更新日時")
 
@@ -162,6 +166,12 @@ class Option(models.Model):
         ordering = ["code"]
         verbose_name = "オプション"
         verbose_name_plural = "オプション"
+        constraints = [
+            models.UniqueConstraint(
+                Lower("label"),
+                name="cms_option_label_ci_unique",
+            ),
+        ]
 
     def __str__(self) -> str:
         """
@@ -245,17 +255,20 @@ class Article(models.Model):
         related_name="articles",
         verbose_name="タグ",
     )
-    options = models.ManyToManyField(
-        Option,
-        through="ArticleOption",
-        related_name="articles",
-        verbose_name="記事オプション",
+    option = ArrayField(
+        models.UUIDField(),
+        blank=True,
+        default=list,
+        verbose_name="記事オプションID",
     )
 
     class Meta:
         ordering = ["-updated_at"]
         verbose_name = "記事"
         verbose_name_plural = "記事"
+        indexes = [
+            GinIndex(fields=["option"], name="cms_article_option_gin"),
+        ]
         constraints = [
             models.UniqueConstraint(
                 fields=["category", "slug"],
@@ -332,38 +345,6 @@ class ArticleTag(models.Model):
         return super().save(*args, **kwargs)
 
 
-class ArticleOption(models.Model):
-    """
-    記事とオプションの中間テーブル。
-    """
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    article = models.ForeignKey(
-        Article,
-        on_delete=models.CASCADE,
-        related_name="article_options",
-        verbose_name="記事",
-    )
-    option = models.ForeignKey(
-        Option,
-        on_delete=models.CASCADE,
-        related_name="article_options",
-        verbose_name="オプション",
-    )
-    override_text = models.TextField(null=True, blank=True, verbose_name="上書き文言")
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")
-
-    class Meta:
-        verbose_name = "記事オプション"
-        verbose_name_plural = "記事オプション"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["article", "option"],
-                name="cms_article_option_unique",
-            )
-        ]
-
-
 class MediaAsset(models.Model):
     """
     記事画像メタ情報を保持する。
@@ -393,6 +374,31 @@ class MediaAsset(models.Model):
         ordering = ["created_at"]
         verbose_name = "メディアアセット"
         verbose_name_plural = "メディアアセット"
+
+
+@receiver(pre_delete, sender=Option)
+def protect_option_delete_when_used(sender, instance: Option, **kwargs) -> None:
+    """
+    記事から参照されているオプションの削除を拒否する。
+    """
+    if Article.objects.filter(option__contains=[instance.id]).exists():
+        raise ProtectedError("記事に紐づいているオプションは削除できません。", [instance])
+
+
+@receiver(pre_save, sender=Article)
+def normalize_article_option_ids(sender, instance: Article, **kwargs) -> None:
+    """
+    Article.option の重複IDを保存前に取り除く。
+    """
+    normalized_options = []
+    seen_option_ids = set()
+    for option_id in instance.option or []:
+        option_key = str(option_id)
+        if option_key in seen_option_ids:
+            continue
+        seen_option_ids.add(option_key)
+        normalized_options.append(option_id)
+    instance.option = normalized_options
 
 
 class ArticlePublishRequest(models.Model):

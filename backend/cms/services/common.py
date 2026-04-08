@@ -102,6 +102,11 @@ def ensure_default_options() -> dict[str, Option]:
     }
     resolved: dict[str, Option] = {}
     for code, label in option_map.items():
-        option, _ = Option.objects.get_or_create(code=code, defaults={"label": label})
+        option, _ = Option.objects.get_or_create(
+            code=code,
+            defaults={
+                "label": label,
+            },
+        )
         resolved[code] = option
     return resolved

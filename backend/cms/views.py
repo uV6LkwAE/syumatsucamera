@@ -8,9 +8,11 @@ from rest_framework.viewsets import ViewSet
 
 from core.permissions.permissions import AdminOnlyReadWrite, AuthorAdminReadWrite
 from cms.serializers import (
+    ArticleOptionSerializer,
     CmsArticleAuthorOptionListSerializer,
     CmsArticleImageUploadRequestSerializer,
     CmsArticleImageUploadResponseSerializer,
+    CmsArticleOptionCreateUpdateRequestSerializer,
     CmsArticleListQuerySerializer,
     CmsArticleListSerializer,
     CmsArticleMutationResponseSerializer,
@@ -166,6 +168,7 @@ class CmsArticleOptionsViewSet(ViewSet):
     """
 
     permission_classes = [AuthorAdminReadWrite]
+    lookup_value_regex = "[0-9a-fA-F-]{36}"
 
     def list(self, request):
         """
@@ -176,6 +179,40 @@ class CmsArticleOptionsViewSet(ViewSet):
         }
         response_serializer = CmsArticleOptionListSerializer(payload)
         return Response(response_serializer.data)
+
+    def create(self, request):
+        """
+        記事オプションを作成する。
+        """
+        request_serializer = CmsArticleOptionCreateUpdateRequestSerializer(data=request.data)
+        request_serializer.is_valid(raise_exception=True)
+        option = ArticleOptionService.create_option(
+            label=request_serializer.validated_data["label"],
+            description=request_serializer.validated_data["description"],
+        )
+        response_serializer = ArticleOptionSerializer(ArticleOptionService.serialize_option(option=option))
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+    def partial_update(self, request, pk=None):
+        """
+        記事オプションを更新する。
+        """
+        request_serializer = CmsArticleOptionCreateUpdateRequestSerializer(data=request.data)
+        request_serializer.is_valid(raise_exception=True)
+        option = ArticleOptionService.update_option(
+            option_id=pk,
+            label=request_serializer.validated_data["label"],
+            description=request_serializer.validated_data["description"],
+        )
+        response_serializer = ArticleOptionSerializer(ArticleOptionService.serialize_option(option=option))
+        return Response(response_serializer.data)
+
+    def destroy(self, request, pk=None):
+        """
+        記事オプションを削除する。
+        """
+        ArticleOptionService.delete_option(option_id=pk)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class CmsTagsViewSet(ViewSet):

@@ -3476,23 +3476,84 @@ body {
 }
 
 .cms-article-option-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
   padding-top: 0.15rem;
 }
 
-.cms-article-option-grid .console-inline-label {
+.cms-article-option-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-height: 100%;
+  padding: 1rem;
+  border: 1px solid #d1dceb;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #183651;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.cms-article-option-choice:hover {
+  border-color: #88a8ce;
+  background: #f7fbff;
+}
+
+.cms-article-option-choice.is-selected {
+  border-color: #6f9460;
+  background: #f5faf2;
+  box-shadow: 0 0 0 3px rgba(111, 148, 96, 0.12);
+}
+
+.cms-article-option-choice-head {
   display: inline-flex;
   align-items: center;
   gap: 0.6rem;
   font-size: 0.98rem;
+  font-weight: 700;
 }
 
-.cms-article-option-grid .console-inline-label input[type="checkbox"] {
+.cms-article-option-choice-head input[type="checkbox"] {
+  appearance: none;
+  display: inline-grid;
+  place-items: center;
   width: 1.2rem;
   height: 1.2rem;
+  margin: 0;
   flex-shrink: 0;
+  border: 2px solid #b7c5d7;
+  border-radius: 999px;
+  background: #ffffff;
+}
+
+.cms-article-option-choice-head input[type="checkbox"]::before {
+  content: "";
+  width: 0.52rem;
+  height: 0.52rem;
+  border-radius: 999px;
+  background: #6f9460;
+  transform: scale(0);
+  transition: transform 0.16s ease;
+}
+
+.cms-article-option-choice-head input[type="checkbox"]:checked {
+  border-color: #6f9460;
+}
+
+.cms-article-option-choice-head input[type="checkbox"]:checked::before {
+  transform: scale(1);
+}
+
+.cms-article-option-choice-text {
+  min-height: 1.5em;
+  color: #5f7188;
+  font-size: 0.86rem;
+  line-height: 1.65;
 }
 
 .cms-article-existing-options,
@@ -3529,6 +3590,36 @@ body {
 
 .cms-article-custom-option-row {
   margin-top: 1rem;
+}
+
+.cms-options-shell {
+  width: 100%;
+  margin-right: 0;
+  margin-left: 0;
+}
+
+.cms-options-table {
+  min-width: 720px;
+}
+
+.cms-options-table tbody tr.is-selected td {
+  background: #f5faf2;
+}
+
+.cms-options-table-text {
+  max-width: 28rem;
+  color: #5f7188;
+  line-height: 1.7;
+}
+
+.cms-options-form-card {
+  position: sticky;
+  top: 1rem;
+}
+
+.cms-options-description-textarea {
+  min-height: 11rem;
+  resize: vertical;
 }
 
 .cms-article-tag-input-row {
@@ -3662,6 +3753,14 @@ body {
 }
 
 @media (max-width: 767.98px) {
+  .cms-article-option-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cms-options-form-card {
+    position: static;
+  }
+
   .cms-article-tag-suggest-action.is-desktop {
     display: none;
   }

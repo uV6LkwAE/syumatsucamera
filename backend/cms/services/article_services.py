@@ -8,7 +8,6 @@ from rest_framework.exceptions import NotFound, PermissionDenied, ValidationErro
 
 from cms.models import (
     Article,
-    ArticleOption,
     ArticleStatus,
     ImageJobStatus,
     MediaAsset,
@@ -56,7 +55,7 @@ class ArticleService:
             "category",
             "author",
             "thumbnail_asset",
-        ).prefetch_related("article_options__option")
+        )
 
         if user.role != UserRole.ADMIN:
             queryset = queryset.filter(author=user)
@@ -89,7 +88,6 @@ class ArticleService:
                 "locked_by",
             ).prefetch_related(
                 "tags",
-                "article_options__option",
             ).get(id=article_id)
         except Article.DoesNotExist as exc:
             raise NotFound("記事が存在しません。") from exc
@@ -189,7 +187,7 @@ class ArticleService:
             )
 
         ArticleService._sync_tags(article=article, tags=tags)
-        ArticleService._sync_article_options(
+        ArticleService._sync_article_option_ids(
             article=article,
             article_option=payload["article_option"],
         )
@@ -291,16 +289,12 @@ class ArticleService:
         article.tags.set(tags)
 
     @staticmethod
-    def _sync_article_options(*, article: Article, article_option: dict) -> None:
+    def _sync_article_option_ids(*, article: Article, article_option: dict) -> None:
         """
-        記事オプションを同期する。
+        記事オプションIDを同期する。
         """
         selected_options = ArticleOptionService.resolve_options_for_upsert(
             article_option=article_option,
         )
-        selected_option_ids = [option.id for option in selected_options]
-
-        ArticleOption.objects.filter(article=article).exclude(option_id__in=selected_option_ids).delete()
-
-        for option in selected_options:
-            ArticleOption.objects.get_or_create(article=article, option=option)
+        article.option = selected_options
+        article.save(update_fields=["option", "updated_at"])

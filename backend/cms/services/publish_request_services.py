@@ -32,8 +32,6 @@ class PublishRequestService:
             "article__category",
             "requested_by",
             "handled_by",
-        ).prefetch_related(
-            "article__article_options__option",
         ).order_by("-requested_at")
         if status is not None:
             queryset = queryset.filter(status=status)

@@ -298,6 +298,117 @@ paths:
             application/json:
               schema:
                 $ref: "./components/schemas.yaml#/components/schemas/CmsArticleOptionList"
+    post:
+      tags:
+        - cms
+      summary: CMS記事オプションを作成する
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin または author
+        permission_class: AuthorAdminReadWrite
+      operationId: createCmsArticleOption
+      security:
+        - CloudflareAccessJwt:
+            - admin
+        - CloudflareAccessJwt:
+            - author
+      x-permission-class: AuthorAdminReadWrite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./components/schemas.yaml#/components/schemas/CmsArticleOptionCreateUpdateRequest"
+      responses:
+        "201":
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CmsArticleOptionItem"
+        "400":
+          description: 入力値不正
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonValidationError"
+  /api/cms/article-options/{option_id}:
+    patch:
+      tags:
+        - cms
+      summary: CMS記事オプションを更新する
+      operationId: updateCmsArticleOption
+      security:
+        - CloudflareAccessJwt:
+            - admin
+        - CloudflareAccessJwt:
+            - author
+      x-permission-class: AuthorAdminReadWrite
+      parameters:
+        - name: option_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./components/schemas.yaml#/components/schemas/CmsArticleOptionCreateUpdateRequest"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CmsArticleOptionItem"
+        "400":
+          description: 入力値不正
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonValidationError"
+        "404":
+          description: 対象が存在しない
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
+    delete:
+      tags:
+        - cms
+      summary: CMS記事オプションを削除する
+      operationId: deleteCmsArticleOption
+      security:
+        - CloudflareAccessJwt:
+            - admin
+        - CloudflareAccessJwt:
+            - author
+      x-permission-class: AuthorAdminReadWrite
+      parameters:
+        - name: option_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: 削除成功
+        "400":
+          description: 記事に紐づいているため削除不可
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonValidationError"
+        "404":
+          description: 対象が存在しない
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
   /api/cms/tags:
     get:
       tags:

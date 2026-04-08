@@ -5,7 +5,6 @@ from django.contrib import admin
 
 from cms.models import (
     Article,
-    ArticleOption,
     ArticleOgpInfo,
     ArticlePublishRequest,
     ArticleSaveLog,
@@ -42,8 +41,8 @@ class OptionAdmin(admin.ModelAdmin):
     オプションの管理画面設定。
     """
 
-    list_display = ("code", "label", "updated_at")
-    search_fields = ("code", "label")
+    list_display = ("code", "label", "description", "updated_at")
+    search_fields = ("code", "label", "description")
 
 
 @admin.register(Article)
@@ -96,12 +95,3 @@ class ArticleSaveLogAdmin(admin.ModelAdmin):
     list_display = ("occurred_at", "request_user", "lock_token", "target", "status")
     list_filter = ("status",)
     search_fields = ("lock_token", "target", "message")
-
-
-@admin.register(ArticleOption)
-class ArticleOptionAdmin(admin.ModelAdmin):
-    """
-    記事オプションの管理画面設定。
-    """
-
-    list_display = ("article", "option", "created_at")

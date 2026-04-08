@@ -43,6 +43,7 @@ erDiagram
         bigint views_total "NOT NULL, default=0"
         uuid thumbnail_asset_id FK "NOT NULL"
         jsonb toc_json "NOT NULL"
+        uuid_array option "NOT NULL, default=[], uuid[] OPTION.id配列"
         string image_job_status "NOT NULL, enum=pending|processing|completed|failed, default=pending"
         uuid locked_by_id FK "NULLABLE, required_if=lock_token"
         timestamptz locked_at "NULLABLE, required_if=lock_token"
@@ -56,17 +57,9 @@ erDiagram
         uuid id PK "NOT NULL, default=uuid"
         string code UK "NOT NULL, max_length=64"
         string label "NOT NULL, max_length=100"
-        text default_text "NULLABLE"
+        text description "NULLABLE"
         timestamptz created_at "NOT NULL"
         timestamptz updated_at "NOT NULL"
-    }
-
-    ARTICLE_OPTION {
-        uuid id PK "NOT NULL, default=uuid"
-        uuid article_id FK "NOT NULL"
-        uuid option_id FK "NOT NULL"
-        text override_text "NULLABLE"
-        timestamptz created_at "NOT NULL"
     }
 
     TAG {
@@ -156,8 +149,7 @@ erDiagram
     USER ||--o{ ARTICLE_PUBLISH_REQUEST : handled_by
     USER ||--o{ ARTICLE_SAVE_LOG : requested_by
 
-    ARTICLE ||--o{ ARTICLE_OPTION : has_options
-    OPTION ||--o{ ARTICLE_OPTION : applied_to
+    ARTICLE }o..o{ OPTION : stores_option_ids
 ```
 
 ## 制約メモ（DB制約）
@@ -167,7 +159,10 @@ erDiagram
 - `tag.slug` は `UNIQUE`
 - `article.slug` はカテゴリ配下で一意: `UNIQUE(category_id, slug)`
 - `article_tag` は重複禁止: `UNIQUE(article_id, tag_id)`
-- `article_option` は重複禁止: `UNIQUE(article_id, option_id)`
+- `article.option` は `uuid[]` で `OPTION.id` を保持し、保存前に重複IDを除去する。
+- `article.option` は検索用に GIN index を張る。
+- `option.label` は大文字小文字を同一視して重複禁止: `UNIQUE(LOWER(label))`
+- `article.option` は配列カラムのため通常のDB外部キー制約は張れない。Django側で参照中 `OPTION` の削除を拒否する。
 - `media_asset.file_name` は重複禁止: `UNIQUE(file_name)`
 - `user.cf_access_sub` は `UNIQUE`（Cloudflare Access `sub` の平文ではなく、HMACハッシュを保存する）
 - `user.email` は `UNIQUE`（大文字小文字を同一視する実装を推奨）
@@ -197,8 +192,9 @@ erDiagram
 
 ## オプション運用メモ
 
-- `is_pr` / `is_ad` は `ARTICLE` カラムで持たず、`ARTICLE_OPTION` で管理する。
-- `OPTION.code` に `pr` / `ad` を登録し、記事への適用は `ARTICLE_OPTION` で表現する。
+- `is_pr` / `is_ad` は `ARTICLE` カラムで持たず、`ARTICLE.option` に格納した `OPTION.code` から判定する。
+- `OPTION.code` に `pr` / `ad` を登録し、記事への適用は `ARTICLE.option` の UUID 配列で表現する。
+- `OPTION.description` は記事オプションの説明文として表示する。
 - 将来オプション追加（例: `sponsored`）は `OPTION` 追加のみで対応する。
 
 ## CONTACT運用メモ

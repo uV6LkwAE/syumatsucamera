@@ -45,6 +45,7 @@ export type CmsArticleOptionItem = {
   id: string
   code: string
   label: string
+  description: string
   is_system: boolean
 }
 

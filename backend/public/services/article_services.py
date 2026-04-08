@@ -85,8 +85,6 @@ class PublicArticleService:
             "category",
             "author",
             "thumbnail_asset",
-        ).prefetch_related(
-            "article_options__option",
         )
 
     @staticmethod
@@ -150,4 +148,3 @@ class PublicArticleService:
             return Tag.objects.get(slug=tag_slug)
         except Tag.DoesNotExist as exc:
             raise NotFound("タグが存在しません。") from exc
-

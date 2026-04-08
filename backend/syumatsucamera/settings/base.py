@@ -117,6 +117,7 @@ INSTALLED_APPS = [
     "django.contrib.sitemaps",
     "django.contrib.sessions",
     "django.contrib.messages",
+    "django.contrib.postgres",
     "django.contrib.staticfiles",
     "rest_framework",
     "corsheaders",

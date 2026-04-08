@@ -12,6 +12,7 @@ from cms.models import (
     SaveLogStatus,
     TwitterCardType,
 )
+from cms.services.article_option_services import ArticleOptionService
 
 
 class CommonPaginationSerializer(serializers.Serializer):
@@ -124,6 +125,7 @@ class ArticleOptionSerializer(serializers.Serializer):
     id = serializers.UUIDField(read_only=True)
     code = serializers.CharField(read_only=True)
     label = serializers.CharField(read_only=True)
+    description = serializers.CharField(allow_blank=True, read_only=True)
     is_system = serializers.BooleanField(read_only=True)
 
 
@@ -142,20 +144,20 @@ class ArticleOptionRequestSerializer(serializers.Serializer):
     記事オプション入力を検証する。
     """
 
-    is_pr = serializers.BooleanField()
-    is_ad = serializers.BooleanField()
     selected_option_ids = serializers.ListField(
         child=serializers.UUIDField(),
         required=False,
         allow_empty=True,
         default=list,
     )
-    custom_option_labels = serializers.ListField(
-        child=serializers.CharField(max_length=100),
-        required=False,
-        allow_empty=True,
-        default=list,
-    )
+
+    def validate_selected_option_ids(self, value):
+        """
+        同一オプションの重複指定を検証する。
+        """
+        if len(value) != len({str(option_id) for option_id in value}):
+            raise serializers.ValidationError("同じ記事オプションを複数指定することはできません。")
+        return value
 
 
 class CmsArticleOptionListSerializer(serializers.Serializer):
@@ -164,6 +166,15 @@ class CmsArticleOptionListSerializer(serializers.Serializer):
     """
 
     items = ArticleOptionSerializer(many=True, read_only=True)
+
+
+class CmsArticleOptionCreateUpdateRequestSerializer(serializers.Serializer):
+    """
+    記事オプション作成更新入力を検証する。
+    """
+
+    label = serializers.CharField(min_length=1, max_length=100)
+    description = serializers.CharField(min_length=1)
 
 
 class CmsTocNodeSerializer(serializers.Serializer):
@@ -209,21 +220,7 @@ class CmsArticleSummarySerializer(serializers.Serializer):
         """
         オプション要約を返す。
         """
-        option_codes = set(obj.article_options.values_list("option__code", flat=True))
-        items = [
-            {
-                "id": article_option.option_id,
-                "code": article_option.option.code,
-                "label": article_option.option.label,
-                "is_system": article_option.option.code in {"pr", "ad"},
-            }
-            for article_option in obj.article_options.all()
-        ]
-        return {
-            "is_pr": "pr" in option_codes,
-            "is_ad": "ad" in option_codes,
-            "items": items,
-        }
+        return ArticleOptionService.build_article_option_payload(article=obj)
 
 
 class CmsArticleListSerializer(serializers.Serializer):
@@ -409,21 +406,7 @@ class CmsArticleSerializer(serializers.Serializer):
         """
         オプション要約を返す。
         """
-        option_codes = set(obj.article_options.values_list("option__code", flat=True))
-        items = [
-            {
-                "id": article_option.option_id,
-                "code": article_option.option.code,
-                "label": article_option.option.label,
-                "is_system": article_option.option.code in {"pr", "ad"},
-            }
-            for article_option in obj.article_options.all()
-        ]
-        return {
-            "is_pr": "pr" in option_codes,
-            "is_ad": "ad" in option_codes,
-            "items": items,
-        }
+        return ArticleOptionService.build_article_option_payload(article=obj)
 
     def get_toc(self, obj) -> list:
         """

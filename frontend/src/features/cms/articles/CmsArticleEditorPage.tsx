@@ -54,10 +54,7 @@ type ArticleFormState = {
   bodyHtml: string
   status: 'draft' | 'publish' | 'private'
   twitterCard: CmsTwitterCard
-  isPr: boolean
-  isAd: boolean
   selectedOptionIds: string[]
-  customOptionLabels: string[]
   tagNames: string[]
 }
 
@@ -76,7 +73,6 @@ type ArticleEditorBootstrapCacheEntry = {
 
 const ARTICLE_TITLE_MAX_LENGTH = 255
 const ARTICLE_SUMMARY_MAX_LENGTH = 200
-const ARTICLE_CUSTOM_OPTION_MAX_LENGTH = 100
 const ARTICLE_TAG_MAX_LENGTH = 100
 const ARTICLE_TAG_MAX_COUNT = 5
 const ARTICLE_TAG_SUGGESTION_LIMIT = 8
@@ -97,10 +93,7 @@ const DEFAULT_ARTICLE_FORM: ArticleFormState = {
   bodyHtml: '<p></p>',
   status: 'draft',
   twitterCard: 'summary_large_image',
-  isPr: false,
-  isAd: false,
   selectedOptionIds: [],
-  customOptionLabels: [],
   tagNames: [],
 }
 
@@ -383,7 +376,6 @@ export default function CmsArticleEditorPage({
   const [thumbnailMode, setThumbnailMode] = useState<InternalThumbnailMode>('generate_from_title')
   const [thumbnailUploadFileName, setThumbnailUploadFileName] = useState('')
   const [thumbnailPreviewPath, setThumbnailPreviewPath] = useState('')
-  const [customOptionDraft, setCustomOptionDraft] = useState('')
   const [tagDraft, setTagDraft] = useState('')
   const [tagSuggestions, setTagSuggestions] = useState<CmsTagSuggestion[]>([])
   const [tagSuggestionLoading, setTagSuggestionLoading] = useState(false)
@@ -425,18 +417,12 @@ export default function CmsArticleEditorPage({
             bodyHtml: normalizeStoredArticleHtml(payload.article.body_html),
             status: payload.article.status,
             twitterCard: payload.article.twitter_card,
-            isPr: payload.article.article_option.is_pr,
-            isAd: payload.article.article_option.is_ad,
-            selectedOptionIds: payload.article.article_option.items
-              .filter((item) => !item.is_system)
-              .map((item) => item.id),
-            customOptionLabels: [],
+            selectedOptionIds: payload.article.article_option.items.map((item) => item.id),
             tagNames: payload.article.tags.map((tag) => tag.name),
           })
           setThumbnailMode(thumbnailAsset === null ? 'generate_from_title' : 'keep_current')
           setThumbnailUploadFileName('')
           setThumbnailPreviewPath(thumbnailAsset?.public_path ?? '')
-          setCustomOptionDraft('')
           setTagDraft('')
           setTagSuggestions([])
           setTagSuggestionError('')
@@ -449,7 +435,6 @@ export default function CmsArticleEditorPage({
           setThumbnailMode('generate_from_title')
           setThumbnailUploadFileName('')
           setThumbnailPreviewPath('')
-          setCustomOptionDraft('')
           setTagDraft('')
           setTagSuggestions([])
           setTagSuggestionError('')
@@ -669,10 +654,7 @@ export default function CmsArticleEditorPage({
         tag_names: form.tagNames,
         twitter_card: form.twitterCard,
         article_option: {
-          is_pr: form.isPr,
-          is_ad: form.isAd,
           selected_option_ids: form.selectedOptionIds,
-          custom_option_labels: form.customOptionLabels,
         },
         image_diff: {
           lock_token: lockToken,
@@ -747,8 +729,6 @@ export default function CmsArticleEditorPage({
     && article.status !== 'publish'
   )
 
-  const selectableCustomOptions = optionCatalog.filter((option) => !option.is_system)
-
   function toggleExistingOption(optionId: string): void {
     setForm((prev) => {
       if (prev.selectedOptionIds.includes(optionId)) {
@@ -762,46 +742,6 @@ export default function CmsArticleEditorPage({
         selectedOptionIds: [...prev.selectedOptionIds, optionId],
       }
     })
-  }
-
-  function addCustomOptionLabel(): void {
-    const normalizedLabel = customOptionDraft.trim()
-    if (normalizedLabel === '') {
-      return
-    }
-    if (normalizedLabel.length > ARTICLE_CUSTOM_OPTION_MAX_LENGTH) {
-      setErrorMessage(`記事オプション名は${ARTICLE_CUSTOM_OPTION_MAX_LENGTH}文字以内で入力してください。`)
-      return
-    }
-
-    const existingOption = optionCatalog.find(
-      (option) => option.label.trim().toLocaleLowerCase() === normalizedLabel.toLocaleLowerCase(),
-    )
-    if (existingOption !== undefined) {
-      setForm((prev) => ({
-        ...prev,
-        selectedOptionIds: prev.selectedOptionIds.includes(existingOption.id)
-          ? prev.selectedOptionIds
-          : [...prev.selectedOptionIds, existingOption.id],
-      }))
-      setCustomOptionDraft('')
-      return
-    }
-
-    setForm((prev) => {
-      const alreadyAdded = prev.customOptionLabels.some(
-        (label) => label.toLocaleLowerCase() === normalizedLabel.toLocaleLowerCase(),
-      )
-      if (alreadyAdded) {
-        return prev
-      }
-      return {
-        ...prev,
-        customOptionLabels: [...prev.customOptionLabels, normalizedLabel],
-      }
-    })
-    setCustomOptionDraft('')
-    setErrorMessage('')
   }
 
   function addTagName(rawName = tagDraft): void {
@@ -1175,97 +1115,47 @@ export default function CmsArticleEditorPage({
         <CmsTabGuide
           title="記事オプション"
           helpLines={[
-            '既存のオプションを選択するか、自身で作成できます。',
+            '既存のオプションから必要なものを選択してください。',
+            'オプションの作成や編集はオプションタブで行います。',
             '記事内にAmazonアフィリエイトリンクを挿入する場合はADを必ず選択してください。',
             'メーカーより提供がある製品をレビューする場合PRを必ず選択してください。',
           ]}
           compact
           showDivider={false}
         />
-        <div className="cms-article-option-grid">
-          <label className="console-inline-label">
-            <input
-              type="checkbox"
-              checked={form.isPr}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, isPr: event.target.checked }))
-              }
-            />
-            PR
-          </label>
-          <label className="console-inline-label">
-            <input
-              type="checkbox"
-              checked={form.isAd}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, isAd: event.target.checked }))
-              }
-            />
-            AD
-          </label>
-        </div>
-        {selectableCustomOptions.length > 0 && (
-          <div className="cms-article-existing-options">
-            {selectableCustomOptions.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                className={`cms-article-option-chip${
-                  form.selectedOptionIds.includes(option.id) ? ' is-selected' : ''
-                }`}
-                onClick={() => toggleExistingOption(option.id)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        )}
-        <div className="console-form-grid row g-3 cms-article-custom-option-row">
-          <label className="console-label col-12 col-lg">
-            <span className="cms-article-field-head">
-              <span>オプションを追加</span>
-              <span className="cms-article-field-counter">
-                {customOptionDraft.length}/{ARTICLE_CUSTOM_OPTION_MAX_LENGTH}
-              </span>
-            </span>
-            <input
-              className="console-input form-control"
-              type="text"
-              value={customOptionDraft}
-              onChange={(event) => setCustomOptionDraft(event.target.value)}
-              maxLength={ARTICLE_CUSTOM_OPTION_MAX_LENGTH}
-              placeholder="例: スポンサー提供"
-            />
-          </label>
-          <div className="col-12 col-lg-auto d-flex align-items-end">
-            <button
-              type="button"
-              className="console-secondary"
-              onClick={addCustomOptionLabel}
-            >
-              追加
-            </button>
-          </div>
-        </div>
-        {form.customOptionLabels.length > 0 && (
-          <div className="cms-article-custom-option-list">
-            {form.customOptionLabels.map((label) => (
-              <button
-                key={label}
-                type="button"
-                className="cms-article-option-chip is-selected"
-                onClick={() =>
-                  setForm((prev) => ({
-                    ...prev,
-                    customOptionLabels: prev.customOptionLabels.filter((item) => item !== label),
-                  }))
-                }
-              >
-                {label}
-                <i className="bi bi-x-lg" aria-hidden="true" />
-              </button>
-            ))}
-          </div>
+        {optionCatalog.length > 0 ? (
+          <fieldset className="cms-article-option-grid">
+            <legend className="visually-hidden">記事オプション</legend>
+            {optionCatalog.map((option) => {
+              const inputId = `cms-article-option-${option.id}`
+              const selected = form.selectedOptionIds.includes(option.id)
+
+              return (
+                <label
+                  key={option.id}
+                  className={`cms-article-option-choice${selected ? ' is-selected' : ''}`}
+                  htmlFor={inputId}
+                >
+                  <span className="cms-article-option-choice-head">
+                    <input
+                      id={inputId}
+                      type="checkbox"
+                      name="article_option"
+                      value={option.id}
+                      checked={selected}
+                      onChange={() => toggleExistingOption(option.id)}
+                    />
+                    <span>{option.label}</span>
+                  </span>
+                  <span className="cms-article-option-choice-text">
+                    {option.description}
+                  </span>
+                </label>
+              )
+            })}
+          </fieldset>
+        ) : (
+          <div className="console-placeholder">オプションがありません。オプションタブで作成してください。</div>
         )}
       </div>
 

@@ -5,6 +5,7 @@ from django.conf import settings
 from rest_framework import serializers
 
 from cms.models import ArticleStatus, TwitterCardType
+from cms.services.article_option_services import ArticleOptionService
 from core.media_urls import build_cdn_media_url
 
 
@@ -157,6 +158,7 @@ class PublicArticleOptionItemSerializer(serializers.Serializer):
     id = serializers.UUIDField(read_only=True)
     code = serializers.CharField(read_only=True)
     label = serializers.CharField(read_only=True)
+    description = serializers.CharField(allow_blank=True, read_only=True)
     is_system = serializers.BooleanField(read_only=True)
 
 
@@ -238,21 +240,7 @@ class PublicArticleSummarySerializer(serializers.Serializer):
         """
         公開記事オプション要約を返す。
         """
-        option_codes = set(obj.article_options.values_list("option__code", flat=True))
-        items = [
-            {
-                "id": article_option.option_id,
-                "code": article_option.option.code,
-                "label": article_option.option.label,
-                "is_system": article_option.option.code in {"pr", "ad"},
-            }
-            for article_option in obj.article_options.all()
-        ]
-        return {
-            "is_pr": "pr" in option_codes,
-            "is_ad": "ad" in option_codes,
-            "items": items,
-        }
+        return ArticleOptionService.build_article_option_payload(article=obj)
 
 
 class PublicArticleListSerializer(serializers.Serializer):

@@ -26,6 +26,7 @@ import CmsArticlesPage from './features/cms/articles/CmsArticlesPage'
 import CmsCategoriesPage from './features/cms/categories/CmsCategoriesPage'
 import CmsArticleSaveLogsPage from './features/cms/logs/CmsArticleSaveLogsPage'
 import CmsOgpRecordsPage from './features/cms/ogp/CmsOgpRecordsPage'
+import CmsOptionsPage from './features/cms/options/CmsOptionsPage'
 import CmsPublishRequestsPage from './features/cms/requests/CmsPublishRequestsPage'
 import {
   PublicArticleDetailPage,
@@ -87,6 +88,12 @@ const CMS_NAV_ITEMS: CmsNavItem[] = [
     allowedRoles: ['admin'],
   },
   {
+    to: '/cms/console/options',
+    label: 'オプション',
+    icon: 'bi-ui-checks-grid',
+    allowedRoles: ['admin', 'author'],
+  },
+  {
     to: '/cms/console/contacts',
     label: '問い合わせ',
     icon: 'bi-envelope',
@@ -119,6 +126,7 @@ type CmsTabKey =
   | 'logs'
   | 'requests'
   | 'categories'
+  | 'options'
   | 'contacts'
   | 'users'
   | 'ogp'
@@ -388,6 +396,9 @@ function getCmsActiveTab(pathname: string): CmsTabKey {
   }
   if (pathname.startsWith('/cms/console/categories')) {
     return 'categories'
+  }
+  if (pathname.startsWith('/cms/console/options')) {
+    return 'options'
   }
   if (pathname.startsWith('/cms/console/contacts')) {
     return 'contacts'
@@ -1177,6 +1188,16 @@ function CmsConsolePage() {
         />
       )
     }
+    if (activeTab === 'options') {
+      return (
+        <ConsoleHeroCard
+          badge="オプション"
+          title="オプション管理"
+          subtitle="記事に付与する注意表示や分類文言をここで管理します。"
+          icon="bi-ui-checks-grid"
+        />
+      )
+    }
     if (activeTab === 'logs') {
       return (
         <ConsoleHeroCard
@@ -1273,6 +1294,9 @@ function CmsConsolePage() {
     }
     if (activeTab === 'categories') {
       return <CmsCategoriesPage embedded />
+    }
+    if (activeTab === 'options') {
+      return <CmsOptionsPage embedded />
     }
     if (activeTab === 'requests') {
       return <CmsPublishRequestsPage embedded />
@@ -1403,6 +1427,10 @@ export default function App() {
           />
           <Route
             path="categories"
+            element={<CmsConsolePage />}
+          />
+          <Route
+            path="options"
             element={<CmsConsolePage />}
           />
           <Route

@@ -44,6 +44,7 @@ export type PublicArticleOptionItem = {
   id: string
   code: string
   label: string
+  description: string
   is_system: boolean
 }
 

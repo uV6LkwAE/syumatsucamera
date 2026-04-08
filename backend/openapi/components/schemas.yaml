@@ -646,6 +646,7 @@ components:
         - id
         - code
         - label
+        - description
         - is_system
       properties:
         id:
@@ -654,6 +655,8 @@ components:
         code:
           type: string
         label:
+          type: string
+        description:
           type: string
         is_system:
           type: boolean
@@ -672,11 +675,17 @@ components:
       required:
         - is_pr
         - is_ad
+        - items
       properties:
         is_pr:
           type: boolean
         is_ad:
           type: boolean
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/CmsArticleOptionItem"
     CmsArticleOptionResponse:
       type: object
       required:
@@ -695,26 +704,27 @@ components:
             $ref: "#/components/schemas/CmsArticleOptionItem"
     CmsArticleOptionRequest:
       type: object
-      required:
-        - is_pr
-        - is_ad
       properties:
-        is_pr:
-          type: boolean
-        is_ad:
-          type: boolean
         selected_option_ids:
           type: array
           maxItems: 100
+          uniqueItems: true
           items:
             type: string
             format: uuid
-        custom_option_labels:
-          type: array
-          maxItems: 100
-          items:
-            type: string
-            maxLength: 100
+    CmsArticleOptionCreateUpdateRequest:
+      type: object
+      required:
+        - label
+        - description
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          minLength: 1
     MediaAssetImageProcessingOptions:
       type: object
       required:
