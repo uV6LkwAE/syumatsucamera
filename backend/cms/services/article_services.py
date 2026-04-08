@@ -293,8 +293,8 @@ class ArticleService:
         """
         記事オプションIDを同期する。
         """
-        selected_options = ArticleOptionService.resolve_options_for_upsert(
+        selected_option_ids = ArticleOptionService.resolve_option_ids_for_upsert(
             article_option=article_option,
         )
-        article.option = selected_options
+        article.option = selected_option_ids
         article.save(update_fields=["option", "updated_at"])
