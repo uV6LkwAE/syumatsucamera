@@ -1,5 +1,5 @@
 import { createElement, Fragment, useEffect, useState, type ReactNode } from 'react'
-import type { PublicOgpRecord, PublicTocNode } from './types'
+import type { PublicArticleOptionItem, PublicOgpRecord, PublicTocNode } from './types'
 
 type RenderedPublicArticleBody = {
   content: ReactNode[]
@@ -458,17 +458,56 @@ export function renderPublicTocNodes(nodes: PublicTocNode[]): ReactNode {
   )
 }
 
+function renderPublicArticleOptionNotes(
+  options: PublicArticleOptionItem[],
+  className = '',
+): ReactNode {
+  const visibleOptions = options
+    .map((option) => ({
+      id: option.id,
+      label: option.label.trim(),
+      description: option.description.trim(),
+    }))
+    .filter((option) => option.label !== '')
+
+  if (visibleOptions.length === 0) {
+    return null
+  }
+
+  return (
+    <div
+      className={`public-article-option-notes${className === '' ? '' : ` ${className}`}`}
+      aria-label="記事オプション"
+    >
+      {visibleOptions.map((option) => (
+        <div key={option.id} className="public-article-option-note">
+          <i className="bi bi-info-circle" aria-hidden="true" />
+          <span className="public-article-option-note-label">{option.label}</span>
+          {option.description !== '' ? (
+            <span className="public-article-option-note-description">
+              {option.description}
+            </span>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function PublicArticleBodyRenderer({
   bodyHtml,
   cdnBaseUrl,
   ogpByUrl,
+  articleOptions = [],
 }: {
   bodyHtml: string
   cdnBaseUrl: string
   ogpByUrl: Record<string, PublicOgpRecord>
+  articleOptions?: PublicArticleOptionItem[]
 }) {
   const renderedBody = renderPublicArticleBody(bodyHtml, cdnBaseUrl, ogpByUrl)
   const [tocOpen, setTocOpen] = useState(true)
+  const articleOptionNotes = renderPublicArticleOptionNotes(articleOptions)
   usePublicXEmbedRenderer(renderedBody.hasXEmbeds)
 
   return (
@@ -500,8 +539,11 @@ export function PublicArticleBodyRenderer({
               {renderPublicTocNodes(renderedBody.toc)}
             </div>
           </div>
+          {articleOptionNotes}
         </aside>
-      ) : null}
+      ) : (
+        renderPublicArticleOptionNotes(articleOptions, 'is-standalone')
+      )}
       <div className="public-article-content">{renderedBody.content}</div>
     </Fragment>
   )

@@ -93,6 +93,9 @@ class PublicAuthorSummarySerializer(serializers.Serializer):
     profile = serializers.SerializerMethodField()
     icon = serializers.SerializerMethodField()
     header_image = serializers.SerializerMethodField()
+    x_url = serializers.SerializerMethodField()
+    instagram_url = serializers.SerializerMethodField()
+    website_url = serializers.SerializerMethodField()
 
     def get_display_name(self, obj) -> str:
         """
@@ -117,6 +120,24 @@ class PublicAuthorSummarySerializer(serializers.Serializer):
         CDN付き著者ヘッダー画像URLを返す。
         """
         return build_cdn_media_url(obj.header_image)
+
+    def get_x_url(self, obj) -> str | None:
+        """
+        X URLを返す。
+        """
+        return obj.x_url or None
+
+    def get_instagram_url(self, obj) -> str | None:
+        """
+        Instagram URLを返す。
+        """
+        return obj.instagram_url or None
+
+    def get_website_url(self, obj) -> str | None:
+        """
+        WebサイトURLを返す。
+        """
+        return obj.website_url or None
 
 
 class PublicProfileSerializer(PublicAuthorSummarySerializer):

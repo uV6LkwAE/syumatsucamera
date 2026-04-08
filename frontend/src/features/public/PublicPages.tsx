@@ -33,6 +33,7 @@ import type {
   PublicArticleListParams,
   PublicArticleListResponse,
   PublicArticleSummary,
+  PublicAuthorSummary,
   PublicCategoryTreeItem,
   PublicSidebarResponse,
 } from './types'
@@ -196,6 +197,63 @@ function buildProfileTextParagraphs(value: string): string[] {
     .split(/\n{2,}/)
     .map((paragraph) => paragraph.replace(/\n/g, '').trim())
     .filter((paragraph) => paragraph !== '')
+}
+
+type PublicProfileSocialSource = Pick<
+  PublicAuthorSummary,
+  'x_url' | 'instagram_url' | 'website_url'
+>
+
+function PublicProfileSocialLinks({
+  profile,
+  className = '',
+}: {
+  profile: PublicProfileSocialSource
+  className?: string
+}) {
+  const links = [
+    {
+      href: profile.instagram_url,
+      iconClassName: 'bi bi-instagram',
+      label: 'Instagram',
+    },
+    {
+      href: profile.x_url,
+      iconClassName: 'bi bi-twitter-x',
+      label: 'X',
+    },
+    {
+      href: profile.website_url,
+      iconClassName: 'bi bi-globe2',
+      label: 'Webサイト',
+    },
+  ].filter((link): link is { href: string; iconClassName: string; label: string } =>
+    link.href !== null && link.href.trim() !== '',
+  )
+
+  if (links.length === 0) {
+    return null
+  }
+
+  return (
+    <div
+      className={`public-profile-social-links${className === '' ? '' : ` ${className}`}`}
+      aria-label="SNSリンク"
+    >
+      {links.map((link) => (
+        <a
+          key={link.label}
+          className="public-profile-social-link"
+          href={link.href}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <i className={link.iconClassName} aria-hidden="true" />
+          <span className="visually-hidden">{link.label}</span>
+        </a>
+      ))}
+    </div>
+  )
 }
 
 function PublicProfileTextBlock({
@@ -856,10 +914,16 @@ function PublicDetailAuthorPanel({ article }: { article: PublicArticleBody }) {
             ) : null}
           </div>
         </div>
-        <Link className="public-detail-author-link" to={`/search?author_id=${article.author.id}`}>
-          この著者の記事
-          <i className="bi bi-arrow-right-short" aria-hidden="true" />
-        </Link>
+        <div className="public-detail-author-footer">
+          <PublicProfileSocialLinks
+            profile={article.author}
+            className="public-detail-author-social-links"
+          />
+          <Link className="public-detail-author-link" to={`/search?author_id=${article.author.id}`}>
+            この著者の記事
+            <i className="bi bi-arrow-right-short" aria-hidden="true" />
+          </Link>
+        </div>
       </div>
     </section>
   )
@@ -1079,6 +1143,7 @@ function PublicHomeDesktopLower({
                   </div>
                 </div>
                 <div className="public-home-more-wrap public-profile-more-wrap">
+                  <PublicProfileSocialLinks profile={sidebar.profile} />
                   <Link className="public-home-more-link" to="#">
                     もっと見る
                     <i className="bi bi-arrow-right-short" aria-hidden="true" />
@@ -1703,10 +1768,7 @@ export function PublicArticleDetailPage() {
   const headingPanelClassName = `public-detail-heading-panel${
     publishedDateParts === null ? ' without-date' : ''
   }`
-  const detailOptionItems = article.article_option.items.map((option) => ({
-    key: `option-${option.id}`,
-    content: <span>{option.label}</span>,
-  }))
+  const detailOptionItems = article.article_option.items
 
   return (
     <main className="public-main public-article-detail-page">
@@ -1744,18 +1806,17 @@ export function PublicArticleDetailPage() {
 
                 <div className="public-detail-heading-copy">
                   <h1 className="public-detail-title">{article.title}</h1>
-                  {detailOptionItems.length > 0 ? (
-                    <nav
-                      className="public-detail-meta-line"
-                      aria-label="記事オプション"
-                    >
-                      {detailOptionItems.map((item, index) => (
-                        <Fragment key={item.key}>
-                          {item.content}
-                          {index < detailOptionItems.length - 1 ? <span>/</span> : null}
-                        </Fragment>
-                      ))}
-                    </nav>
+                  {article.tags.length > 0 ? (
+                    <div className="public-detail-taxonomy">
+                      <nav className="public-detail-tag-row" aria-label="タグ">
+                        <i className="bi bi-tags" aria-hidden="true" />
+                        {article.tags.map((tag) => (
+                          <Link key={tag.id} className="public-detail-tag-link" to={`/tag/${tag.slug}/`}>
+                            #{tag.name}
+                          </Link>
+                        ))}
+                      </nav>
+                    </div>
                   ) : null}
                 </div>
               </div>
@@ -1777,6 +1838,7 @@ export function PublicArticleDetailPage() {
                 bodyHtml={article.body_html}
                 cdnBaseUrl={cdnBaseUrl}
                 ogpByUrl={article.ogp_by_url}
+                articleOptions={detailOptionItems}
               />
             </div>
           </article>

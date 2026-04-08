@@ -154,6 +154,9 @@ components:
         - profile
         - icon
         - header_image
+        - x_url
+        - instagram_url
+        - website_url
       properties:
         id:
           type: string
@@ -167,6 +170,18 @@ components:
             - string
             - "null"
         header_image:
+          type:
+            - string
+            - "null"
+        x_url:
+          type:
+            - string
+            - "null"
+        instagram_url:
+          type:
+            - string
+            - "null"
+        website_url:
           type:
             - string
             - "null"

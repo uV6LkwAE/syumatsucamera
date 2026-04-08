@@ -4945,9 +4945,46 @@ body {
 }
 
 .public-profile-more-wrap {
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
+  gap: 0.7rem;
   margin-top: 0;
   padding: 0 1.2rem 1.15rem;
+}
+
+.public-profile-social-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  width: 100%;
+}
+
+.public-profile-social-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid rgba(131, 160, 104, 0.24);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #62784e;
+  font-size: 0.92rem;
+  text-decoration: none;
+  transition:
+    background-color var(--motion-fast-duration) ease,
+    border-color var(--motion-fast-duration) ease,
+    color var(--motion-fast-duration) ease,
+    transform var(--motion-fast-duration) ease;
+}
+
+.public-profile-social-link:hover {
+  border-color: rgba(131, 160, 104, 0.5);
+  background: #83a068;
+  color: #ffffff;
+  transform: translateY(-1px);
 }
 
 .public-sidebar-kicker {
@@ -5530,11 +5567,19 @@ body {
   align-items: center;
   justify-content: flex-end;
   gap: 0.2rem;
-  margin: 0 1rem 1rem;
+  margin: 0;
   color: #62784e;
   font-size: 0.78rem;
   font-weight: 700;
   text-decoration: none;
+}
+
+.public-detail-author-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0 1rem 1rem;
 }
 
 .public-detail-related-panel {
@@ -5685,9 +5730,11 @@ body {
 }
 
 .public-detail-taxonomy {
-  display: grid;
-  gap: 0.6rem;
-  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.55rem 0.7rem;
+  margin-top: 0.8rem;
 }
 
 .public-detail-taxonomy-line,
@@ -5695,6 +5742,7 @@ body {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
+  flex: 0 1 auto;
   gap: 0.45rem;
   color: #6e796a;
   font-size: 0.78rem;
@@ -5709,6 +5757,12 @@ body {
 
 .public-detail-taxonomy-line a,
 .public-detail-tag-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.7rem;
+  padding: 0.22rem 0.55rem;
+  border-radius: 999px;
+  background: #f1f5ee;
   color: #4f5a4b;
   font-weight: 700;
   text-decoration: none;
@@ -6036,6 +6090,52 @@ body {
 .public-article-toc-body-inner {
   min-height: 0;
   overflow: hidden;
+}
+
+.public-article-option-notes {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.95rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid rgba(131, 160, 104, 0.18);
+}
+
+.public-article-option-notes.is-standalone {
+  width: min(100%, 38rem);
+  margin: 1.8rem auto 2.4rem;
+  padding: 0.9rem 1.05rem;
+  border: 1px solid rgba(131, 160, 104, 0.2);
+  border-radius: 0.5rem;
+  background: #f8faf6;
+}
+
+.public-article-option-note {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.35rem;
+  color: #53604f;
+  font-size: 0.76rem;
+  line-height: 1.6;
+  text-align: left;
+}
+
+.public-article-option-note i {
+  margin-top: 0.16rem;
+  color: #83a068;
+  font-size: 0.82rem;
+  line-height: 1;
+}
+
+.public-article-option-note-label {
+  color: #4f6a3a;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.public-article-option-note-description {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .public-toc-list {
@@ -6465,6 +6565,60 @@ body {
 
   .public-profile-mobile-head .public-section-kicker {
     margin-bottom: 0;
+  }
+
+  .public-detail-title {
+    font-size: clamp(1.1rem, 5vw, 1.48rem);
+  }
+
+  .public-detail-taxonomy {
+    gap: 0.45rem;
+    margin-top: 0.65rem;
+  }
+
+  .public-detail-tag-row {
+    gap: 0.35rem;
+  }
+
+  .public-detail-tag-row i {
+    font-size: 0.82rem;
+  }
+
+  .public-detail-tag-link {
+    min-height: 1.5rem;
+    padding: 0.16rem 0.5rem;
+    font-size: 0.7rem;
+  }
+
+  .public-article-option-notes {
+    gap: 0.35rem;
+    margin-top: 0.72rem;
+    padding-top: 0.65rem;
+  }
+
+  .public-article-option-notes.is-standalone {
+    margin-top: 1.35rem;
+    margin-bottom: 2rem;
+    padding: 0.75rem 0.85rem;
+  }
+
+  .public-article-option-note {
+    grid-template-columns: auto auto minmax(0, 1fr);
+    gap: 0.28rem;
+    font-size: 0.68rem;
+    line-height: 1.55;
+  }
+
+  .public-article-option-note i {
+    margin-top: 0.12rem;
+    font-size: 0.76rem;
+  }
+
+  .public-article-option-note-description {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 
   .public-home-latest-grid {

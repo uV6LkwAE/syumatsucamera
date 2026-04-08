@@ -27,6 +27,9 @@ export type PublicAuthorSummary = {
   profile: string
   icon: string | null
   header_image: string | null
+  x_url: string | null
+  instagram_url: string | null
+  website_url: string | null
 }
 
 export type PublicProfile = PublicAuthorSummary & {
