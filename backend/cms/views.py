@@ -31,6 +31,8 @@ from cms.serializers import (
     CmsPublishRequestListSerializer,
     CmsPublishRequestRejectRequestSerializer,
     CmsPublishRequestSerializer,
+    CmsTagSuggestionListSerializer,
+    CmsTagSuggestionQuerySerializer,
 )
 from cms.services.article_author_services import ArticleAuthorService
 from cms.services.article_option_services import ArticleOptionService
@@ -40,6 +42,7 @@ from cms.services.article_session_services import ArticleSessionService
 from cms.services.category_services import CategoryService
 from cms.services.media_services import MediaService
 from cms.services.publish_request_services import PublishRequestService
+from cms.services.tag_services import TagService
 
 
 class CmsArticlesViewSet(ViewSet):
@@ -172,6 +175,29 @@ class CmsArticleOptionsViewSet(ViewSet):
             "items": ArticleOptionService.list_options(),
         }
         response_serializer = CmsArticleOptionListSerializer(payload)
+        return Response(response_serializer.data)
+
+
+class CmsTagsViewSet(ViewSet):
+    """
+    CMSタグ候補API。
+    """
+
+    permission_classes = [AuthorAdminReadWrite]
+
+    def list(self, request):
+        """
+        入力中のタグ名に合う候補を返す。
+        """
+        query_serializer = CmsTagSuggestionQuerySerializer(data=request.query_params)
+        query_serializer.is_valid(raise_exception=True)
+        payload = {
+            "items": TagService.list_tag_suggestions(
+                query=query_serializer.validated_data["q"],
+                limit=query_serializer.validated_data["limit"],
+            ),
+        }
+        response_serializer = CmsTagSuggestionListSerializer(payload)
         return Response(response_serializer.data)
 
 

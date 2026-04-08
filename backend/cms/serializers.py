@@ -80,6 +80,31 @@ class CmsTagSummarySerializer(serializers.Serializer):
     slug = serializers.CharField(read_only=True)
 
 
+class CmsTagSuggestionQuerySerializer(serializers.Serializer):
+    """
+    タグサジェスト検索条件を検証する。
+    """
+
+    q = serializers.CharField(required=False, allow_blank=True, max_length=100, default="")
+    limit = serializers.IntegerField(required=False, min_value=1, max_value=20, default=8)
+
+
+class CmsTagSuggestionSerializer(CmsTagSummarySerializer):
+    """
+    タグサジェスト候補を返す。
+    """
+
+    article_count = serializers.IntegerField(read_only=True)
+
+
+class CmsTagSuggestionListSerializer(serializers.Serializer):
+    """
+    タグサジェスト候補一覧を返す。
+    """
+
+    items = CmsTagSuggestionSerializer(many=True, read_only=True)
+
+
 class CmsMediaAssetSerializer(serializers.Serializer):
     """
     記事メディアアセット要約を返す。

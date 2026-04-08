@@ -6,6 +6,7 @@ import uuid
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
+from django.db.models.functions import Lower
 from mptt.models import MPTTModel, TreeForeignKey
 
 from users.models import User
@@ -134,6 +135,9 @@ class Tag(models.Model):
         ordering = ["name"]
         verbose_name = "タグ"
         verbose_name_plural = "タグ"
+        indexes = [
+            models.Index(Lower("name"), name="cms_tag_lower_name_idx"),
+        ]
 
     def __str__(self) -> str:
         """
@@ -296,6 +300,9 @@ class ArticleTag(models.Model):
     class Meta:
         verbose_name = "記事タグ"
         verbose_name_plural = "記事タグ"
+        indexes = [
+            models.Index(fields=["tag", "article"], name="cms_arttag_tag_article_idx"),
+        ]
         constraints = [
             models.UniqueConstraint(
                 fields=["article", "tag"],

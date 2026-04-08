@@ -1,6 +1,8 @@
 """
 記事タグサービスを定義する。
 """
+from django.db.models import Count
+from django.db.models.functions import Lower
 from rest_framework.exceptions import ValidationError
 
 from cms.models import ARTICLE_TAG_MAX_COUNT, Tag
@@ -11,6 +13,21 @@ class TagService:
     """
     記事タグの解決と作成を扱う。
     """
+
+    @staticmethod
+    def list_tag_suggestions(*, query: str, limit: int) -> list[Tag]:
+        """
+        入力中のタグ名に合う候補を利用件数つきで返す。
+        """
+        normalized_query = query.strip()
+        queryset = Tag.objects.annotate(
+            article_count=Count("article_tags", distinct=True),
+            name_lower=Lower("name"),
+        )
+        if normalized_query != "":
+            queryset = queryset.filter(name_lower__startswith=normalized_query.lower())
+
+        return list(queryset.order_by("-article_count", "name_lower", "name")[:limit])
 
     @staticmethod
     def resolve_tags_for_article_upsert(*, tag_ids: list, tag_names: list[str]) -> list[Tag]:

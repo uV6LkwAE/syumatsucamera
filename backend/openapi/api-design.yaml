@@ -298,6 +298,46 @@ paths:
             application/json:
               schema:
                 $ref: "./components/schemas.yaml#/components/schemas/CmsArticleOptionList"
+  /api/cms/tags:
+    get:
+      tags:
+        - cms
+      summary: CMSタグ候補を利用件数つきで返す
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin または author
+        permission_class: AuthorAdminReadWrite
+      operationId: listCmsTagSuggestions
+      security:
+        - CloudflareAccessJwt:
+            - admin
+        - CloudflareAccessJwt:
+            - author
+      x-permission-class: AuthorAdminReadWrite
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 100
+          description: タグ名の前方一致検索キーワード
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 8
+          description: 返却件数
+      responses:
+        "200":
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CmsTagSuggestionList"
   /api/cms/articles/{article_id}:
     get:
       tags:

@@ -208,6 +208,26 @@ components:
           type: string
         slug:
           type: string
+    CmsTagSuggestion:
+      allOf:
+        - $ref: "#/components/schemas/CmsTagSummary"
+        - type: object
+          required:
+            - article_count
+          properties:
+            article_count:
+              type: integer
+              minimum: 0
+    CmsTagSuggestionList:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/CmsTagSuggestion"
     PublicSidebarTag:
       type: object
       required:

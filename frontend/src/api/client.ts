@@ -16,6 +16,7 @@ type ApiRequestOptions = {
   body?: unknown
   withAuth?: boolean
   headers?: Record<string, string>
+  showLoading?: boolean
 }
 
 type ApiErrorPayload = {
@@ -143,7 +144,10 @@ export async function apiRequest<T>(
   path: string,
   options: ApiRequestOptions = {},
 ): Promise<T> {
-  beginApiRequestLoading()
+  const showLoading = options.showLoading ?? true
+  if (showLoading) {
+    beginApiRequestLoading()
+  }
 
   const method = options.method ?? 'GET'
   const withAuth = options.withAuth ?? true
@@ -185,7 +189,9 @@ export async function apiRequest<T>(
 
     return payload as T
   } finally {
-    finishApiRequestLoading()
+    if (showLoading) {
+      finishApiRequestLoading()
+    }
   }
 }
 

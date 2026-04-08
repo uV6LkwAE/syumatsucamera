@@ -13,12 +13,14 @@ from cms.views import (
     CmsArticleSessionsViewSet,
     CmsCategoriesViewSet,
     CmsPublishRequestsViewSet,
+    CmsTagsViewSet,
 )
 
 router = SimpleRouter(trailing_slash=False)
 router.register("articles", CmsArticlesViewSet, basename="cms-articles")
 router.register("article-authors", CmsArticleAuthorsViewSet, basename="cms-article-authors")
 router.register("article-options", CmsArticleOptionsViewSet, basename="cms-article-options")
+router.register("tags", CmsTagsViewSet, basename="cms-tags")
 router.register("article-sessions", CmsArticleSessionsViewSet, basename="cms-article-sessions")
 router.register("article-save-logs", CmsArticleSaveLogsViewSet, basename="cms-article-save-logs")
 router.register("publish-requests", CmsPublishRequestsViewSet, basename="cms-publish-requests")

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useNavigate, useOutletContext, useParams } from 'react-router-dom'
 import JoditEditor from 'jodit-react'
 import 'jodit/es2021/jodit.min.css'
@@ -22,6 +22,8 @@ import type {
   CmsArticleSessionResponse,
   CmsCategoryTreeResponse,
   CmsImageUploadResponse,
+  CmsTagSuggestion,
+  CmsTagSuggestionListResponse,
   CmsTwitterCard,
 } from '../types'
 
@@ -77,6 +79,8 @@ const ARTICLE_SUMMARY_MAX_LENGTH = 200
 const ARTICLE_CUSTOM_OPTION_MAX_LENGTH = 100
 const ARTICLE_TAG_MAX_LENGTH = 100
 const ARTICLE_TAG_MAX_COUNT = 5
+const ARTICLE_TAG_SUGGESTION_LIMIT = 8
+const ARTICLE_TAG_SUGGESTION_DEBOUNCE_MS = 180
 
 const DEFAULT_IMAGE_OPTIONS: ImageProcessingOptions = {
   resize: true,
@@ -296,6 +300,10 @@ function findCurrentThumbnail(assets: CmsArticleMediaAsset[]): CmsArticleMediaAs
   return assets.find((asset) => asset.is_thumbnail) ?? null
 }
 
+function normalizeTagNameForCompare(value: string): string {
+  return value.trim().toLocaleLowerCase()
+}
+
 function CmsTwitterCardPreview({ mode }: { mode: CmsTwitterCard }) {
   if (mode === 'summary_large_image') {
     return (
@@ -347,11 +355,13 @@ export default function CmsArticleEditorPage({
   const navigate = useNavigate()
   const { sessionUser } = useOutletContext<CmsOutletContext>()
   const isCreate = articleId === undefined
+  const tagInputId = useId()
 
   const releaseSessionOnLeaveRef = useRef(true)
   const sessionRefreshTimerRef = useRef<number | null>(null)
   const lockTokenRef = useRef('')
   const bootstrapCacheKeyRef = useRef('')
+  const tagInputRef = useRef<HTMLInputElement | null>(null)
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -375,6 +385,10 @@ export default function CmsArticleEditorPage({
   const [thumbnailPreviewPath, setThumbnailPreviewPath] = useState('')
   const [customOptionDraft, setCustomOptionDraft] = useState('')
   const [tagDraft, setTagDraft] = useState('')
+  const [tagSuggestions, setTagSuggestions] = useState<CmsTagSuggestion[]>([])
+  const [tagSuggestionLoading, setTagSuggestionLoading] = useState(false)
+  const [tagSuggestionError, setTagSuggestionError] = useState('')
+  const [showTagSuggestions, setShowTagSuggestions] = useState(false)
 
   const statusOptions = toStatusOptions(sessionUser?.role, form.status)
 
@@ -424,6 +438,9 @@ export default function CmsArticleEditorPage({
           setThumbnailPreviewPath(thumbnailAsset?.public_path ?? '')
           setCustomOptionDraft('')
           setTagDraft('')
+          setTagSuggestions([])
+          setTagSuggestionError('')
+          setShowTagSuggestions(false)
         } else {
           setArticle(null)
           setInitialMediaAssets([])
@@ -434,6 +451,9 @@ export default function CmsArticleEditorPage({
           setThumbnailPreviewPath('')
           setCustomOptionDraft('')
           setTagDraft('')
+          setTagSuggestions([])
+          setTagSuggestionError('')
+          setShowTagSuggestions(false)
         }
       } catch (error) {
         if (active) {
@@ -495,6 +515,56 @@ export default function CmsArticleEditorPage({
       }
     }
   }, [lockToken])
+
+  useEffect(() => {
+    const normalizedQuery = tagDraft.trim()
+    if (normalizedQuery === '') {
+      setTagSuggestions([])
+      setTagSuggestionLoading(false)
+      setTagSuggestionError('')
+      return
+    }
+
+    let active = true
+    const timerId = window.setTimeout(() => {
+      const searchParams = new URLSearchParams({
+        q: normalizedQuery,
+        limit: String(ARTICLE_TAG_SUGGESTION_LIMIT),
+      })
+      setTagSuggestionLoading(true)
+      setTagSuggestionError('')
+      void apiRequest<CmsTagSuggestionListResponse>(`/cms/tags?${searchParams.toString()}`, {
+        showLoading: false,
+      })
+        .then((payload) => {
+          if (!active) {
+            return
+          }
+          const selectedTagNames = new Set(form.tagNames.map(normalizeTagNameForCompare))
+          setTagSuggestions(
+            payload.items.filter(
+              (item) => !selectedTagNames.has(normalizeTagNameForCompare(item.name)),
+            ),
+          )
+        })
+        .catch((error) => {
+          if (active) {
+            setTagSuggestions([])
+            setTagSuggestionError(toApiMessage(error))
+          }
+        })
+        .finally(() => {
+          if (active) {
+            setTagSuggestionLoading(false)
+          }
+        })
+    }, ARTICLE_TAG_SUGGESTION_DEBOUNCE_MS)
+
+    return () => {
+      active = false
+      window.clearTimeout(timerId)
+    }
+  }, [tagDraft, form.tagNames])
 
   async function uploadTempImage(file: File): Promise<CmsImageUploadResponse> {
     if (lockToken === '') {
@@ -734,8 +804,8 @@ export default function CmsArticleEditorPage({
     setErrorMessage('')
   }
 
-  function addTagName(): void {
-    const normalizedName = tagDraft.trim()
+  function addTagName(rawName = tagDraft): void {
+    const normalizedName = rawName.trim()
     if (normalizedName === '') {
       return
     }
@@ -744,10 +814,13 @@ export default function CmsArticleEditorPage({
       return
     }
     const alreadyAdded = form.tagNames.some(
-      (tagName) => tagName.toLocaleLowerCase() === normalizedName.toLocaleLowerCase(),
+      (tagName) =>
+        normalizeTagNameForCompare(tagName) === normalizeTagNameForCompare(normalizedName),
     )
     if (alreadyAdded) {
       setTagDraft('')
+      setTagSuggestions([])
+      setShowTagSuggestions(false)
       return
     }
     if (form.tagNames.length >= ARTICLE_TAG_MAX_COUNT) {
@@ -760,6 +833,9 @@ export default function CmsArticleEditorPage({
       tagNames: [...prev.tagNames, normalizedName],
     }))
     setTagDraft('')
+    setTagSuggestions([])
+    setTagSuggestionError('')
+    setShowTagSuggestions(false)
     setErrorMessage('')
   }
 
@@ -917,70 +993,113 @@ export default function CmsArticleEditorPage({
 
       <div className="console-card">
         <CmsTabGuide
-          title="タグ"
+          title="ハッシュタグ"
           helpLines={[
-            '記事に関連するタグを入力し、追加してください。',
-            '既存タグと同じ名前の場合は、既存タグに紐づけます。',
+            'タグ名を入力すると既存のタグがサジェストされます。',
+            '既存のタグを優先的に選択してください。',
+            '入力値そのままでも、候補からでもタグを確定できます。',
           ]}
           compact
           showDivider={false}
         />
-        <div className="console-form-grid row g-3 cms-article-tag-input-row">
-          <label className="console-label col-12 col-lg">
+        <div className="cms-article-tag-combobox">
+          <div className="console-label cms-article-tag-input-label">
             <span className="cms-article-field-head">
-              <span>タグ名</span>
+              <label htmlFor={tagInputId}>タグ名</label>
               <span className="cms-article-field-counter">
                 {tagDraft.length}/{ARTICLE_TAG_MAX_LENGTH}
               </span>
             </span>
-            <input
-              className="console-input form-control"
-              type="text"
-              value={tagDraft}
-              onChange={(event) => setTagDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key !== 'Enter') {
-                  return
-                }
-                event.preventDefault()
-                addTagName()
-              }}
-              maxLength={ARTICLE_TAG_MAX_LENGTH}
-              placeholder="例: Nikon Z9"
-            />
-          </label>
-          <div className="col-12 col-lg-auto d-flex align-items-end">
-            <button
-              type="button"
-              className="console-secondary"
-              onClick={addTagName}
+            <div
+              className="cms-article-tag-input-shell"
+              onClick={() => tagInputRef.current?.focus()}
             >
-              追加
-            </button>
+              {form.tagNames.map((tagName) => (
+                <button
+                  key={tagName}
+                  type="button"
+                  className="cms-tag-chip is-removable"
+                  onClick={() =>
+                    setForm((prev) => ({
+                      ...prev,
+                      tagNames: prev.tagNames.filter((item) => item !== tagName),
+                    }))
+                  }
+                >
+                  #{tagName}
+                  <i className="bi bi-x-lg" aria-hidden="true" />
+                </button>
+              ))}
+              <input
+                id={tagInputId}
+                ref={tagInputRef}
+                className="cms-article-tag-inline-input"
+                type="text"
+                value={tagDraft}
+                onChange={(event) => {
+                  setTagDraft(event.target.value)
+                  setShowTagSuggestions(true)
+                }}
+                onFocus={() => {
+                  if (tagDraft.trim() !== '') {
+                    setShowTagSuggestions(true)
+                  }
+                }}
+                onBlur={() => setShowTagSuggestions(false)}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter') {
+                    return
+                  }
+                  event.preventDefault()
+                  addTagName()
+                }}
+                maxLength={ARTICLE_TAG_MAX_LENGTH}
+                placeholder={form.tagNames.length === 0 ? '例: Nikon Z9' : ''}
+              />
+            </div>
           </div>
+          {showTagSuggestions && tagDraft.trim() !== '' ? (
+            <div className="cms-article-tag-suggest-panel" role="listbox">
+              {tagSuggestionLoading ? (
+                <div className="cms-article-tag-suggest-status">候補を取得しています。</div>
+              ) : tagSuggestionError !== '' ? (
+                <div className="cms-article-tag-suggest-status is-error">{tagSuggestionError}</div>
+              ) : tagSuggestions.length > 0 ? (
+                tagSuggestions.map((suggestion) => (
+                  <button
+                    key={suggestion.id}
+                    type="button"
+                    className="cms-article-tag-suggest-item"
+                    onMouseDown={(event) => {
+                      event.preventDefault()
+                    }}
+                    onClick={() => addTagName(suggestion.name)}
+                  >
+                    <span className="cms-article-tag-suggest-name">#{suggestion.name}</span>
+                    <span className="cms-article-tag-suggest-count">
+                      {suggestion.article_count.toLocaleString('ja-JP')}件
+                    </span>
+                  </button>
+                ))
+              ) : (
+                <button
+                  type="button"
+                  className="cms-article-tag-suggest-item is-create"
+                  onMouseDown={(event) => {
+                    event.preventDefault()
+                  }}
+                  onClick={() => addTagName()}
+                >
+                  <span className="cms-article-tag-suggest-name">#{tagDraft.trim()}</span>
+                  <span className="cms-article-tag-suggest-count">
+                    <span className="cms-article-tag-suggest-action is-desktop">Enterで追加</span>
+                    <span className="cms-article-tag-suggest-action is-mobile">タップで追加</span>
+                  </span>
+                </button>
+              )}
+            </div>
+          ) : null}
         </div>
-        {form.tagNames.length > 0 ? (
-          <div className="cms-article-tag-list">
-            {form.tagNames.map((tagName) => (
-              <button
-                key={tagName}
-                type="button"
-                className="cms-tag-chip is-removable"
-                onClick={() =>
-                  setForm((prev) => ({
-                    ...prev,
-                    tagNames: prev.tagNames.filter((item) => item !== tagName),
-                  }))
-                }
-              >
-                #{tagName}
-                <i className="bi bi-x-lg" aria-hidden="true" />
-              </button>
-            ))}
-          </div>
-        ) : (
-          <p className="cms-article-help-text">タグは未設定です。</p>
-        )}
       </div>
 
       <div className="console-card">

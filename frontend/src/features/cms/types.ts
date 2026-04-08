@@ -58,6 +58,14 @@ export type CmsTagSummary = {
   slug: string
 }
 
+export type CmsTagSuggestion = CmsTagSummary & {
+  article_count: number
+}
+
+export type CmsTagSuggestionListResponse = {
+  items: CmsTagSuggestion[]
+}
+
 export type CmsArticleSummary = {
   id: string
   title: string
