@@ -30,6 +30,14 @@ data:
         proxy_set_header X-Forwarded-Proto $scheme;
       }
 
+      location = /robots.txt {
+        try_files /robots.txt =404;
+      }
+
+      location = /ads.txt {
+        try_files /ads.txt =404;
+      }
+
       location / {
         try_files $uri $uri/ /index.html;
       }

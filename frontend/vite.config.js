@@ -19,6 +19,10 @@ export default defineConfig({
         target: process.env.VITE_BACKEND_ORIGIN ?? 'http://backend:8000',
         changeOrigin: true,
       },
+      '/sitemap.xml': {
+        target: process.env.VITE_BACKEND_ORIGIN ?? 'http://backend:8000',
+        changeOrigin: true,
+      },
     },
   },
 })
