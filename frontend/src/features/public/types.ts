@@ -17,11 +17,27 @@ export type PublicTagSummary = {
   slug: string
 }
 
+export type PublicSidebarTag = PublicTagSummary & {
+  path: string
+}
+
 export type PublicAuthorSummary = {
   id: string
   display_name: string
+  profile: string
   icon: string | null
   header_image: string | null
+}
+
+export type PublicProfile = PublicAuthorSummary & {
+  profile: string
+  meta: Record<string, string>
+}
+
+export type PublicCategoryTreeItem = PublicCategorySummary & {
+  slug: string
+  article_count: number
+  children: PublicCategoryTreeItem[]
 }
 
 export type PublicArticleOptionItem = {
@@ -65,6 +81,7 @@ export type PublicArticleBody = PublicArticleSummary & {
   body_html: string
   status: 'draft' | 'private' | 'publish'
   twitter_card: 'summary' | 'summary_large_image'
+  category_breadcrumb: PublicCategorySummary[]
   tags: PublicTagSummary[]
   toc: PublicTocNode[]
   ogp_by_url: Record<string, PublicOgpRecord>
@@ -86,6 +103,16 @@ export type PublicArticleDetailResponse = {
   article: PublicArticleBody
   related_articles: PublicArticleSummary[]
   cdn_base_url: string
+}
+
+export type PublicSidebarResponse = {
+  profile: PublicProfile
+  category_tree: PublicCategoryTreeItem[]
+  tags: PublicSidebarTag[]
+}
+
+export type PublicSiteConfigResponse = {
+  turnstile_site_key: string
 }
 
 export type PublicArticleListParams = {

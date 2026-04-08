@@ -1,38 +1,168 @@
-import { FormEvent, startTransition, useEffect, useRef, useState } from 'react'
+import {
+  CSSProperties,
+  Fragment,
+  FormEvent,
+  startTransition,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 import {
   Link,
   Navigate,
   Outlet,
   useLocation,
-  useNavigate,
   useParams,
   useSearchParams,
 } from 'react-router-dom'
 import { ApiError } from '../../api/client'
-import { fetchPublicArticleDetail, listPublicArticles, submitPublicContact } from './api'
+import publicHeroPhoto from '../../assets/public/public-hero-photo.jpg'
+import {
+  fetchPublicArticleDetail,
+  fetchPublicSidebar,
+  fetchPublicSiteConfig,
+  listPublicArticles,
+  submitPublicContact,
+} from './api'
 import { PublicArticleBodyRenderer } from './articleBody'
 import type {
   ContactSubjectType,
+  PublicArticleBody,
   PublicArticleDetailResponse,
   PublicArticleListParams,
   PublicArticleListResponse,
   PublicArticleSummary,
+  PublicCategoryTreeItem,
+  PublicSidebarResponse,
 } from './types'
 
 const PUBLIC_PAGE_SIZE = 9
 const HOME_SECTION_SIZE = 6
+const HOME_SEARCH_PAGE_SIZE = 9
+const HOME_MOBILE_SEARCH_PAGE_SIZE = 6
+const HOME_SEARCH_DEBOUNCE_MS = 320
 const PUBLIC_SITE_NAME = '週末カメラ'
 const PUBLIC_SITE_DESCRIPTION = '気ままに、機材と写真を楽しむブログ'
-const POPULAR_SLIDE_INTERVAL_MS = 6200
 const MINI_CAROUSEL_INTERVAL_MS = 3600
 const SLIDE_DRAG_THRESHOLD_PX = 48
+const PUBLIC_MOBILE_VIEWPORT_QUERY = '(max-width: 991.98px)'
+const TURNSTILE_SCRIPT_ID = 'cloudflare-turnstile-script'
+const TURNSTILE_SCRIPT_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
 const PUBLIC_HERO_MESSAGES = [
-  '沼ってますか？\nカメラやレンズのこと、写真を撮る楽しさを気ままにつづっていくブログです。',
-  'その一本、本当に最後ですか？\n読みに来たつもりが、欲しくなっちゃうかもしれません。',
-  '見に来ただけのはずが、欲しくなっちゃうかも。\n機材のことも、写真を撮る楽しさも、気ままにつづっていくブログです。',
-  '予算ってなんですか？\n欲しいものが、いつのまにか予算になっていくんです。',
-  '防湿庫のスペース、まだ余ってますか？\n欲しい理由を、一緒に増やしていきませんか。',
+  [
+    '沼ってますか？',
+    'カメラやレンズのこと、写真を撮る楽しさを気ままにつづっていくブログです。',
+  ],
+  [
+    'その一本、本当に最後ですか？',
+    '読みに来たつもりが、欲しくなっちゃうかもしれません。',
+  ],
+  [
+    '見に来ただけのはずが、欲しくなっちゃうかも。',
+    '機材のことも、写真を撮る楽しさも、気ままにつづっていくブログです。',
+  ],
+  [
+    '予算ってなんですか？',
+    '欲しいものが、いつのまにか予算になっていくんです。',
+  ],
+  [
+    '防湿庫のスペース、まだ余ってますか？',
+    '欲しい理由を、一緒に増やしていきませんか。',
+  ],
 ]
+
+type PublicTurnstileWidgetId = string
+
+type PublicTurnstileRenderOptions = {
+  sitekey: string
+  size?: 'normal' | 'compact' | 'flexible'
+  theme?: 'light' | 'dark' | 'auto'
+  callback?: (token: string) => void
+  'error-callback'?: () => void
+  'expired-callback'?: () => void
+  'timeout-callback'?: () => void
+}
+
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (
+        container: HTMLElement | string,
+        options: PublicTurnstileRenderOptions,
+      ) => PublicTurnstileWidgetId
+      reset: (widgetId?: PublicTurnstileWidgetId) => void
+      remove: (widgetId?: PublicTurnstileWidgetId) => void
+    }
+  }
+}
+
+let turnstileScriptLoadPromise: Promise<void> | null = null
+
+function loadPublicTurnstileScript(): Promise<void> {
+  if (window.turnstile !== undefined) {
+    return Promise.resolve()
+  }
+  if (turnstileScriptLoadPromise !== null) {
+    return turnstileScriptLoadPromise
+  }
+
+  turnstileScriptLoadPromise = new Promise((resolve, reject) => {
+    const existingScript = document.getElementById(TURNSTILE_SCRIPT_ID) as HTMLScriptElement | null
+    if (existingScript !== null) {
+      existingScript.addEventListener('load', () => resolve(), { once: true })
+      existingScript.addEventListener(
+        'error',
+        () => {
+          turnstileScriptLoadPromise = null
+          reject(new Error('Turnstile script loading failed.'))
+        },
+        { once: true },
+      )
+      return
+    }
+
+    const script = document.createElement('script')
+    script.id = TURNSTILE_SCRIPT_ID
+    script.src = TURNSTILE_SCRIPT_SRC
+    script.async = true
+    script.defer = true
+    script.addEventListener('load', () => resolve(), { once: true })
+    script.addEventListener(
+      'error',
+      () => {
+        turnstileScriptLoadPromise = null
+        reject(new Error('Turnstile script loading failed.'))
+      },
+      { once: true },
+    )
+    document.head.appendChild(script)
+  })
+
+  return turnstileScriptLoadPromise
+}
+
+function usePublicMobileViewport(): boolean {
+  const [isMobileViewport, setIsMobileViewport] = useState(
+    () => window.matchMedia(PUBLIC_MOBILE_VIEWPORT_QUERY).matches,
+  )
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(PUBLIC_MOBILE_VIEWPORT_QUERY)
+
+    function handleChange(event: MediaQueryListEvent): void {
+      setIsMobileViewport(event.matches)
+    }
+
+    setIsMobileViewport(mediaQuery.matches)
+    mediaQuery.addEventListener('change', handleChange)
+    return () => {
+      mediaQuery.removeEventListener('change', handleChange)
+    }
+  }, [])
+
+  return isMobileViewport
+}
 
 function formatPublicDate(value: string | null): string {
   if (value === null) {
@@ -43,6 +173,129 @@ function formatPublicDate(value: string | null): string {
     month: '2-digit',
     day: '2-digit',
   })
+}
+
+function formatPublicDateParts(value: string | null): { year: string; monthDay: string } | null {
+  if (value === null) {
+    return null
+  }
+
+  const date = new Date(value)
+  return {
+    year: String(date.getFullYear()),
+    monthDay: [
+      String(date.getMonth() + 1).padStart(2, '0'),
+      String(date.getDate()).padStart(2, '0'),
+    ].join('/'),
+  }
+}
+
+function buildProfileTextParagraphs(value: string): string[] {
+  const normalizedValue = value.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  return normalizedValue
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.replace(/\n/g, '').trim())
+    .filter((paragraph) => paragraph !== '')
+}
+
+function PublicProfileTextBlock({
+  paragraphs,
+  className,
+}: {
+  paragraphs: string[]
+  className: string
+}) {
+  const textRef = useRef<HTMLDivElement | null>(null)
+  const isMobileViewport = usePublicMobileViewport()
+  const [shouldFade, setShouldFade] = useState(false)
+  const [fadeHeight, setFadeHeight] = useState<number | null>(null)
+  const paragraphKey = paragraphs.join('\n')
+
+  useLayoutEffect(() => {
+    const textElement = textRef.current
+    if (!isMobileViewport || textElement === null) {
+      setShouldFade(false)
+      setFadeHeight(null)
+      return
+    }
+
+    function updateFadeState(): void {
+      if (textElement === null) {
+        return
+      }
+      const computedStyle = window.getComputedStyle(textElement)
+      const lineHeight = Number.parseFloat(computedStyle.lineHeight)
+      if (!Number.isFinite(lineHeight) || lineHeight <= 0) {
+        setShouldFade(false)
+        setFadeHeight(null)
+        return
+      }
+
+      const textRects: Array<{ bottom: number; top: number }> = []
+      const walker = document.createTreeWalker(textElement, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+          if (node.textContent?.trim() === '') {
+            return NodeFilter.FILTER_REJECT
+          }
+          return NodeFilter.FILTER_ACCEPT
+        },
+      })
+
+      for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+        const range = document.createRange()
+        range.selectNodeContents(node)
+        for (const rect of Array.from(range.getClientRects())) {
+          if (rect.width > 0 && rect.height > 0) {
+            textRects.push({ bottom: rect.bottom, top: rect.top })
+          }
+        }
+        range.detach()
+      }
+
+      const groupingTolerance = Math.max(1, lineHeight * 0.2)
+      const lineRects: Array<{ bottom: number; top: number }> = []
+      for (const rect of textRects.sort((a, b) => a.top - b.top || a.bottom - b.bottom)) {
+        const lastLine = lineRects[lineRects.length - 1]
+        if (lastLine !== undefined && Math.abs(lastLine.top - rect.top) <= groupingTolerance) {
+          lastLine.bottom = Math.max(lastLine.bottom, rect.bottom)
+          continue
+        }
+        lineRects.push({ ...rect })
+      }
+
+      const nextShouldFade = lineRects.length >= 5
+      setShouldFade(nextShouldFade)
+      setFadeHeight(
+        nextShouldFade
+          ? Math.max(0, lineRects[4].bottom - textElement.getBoundingClientRect().top)
+          : null,
+      )
+    }
+
+    updateFadeState()
+    const resizeObserver = new ResizeObserver(updateFadeState)
+    resizeObserver.observe(textElement)
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [isMobileViewport, paragraphKey])
+
+  const fadeStyle =
+    fadeHeight === null
+      ? undefined
+      : ({ '--public-profile-fade-height': `${fadeHeight}px` } as CSSProperties)
+
+  return (
+    <div
+      ref={textRef}
+      className={`${className}${shouldFade ? ' is-mobile-faded' : ''}`}
+      style={fadeStyle}
+    >
+      {paragraphs.map((paragraph, index) => (
+        <p key={`${paragraph}-${index}`}>{paragraph}</p>
+      ))}
+    </div>
+  )
 }
 
 function resolvePublicErrorPath(error: unknown): string {
@@ -147,14 +400,111 @@ function applyPublicPageMeta({
   }
 }
 
+function PublicTurnstileWidget({
+  siteKey,
+  resetSignal,
+  onTokenChange,
+}: {
+  siteKey: string
+  resetSignal: number
+  onTokenChange: (token: string) => void
+}) {
+  const widgetElementRef = useRef<HTMLDivElement | null>(null)
+  const widgetIdRef = useRef<PublicTurnstileWidgetId | null>(null)
+  const [statusMessage, setStatusMessage] = useState('Turnstile を読み込んでいます。')
+
+  useEffect(() => {
+    let shouldIgnore = false
+    const normalizedSiteKey = siteKey.trim()
+    onTokenChange('')
+
+    async function renderTurnstile(): Promise<void> {
+      if (normalizedSiteKey === '') {
+        setStatusMessage('Turnstile の公開キーが設定されていません。')
+        return
+      }
+
+      try {
+        await loadPublicTurnstileScript()
+        if (shouldIgnore || widgetElementRef.current === null) {
+          return
+        }
+        if (window.turnstile === undefined) {
+          throw new Error('Turnstile global object is missing.')
+        }
+
+        widgetIdRef.current = window.turnstile.render(widgetElementRef.current, {
+          sitekey: normalizedSiteKey,
+          size: 'flexible',
+          theme: 'light',
+          callback: (token) => {
+            onTokenChange(token)
+            setStatusMessage('')
+          },
+          'error-callback': () => {
+            onTokenChange('')
+            setStatusMessage('Turnstile の検証中にエラーが発生しました。')
+          },
+          'expired-callback': () => {
+            onTokenChange('')
+            setStatusMessage('Turnstile の認証期限が切れました。再度確認してください。')
+          },
+          'timeout-callback': () => {
+            onTokenChange('')
+            setStatusMessage('Turnstile の認証がタイムアウトしました。再度確認してください。')
+          },
+        })
+      } catch {
+        if (!shouldIgnore) {
+          onTokenChange('')
+          setStatusMessage('Turnstile の読み込みに失敗しました。時間をおいて再読み込みしてください。')
+        }
+      }
+    }
+
+    void renderTurnstile()
+
+    return () => {
+      shouldIgnore = true
+      if (widgetIdRef.current !== null && window.turnstile !== undefined) {
+        window.turnstile.remove(widgetIdRef.current)
+      }
+      widgetIdRef.current = null
+    }
+  }, [onTokenChange, siteKey])
+
+  useEffect(() => {
+    if (resetSignal === 0) {
+      return
+    }
+    onTokenChange('')
+    if (widgetIdRef.current === null || window.turnstile === undefined) {
+      return
+    }
+    window.turnstile.reset(widgetIdRef.current)
+    setStatusMessage('Turnstile を確認しています。')
+  }, [onTokenChange, resetSignal])
+
+  return (
+    <div className="public-contact-turnstile-field">
+      <div ref={widgetElementRef} className="public-contact-turnstile-widget" />
+      {statusMessage !== '' ? (
+        <p className="public-contact-turnstile-message">{statusMessage}</p>
+      ) : null}
+    </div>
+  )
+}
+
 function PublicArticleCard({
   article,
   variant = 'standard',
   eager = false,
+  showSupplement = true,
 }: {
   article: PublicArticleSummary
   variant?: 'hero' | 'standard' | 'compact'
   eager?: boolean
+  showSupplement?: boolean
 }) {
   return (
     <article className={`public-article-card is-${variant}`}>
@@ -168,45 +518,48 @@ function PublicArticleCard({
             height={630}
             loading={eager ? 'eager' : 'lazy'}
             decoding="async"
-            fetchPriority={eager ? 'high' : 'auto'}
           />
           <span className="public-category-label">{article.category.name}</span>
         </div>
         <div className="public-article-card-body">
           <h2 className="public-article-card-title">{article.title}</h2>
           <p className="public-article-card-summary">{article.summary}</p>
-          <div className="public-article-card-meta">
-            <div className="public-author-chip">
-              {article.author.icon ? (
-                <img
-                  className="public-author-icon"
-                  src={article.author.icon}
-                  alt={article.author.display_name}
-                  width={48}
-                  height={48}
-                  loading="lazy"
-                  decoding="async"
-                />
-              ) : (
-                <span className="public-author-icon-fallback">
-                  {article.author.display_name.charAt(0)}
-                </span>
-              )}
-              <span className="public-author-name">{article.author.display_name}</span>
-            </div>
-            {article.published_at ? (
-              <time className="public-published-at" dateTime={article.published_at}>
-                {formatPublicDate(article.published_at)}
-              </time>
-            ) : null}
-          </div>
-          <div className="public-article-flags">
-            {article.article_option.items.map((option) => (
-              <span key={option.id} className="public-article-flag">
-                {option.label}
-              </span>
-            ))}
-          </div>
+          {showSupplement ? (
+            <>
+              <div className="public-article-card-meta">
+                <div className="public-author-chip">
+                  {article.author.icon ? (
+                    <img
+                      className="public-author-icon"
+                      src={article.author.icon}
+                      alt={article.author.display_name}
+                      width={48}
+                      height={48}
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  ) : (
+                    <span className="public-author-icon-fallback">
+                      {article.author.display_name.charAt(0)}
+                    </span>
+                  )}
+                  <span className="public-author-name">{article.author.display_name}</span>
+                </div>
+                {article.published_at ? (
+                  <time className="public-published-at" dateTime={article.published_at}>
+                    {formatPublicDate(article.published_at)}
+                  </time>
+                ) : null}
+              </div>
+              <div className="public-article-flags">
+                {article.article_option.items.map((option) => (
+                  <span key={option.id} className="public-article-flag">
+                    {option.label}
+                  </span>
+                ))}
+              </div>
+            </>
+          ) : null}
         </div>
       </Link>
     </article>
@@ -220,30 +573,27 @@ function getLoopedSlideIndex(index: number, length: number): number {
   return ((index % length) + length) % length
 }
 
-function getRelativeSlideOffset(index: number, activeIndex: number, length: number): number {
-  if (length <= 1) {
-    return 0
-  }
-
-  let offset = index - activeIndex
-  const half = length / 2
-  if (offset > half) {
-    offset -= length
-  }
-  if (offset < -half) {
-    offset += length
-  }
-  return offset
-}
-
-function PublicPopularShowcase({ articles }: { articles: PublicArticleSummary[] }) {
-  const [activeIndex, setActiveIndex] = useState(0)
+function PublicMiniArticleCarousel({
+  articles,
+  eagerCount = 2,
+  moreTo,
+}: {
+  articles: PublicArticleSummary[]
+  eagerCount?: number
+  moreTo?: string
+}) {
+  const [activeIndex, setActiveIndex] = useState(articles.length)
+  const [isTrackTransitionEnabled, setIsTrackTransitionEnabled] = useState(true)
   const dragStartXRef = useRef<number | null>(null)
   const dragDeltaXRef = useRef(0)
   const pauseUntilRef = useRef(0)
+  const suppressClickRef = useRef(false)
+  const repeatedArticles = [...articles, ...articles, ...articles]
+  const currentDotIndex = getLoopedSlideIndex(activeIndex - articles.length, articles.length)
 
   useEffect(() => {
-    setActiveIndex(0)
+    setActiveIndex(articles.length)
+    setIsTrackTransitionEnabled(true)
   }, [articles])
 
   useEffect(() => {
@@ -255,170 +605,36 @@ function PublicPopularShowcase({ articles }: { articles: PublicArticleSummary[] 
       if (Date.now() < pauseUntilRef.current) {
         return
       }
-      setActiveIndex((current) => getLoopedSlideIndex(current + 1, articles.length))
-    }, POPULAR_SLIDE_INTERVAL_MS)
-
-    return () => {
-      window.clearInterval(timer)
-    }
-  }, [articles.length])
-
-  if (articles.length === 0) {
-    return null
-  }
-
-  function pauseAutoSlide(): void {
-    pauseUntilRef.current = Date.now() + POPULAR_SLIDE_INTERVAL_MS
-  }
-
-  function moveSlide(step: number): void {
-    pauseAutoSlide()
-    setActiveIndex((current) => getLoopedSlideIndex(current + step, articles.length))
-  }
-
-  function handleDragStart(clientX: number): void {
-    dragStartXRef.current = clientX
-    dragDeltaXRef.current = 0
-    pauseAutoSlide()
-  }
-
-  function handleDragMove(clientX: number): void {
-    if (dragStartXRef.current === null) {
-      return
-    }
-    dragDeltaXRef.current = clientX - dragStartXRef.current
-  }
-
-  function handleDragEnd(): void {
-    if (dragStartXRef.current === null) {
-      return
-    }
-    if (dragDeltaXRef.current <= -SLIDE_DRAG_THRESHOLD_PX) {
-      moveSlide(1)
-    } else if (dragDeltaXRef.current >= SLIDE_DRAG_THRESHOLD_PX) {
-      moveSlide(-1)
-    }
-    dragStartXRef.current = null
-    dragDeltaXRef.current = 0
-  }
-
-  return (
-    <section className="public-popular-showcase">
-      <div className="public-section-head">
-        <div>
-          <p className="public-section-kicker">Popular</p>
-          <h2 className="public-section-title">人気記事</h2>
-        </div>
-        <Link className="public-more-link" to="/articles/popular/">
-          一覧へ
-          <i className="bi bi-arrow-right-short" aria-hidden="true" />
-        </Link>
-      </div>
-
-      <div
-        className="public-popular-slider"
-        onPointerDown={(event) => {
-          event.currentTarget.setPointerCapture(event.pointerId)
-          handleDragStart(event.clientX)
-        }}
-        onPointerMove={(event) => handleDragMove(event.clientX)}
-        onPointerUp={() => handleDragEnd()}
-        onPointerCancel={() => handleDragEnd()}
-      >
-        <div className="public-popular-stage">
-          {articles.map((article, index) => {
-            const offset = getRelativeSlideOffset(index, activeIndex, articles.length)
-            const isVisible = Math.abs(offset) <= 1
-            const depth = Math.abs(offset)
-            const slideClassName = [
-              'public-popular-slide',
-              offset === 0 ? 'is-active' : '',
-              Math.abs(offset) === 1 ? 'is-side' : '',
-            ]
-              .filter((className) => className !== '')
-              .join(' ')
-
-            return (
-              <article
-                key={article.id}
-                className={slideClassName}
-                aria-hidden={!isVisible}
-                style={{
-                  transform: `translateX(${offset * 30}%) translateY(${depth * 1.35}rem) scale(${1 - depth * 0.08}) rotateZ(${offset * -7}deg)`,
-                  opacity: depth > 1 ? 0 : offset === 0 ? 1 : 0.42,
-                  pointerEvents: offset === 0 ? 'auto' : 'none',
-                  zIndex: 10 - depth,
-                }}
-              >
-                <Link className="public-popular-card-link" to={article.path}>
-                  <div className="public-popular-thumb-wrap">
-                    <img
-                      className="public-popular-thumb"
-                      src={article.thumbnail_url}
-                      alt={article.title}
-                      width={1200}
-                      height={630}
-                      loading={index === 0 ? 'eager' : 'lazy'}
-                      decoding="async"
-                      fetchPriority={index === 0 ? 'high' : 'auto'}
-                    />
-                    <span className="public-category-label">{article.category.name}</span>
-                  </div>
-                  <div className="public-popular-copy">
-                    <h3 className="public-popular-title">{article.title}</h3>
-                    <p className="public-popular-summary">{article.summary}</p>
-                  </div>
-                </Link>
-              </article>
-            )
-          })}
-        </div>
-      </div>
-
-      <div className="public-popular-dots" aria-label="人気記事スライド">
-        {articles.map((article, index) => (
-          <button
-            key={article.id}
-            type="button"
-            className={`public-popular-dot ${index === activeIndex ? 'is-active' : ''}`}
-            onClick={() => {
-              pauseAutoSlide()
-              setActiveIndex(index)
-            }}
-            aria-label={`${index + 1}件目の記事へ移動`}
-          />
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function PublicMiniArticleCarousel({ articles }: { articles: PublicArticleSummary[] }) {
-  const [activeIndex, setActiveIndex] = useState(0)
-  const dragStartXRef = useRef<number | null>(null)
-  const dragDeltaXRef = useRef(0)
-  const pauseUntilRef = useRef(0)
-
-  useEffect(() => {
-    setActiveIndex(0)
-  }, [articles])
-
-  useEffect(() => {
-    if (articles.length <= 1) {
-      return
-    }
-
-    const timer = window.setInterval(() => {
-      if (Date.now() < pauseUntilRef.current) {
-        return
-      }
-      setActiveIndex((current) => getLoopedSlideIndex(current + 1, articles.length))
+      setActiveIndex((current) => current + 1)
     }, MINI_CAROUSEL_INTERVAL_MS)
 
     return () => {
       window.clearInterval(timer)
     }
   }, [articles.length])
+
+  useEffect(() => {
+    if (articles.length <= 1) {
+      return
+    }
+    if (isTrackTransitionEnabled) {
+      return
+    }
+
+    let firstFrameId = 0
+    let secondFrameId = 0
+
+    firstFrameId = window.requestAnimationFrame(() => {
+      secondFrameId = window.requestAnimationFrame(() => {
+        setIsTrackTransitionEnabled(true)
+      })
+    })
+
+    return () => {
+      window.cancelAnimationFrame(firstFrameId)
+      window.cancelAnimationFrame(secondFrameId)
+    }
+  }, [articles.length, isTrackTransitionEnabled])
 
   if (articles.length === 0) {
     return null
@@ -430,12 +646,13 @@ function PublicMiniArticleCarousel({ articles }: { articles: PublicArticleSummar
 
   function moveSlide(step: number): void {
     pauseAutoSlide()
-    setActiveIndex((current) => getLoopedSlideIndex(current + step, articles.length))
+    setActiveIndex((current) => current + step)
   }
 
   function handleDragStart(clientX: number): void {
     dragStartXRef.current = clientX
     dragDeltaXRef.current = 0
+    suppressClickRef.current = false
     pauseAutoSlide()
   }
 
@@ -450,6 +667,7 @@ function PublicMiniArticleCarousel({ articles }: { articles: PublicArticleSummar
     if (dragStartXRef.current === null) {
       return
     }
+    suppressClickRef.current = Math.abs(dragDeltaXRef.current) >= SLIDE_DRAG_THRESHOLD_PX
     if (dragDeltaXRef.current <= -SLIDE_DRAG_THRESHOLD_PX) {
       moveSlide(1)
     } else if (dragDeltaXRef.current >= SLIDE_DRAG_THRESHOLD_PX) {
@@ -463,8 +681,8 @@ function PublicMiniArticleCarousel({ articles }: { articles: PublicArticleSummar
     <section className="public-mini-carousel-shell">
       <div
         className="public-mini-carousel-viewport"
+        onDragStart={(event) => event.preventDefault()}
         onPointerDown={(event) => {
-          event.currentTarget.setPointerCapture(event.pointerId)
           handleDragStart(event.clientX)
         }}
         onPointerMove={(event) => handleDragMove(event.clientX)}
@@ -473,40 +691,74 @@ function PublicMiniArticleCarousel({ articles }: { articles: PublicArticleSummar
       >
         <div
           className="public-mini-carousel-track"
+          onTransitionEnd={() => {
+            if (articles.length <= 1) {
+              return
+            }
+            if (activeIndex >= articles.length && activeIndex < articles.length * 2) {
+              return
+            }
+            setIsTrackTransitionEnabled(false)
+            setActiveIndex(getLoopedSlideIndex(activeIndex, articles.length) + articles.length)
+          }}
           style={{
-            transform: `translateX(calc(-1 * ${activeIndex} * var(--public-mini-card-step)))`,
+            transform: `translateX(calc(var(--public-mini-card-center-offset, 0px) - 1 * ${activeIndex} * var(--public-mini-card-step)))`,
+            transition: isTrackTransitionEnabled ? undefined : 'none',
           }}
         >
-          {articles.map((article, index) => (
-            <Link key={article.id} className="public-mini-carousel-card" to={article.path}>
-              <div className="public-mini-carousel-thumb-wrap">
-                <img
-                  className="public-mini-carousel-thumb"
-                  src={article.thumbnail_url}
-                  alt={article.title}
-                  width={1200}
-                  height={630}
-                  loading={index < 2 ? 'eager' : 'lazy'}
-                  decoding="async"
-                  fetchPriority={index === 0 ? 'high' : 'auto'}
-                />
-                <span className="public-mini-carousel-label">{article.category.name}</span>
-              </div>
-              <p className="public-mini-carousel-title">{article.title}</p>
-            </Link>
-          ))}
+          {repeatedArticles.map((article, index) => {
+            const isInitialVisible = index >= articles.length && index < articles.length + eagerCount
+            return (
+              <Link
+                key={`${article.id}-${index}`}
+                className="public-mini-carousel-card"
+                to={article.path}
+                onClickCapture={(event) => {
+                  if (suppressClickRef.current) {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    suppressClickRef.current = false
+                  }
+                }}
+              >
+                <div className="public-mini-carousel-thumb-wrap">
+                  <img
+                    className="public-mini-carousel-thumb"
+                    src={article.thumbnail_url}
+                    alt={article.title}
+                    width={1200}
+                    height={630}
+                    draggable={false}
+                    loading={isInitialVisible ? 'eager' : 'lazy'}
+                    decoding="async"
+                  />
+                  <span className="public-mini-carousel-label">{article.category.name}</span>
+                </div>
+                <p className="public-mini-carousel-title">{article.title}</p>
+              </Link>
+            )
+          })}
         </div>
       </div>
+
+      {moreTo ? (
+        <div className="public-home-more-wrap public-carousel-more-wrap">
+          <Link className="public-home-more-link" to={moreTo}>
+            もっと見る
+            <i className="bi bi-arrow-right-short" aria-hidden="true" />
+          </Link>
+        </div>
+      ) : null}
 
       <div className="public-popular-dots" aria-label="人気記事カルーセル">
         {articles.map((article, index) => (
           <button
             key={article.id}
             type="button"
-            className={`public-popular-dot ${index === activeIndex ? 'is-active' : ''}`}
+            className={`public-popular-dot ${index === currentDotIndex ? 'is-active' : ''}`}
             onClick={() => {
               pauseAutoSlide()
-              setActiveIndex(index)
+              setActiveIndex(index + articles.length)
             }}
             aria-label={`${index + 1}件目の記事へ移動`}
           />
@@ -518,24 +770,21 @@ function PublicMiniArticleCarousel({ articles }: { articles: PublicArticleSummar
 
 function PublicArticleSection({
   title,
-  description,
   articles,
   to,
   heroFirst = false,
 }: {
   title: string
-  description: string
   articles: PublicArticleSummary[]
   to: string
   heroFirst?: boolean
 }) {
   return (
     <section className="public-section">
-      <div className="public-section-head">
+      <div className="public-article-section-head">
         <div>
           <p className="public-section-kicker">Stories</p>
           <h2 className="public-section-title">{title}</h2>
-          <p className="public-section-lead">{description}</p>
         </div>
         <Link className="public-more-link" to={to}>
           一覧へ
@@ -556,6 +805,314 @@ function PublicArticleSection({
   )
 }
 
+function PublicDetailAuthorPanel({ article }: { article: PublicArticleBody }) {
+  const authorProfile = article.author.profile?.trim() ?? ''
+  const authorProfileParagraphs = buildProfileTextParagraphs(authorProfile)
+  const hasAuthorHeaderImage = article.author.header_image !== null
+
+  return (
+    <section className="public-detail-side-block public-detail-author-panel">
+      <p className="public-detail-side-kicker">Author</p>
+      <h2>この記事を書いたひと</h2>
+      <div
+        className={`public-detail-author-card${hasAuthorHeaderImage ? ' has-header-image' : ''}`}
+      >
+        {hasAuthorHeaderImage ? (
+          <div className="public-detail-author-header-frame">
+            <img
+              className="public-detail-author-header"
+              src={article.author.header_image}
+              alt=""
+              width={640}
+              height={360}
+              loading="lazy"
+              decoding="async"
+            />
+          </div>
+        ) : null}
+        <div className="public-detail-author-main">
+          {article.author.icon ? (
+            <img
+              className="public-detail-author-icon"
+              src={article.author.icon}
+              alt={article.author.display_name}
+              width={72}
+              height={72}
+              loading="lazy"
+              decoding="async"
+            />
+          ) : (
+            <span className="public-detail-author-icon public-detail-author-icon-fallback">
+              {article.author.display_name.charAt(0)}
+            </span>
+          )}
+          <div className="public-detail-author-copy">
+            <h2>{article.author.display_name}</h2>
+            {authorProfileParagraphs.length > 0 ? (
+              <PublicProfileTextBlock
+                paragraphs={authorProfileParagraphs}
+                className="public-detail-author-text"
+              />
+            ) : null}
+          </div>
+        </div>
+        <Link className="public-detail-author-link" to={`/search?author_id=${article.author.id}`}>
+          この著者の記事
+          <i className="bi bi-arrow-right-short" aria-hidden="true" />
+        </Link>
+      </div>
+    </section>
+  )
+}
+
+function PublicDetailRelatedList({
+  articles,
+}: {
+  articles: PublicArticleSummary[]
+}) {
+  if (articles.length === 0) {
+    return null
+  }
+
+  return (
+    <section className="public-detail-side-block public-detail-related-panel">
+      <p className="public-detail-side-kicker">Related</p>
+      <h2>関連記事</h2>
+      <div className="public-detail-related-list">
+        {articles.map((article) => (
+          <Link key={article.id} className="public-detail-related-item" to={article.path}>
+            <div className="public-detail-related-thumb-frame">
+              <img
+                className="public-detail-related-thumb"
+                src={article.thumbnail_url}
+                alt={article.title}
+                width={160}
+                height={84}
+                loading="lazy"
+                decoding="async"
+              />
+            </div>
+            <span>{article.title}</span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function PublicCategoryTreeNode({
+  category,
+  depth,
+}: {
+  category: PublicCategoryTreeItem
+  depth: number
+}) {
+  const iconClassName = depth === 0 ? 'bi-folder-fill' : 'bi-chevron-right'
+
+  return (
+    <li className={`public-sidebar-category-item is-open is-depth-${Math.min(depth, 2)}`}>
+      <div className="public-sidebar-category-row">
+        <span className="public-sidebar-category-icon" aria-hidden="true">
+          <i className={`bi ${iconClassName}`} aria-hidden="true" />
+        </span>
+        <Link className="public-sidebar-category-link" to={category.path}>
+          <span className="public-sidebar-category-name">
+            {category.name}
+            <span className="public-sidebar-category-count">
+              ({category.article_count})
+            </span>
+          </span>
+        </Link>
+      </div>
+      {category.children.length > 0 ? (
+        <div className="public-sidebar-category-collapse">
+          <div className="public-sidebar-category-collapse-inner">
+            <ul className="public-sidebar-category-tree">
+              {category.children.map((childCategory) => (
+                <PublicCategoryTreeNode
+                  key={childCategory.id}
+                  category={childCategory}
+                  depth={depth + 1}
+                />
+              ))}
+            </ul>
+          </div>
+        </div>
+      ) : null}
+    </li>
+  )
+}
+
+function PublicCategoryTree({ categories }: { categories: PublicCategoryTreeItem[] }) {
+  if (categories.length === 0) {
+    return null
+  }
+
+  return (
+    <ul className="public-sidebar-category-tree is-root">
+      {categories.map((category) => (
+        <PublicCategoryTreeNode
+          key={category.id}
+          category={category}
+          depth={0}
+        />
+      ))}
+    </ul>
+  )
+}
+
+function PublicHomeDesktopLower({
+  searchText,
+  onSearchTextChange,
+  latestPayload,
+  latestMoreTo,
+  sidebar,
+  eagerCount,
+  showSearch,
+}: {
+  searchText: string
+  onSearchTextChange: (value: string) => void
+  latestPayload: PublicArticleListResponse | null
+  latestMoreTo: string
+  sidebar: PublicSidebarResponse | null
+  eagerCount: number
+  showSearch: boolean
+}) {
+  const articles = latestPayload?.items ?? []
+  const profileMetaEntries = sidebar === null ? [] : Object.entries(sidebar.profile.meta)
+  const profileTextParagraphs = sidebar === null
+    ? []
+    : buildProfileTextParagraphs(sidebar.profile.profile)
+
+  return (
+    <section className="public-home-lower row g-4">
+      <div className="col-lg-8">
+        <section className="public-home-latest-panel">
+          <div className="public-home-latest-head">
+            <div>
+              <p className="public-section-kicker">New Articles</p>
+              <h2 className="public-home-latest-title">新着記事</h2>
+            </div>
+            {showSearch ? (
+              <label className="public-home-search-field">
+                <i className="bi bi-search" aria-hidden="true" />
+                <input
+                  type="search"
+                  value={searchText}
+                  onChange={(event) => onSearchTextChange(event.target.value)}
+                  placeholder="記事タイトルから検索"
+                  aria-label="新着記事を検索"
+                />
+              </label>
+            ) : null}
+          </div>
+          <div className="public-home-latest-grid">
+            {articles.map((article, index) => (
+              <PublicArticleCard
+                key={article.id}
+                article={article}
+                variant="compact"
+                eager={index < eagerCount}
+              />
+            ))}
+          </div>
+          {latestPayload !== null ? (
+            <div className="public-home-more-wrap public-home-latest-more-wrap">
+              <Link className="public-home-more-link" to={latestMoreTo}>
+                もっと見る
+                <i className="bi bi-arrow-right-short" aria-hidden="true" />
+              </Link>
+            </div>
+          ) : null}
+        </section>
+      </div>
+
+      <aside className="col-lg-4">
+        {sidebar !== null ? (
+          <div className="public-home-sidebar">
+            <div className="public-profile-home-panel">
+              <div className="public-home-latest-head public-home-carousel-head public-profile-mobile-head">
+                <p className="public-section-kicker">PROFILE</p>
+                <h2 className="public-home-latest-title">プロフィール</h2>
+              </div>
+              <section className="public-sidebar-block public-profile-block">
+                <div className="public-profile-header">
+                  <img
+                    className="public-profile-header-image"
+                    src={sidebar.profile.header_image ?? ''}
+                    alt=""
+                    width={1200}
+                    height={420}
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </div>
+                <div className="public-profile-body">
+                  {sidebar.profile.icon !== null ? (
+                    <img
+                      className="public-profile-icon"
+                      src={sidebar.profile.icon}
+                      alt={sidebar.profile.display_name}
+                      width={72}
+                      height={72}
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  ) : null}
+                  <div className="public-profile-copy">
+                    <p className="public-sidebar-kicker">Profile</p>
+                    <h2 className="public-sidebar-title">{sidebar.profile.display_name}</h2>
+                    <PublicProfileTextBlock
+                      paragraphs={profileTextParagraphs}
+                      className="public-profile-text"
+                    />
+                    {profileMetaEntries.length > 0 ? (
+                      <dl className="public-profile-meta-list">
+                        {profileMetaEntries.map(([key, value]) => (
+                          <div key={key} className="public-profile-meta-item">
+                            <dt>{key}:</dt>
+                            <dd>{value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="public-home-more-wrap public-profile-more-wrap">
+                  <Link className="public-home-more-link" to="#">
+                    もっと見る
+                    <i className="bi bi-arrow-right-short" aria-hidden="true" />
+                  </Link>
+                </div>
+              </section>
+            </div>
+
+            <section className="public-sidebar-block public-category-block">
+              <div className="public-sidebar-section-head">
+                <h2 className="public-sidebar-section-title">カテゴリー</h2>
+              </div>
+              <PublicCategoryTree categories={sidebar.category_tree} />
+            </section>
+
+            <section className="public-sidebar-block public-tag-block">
+              <div className="public-sidebar-section-head">
+                <h2 className="public-sidebar-section-title">タグ</h2>
+              </div>
+              <div className="public-sidebar-chip-cloud">
+                {sidebar.tags.map((tag) => (
+                  <Link key={tag.id} className="public-sidebar-chip" to={tag.path}>
+                    #{tag.name}
+                  </Link>
+                ))}
+              </div>
+            </section>
+          </div>
+        ) : null}
+      </aside>
+    </section>
+  )
+}
+
 function PublicPaginationControls({
   page,
   totalPages,
@@ -569,30 +1126,67 @@ function PublicPaginationControls({
     return null
   }
 
+  const pageItems: Array<number | 'ellipsis'> = []
+  for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
+    const shouldShow =
+      pageNumber === 1 ||
+      pageNumber === totalPages ||
+      Math.abs(pageNumber - page) <= 1
+
+    if (shouldShow) {
+      pageItems.push(pageNumber)
+      continue
+    }
+
+    if (pageItems[pageItems.length - 1] !== 'ellipsis') {
+      pageItems.push('ellipsis')
+    }
+  }
+
   return (
-    <div className="public-pagination-wrap">
+    <nav className="public-pagination-wrap" aria-label="ページネーション">
       <button
         type="button"
-        className="public-page-button"
+        className="public-page-button public-page-nav-button"
         onClick={() => onMove(Math.max(1, page - 1))}
         disabled={page <= 1}
+        aria-label="前のページ"
       >
         <i className="bi bi-chevron-left" aria-hidden="true" />
-        前へ
       </button>
-      <p className="public-page-status">
-        {page} / {totalPages}
-      </p>
+      <div className="public-page-number-list">
+        {pageItems.map((pageItem, index) => {
+          if (pageItem === 'ellipsis') {
+            return (
+              <span key={`ellipsis-${index}`} className="public-page-ellipsis" aria-hidden="true">
+                …
+              </span>
+            )
+          }
+
+          return (
+            <button
+              key={pageItem}
+              type="button"
+              className={`public-page-number ${pageItem === page ? 'is-active' : ''}`}
+              onClick={() => onMove(pageItem)}
+              aria-current={pageItem === page ? 'page' : undefined}
+            >
+              {pageItem}
+            </button>
+          )
+        })}
+      </div>
       <button
         type="button"
-        className="public-page-button"
+        className="public-page-button public-page-nav-button"
         onClick={() => onMove(Math.min(totalPages, page + 1))}
         disabled={page >= totalPages}
+        aria-label="次のページ"
       >
-        次へ
         <i className="bi bi-chevron-right" aria-hidden="true" />
       </button>
-    </div>
+    </nav>
   )
 }
 
@@ -633,65 +1227,218 @@ function usePublicArticleList(params: PublicArticleListParams) {
   return { payload, errorPath }
 }
 
-function PublicHeroVisual() {
+function usePublicSidebarPayload() {
+  const [sidebar, setSidebar] = useState<PublicSidebarResponse | null>(null)
+  const [errorPath, setErrorPath] = useState('')
+
+  useEffect(() => {
+    let active = true
+
+    async function load(): Promise<void> {
+      try {
+        const nextSidebar = await fetchPublicSidebar()
+        if (!active) {
+          return
+        }
+        startTransition(() => {
+          setSidebar(nextSidebar)
+          setErrorPath('')
+        })
+      } catch (error) {
+        if (!active) {
+          return
+        }
+        startTransition(() => {
+          setErrorPath(resolvePublicErrorPath(error))
+        })
+      }
+    }
+
+    void load()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  return { sidebar, errorPath }
+}
+
+function findPublicCategoryBySlug(
+  categories: PublicCategoryTreeItem[],
+  slug: string,
+): PublicCategoryTreeItem | null {
+  for (const category of categories) {
+    if (category.slug === slug) {
+      return category
+    }
+    const childCategory = findPublicCategoryBySlug(category.children, slug)
+    if (childCategory !== null) {
+      return childCategory
+    }
+  }
+  return null
+}
+
+function PublicHeroVisual({ animationKey }: { animationKey: string }) {
   const [heroMessage] = useState(
     () => PUBLIC_HERO_MESSAGES[Math.floor(Math.random() * PUBLIC_HERO_MESSAGES.length)],
   )
+  const heroTitleCharacters = Array.from('気ままに、機材と写真を楽しむブログ。')
+  const heroTextLabel = heroMessage.join('\n')
 
   return (
-    <section className="public-hero">
-      <div className="public-hero-copy">
-        <p className="public-hero-kicker">Weekend Camera</p>
-        <h1 className="public-hero-title">気ままに、機材と写真を楽しむブログ。</h1>
-        <p className="public-hero-text">{heroMessage}</p>
-      </div>
-    </section>
+    <>
+      <section className="public-hero">
+        <div className="public-hero-copy">
+          <p className="public-hero-kicker">Weekend Camera</p>
+          <h1 className="public-hero-title" aria-label="気ままに、機材と写真を楽しむブログ。">
+            {heroTitleCharacters.map((character, index) => (
+              <Fragment key={`${animationKey}-plain-${character}-${index}`}>
+                <span
+                  className="public-hero-title-char"
+                  style={{ ['--hero-char-delay' as string]: `${index * 38}ms` }}
+                  aria-hidden="true"
+                >
+                  {character}
+                </span>
+                {index === 4 ? <br className="public-hero-mobile-break" aria-hidden="true" /> : null}
+              </Fragment>
+            ))}
+          </h1>
+          <p className="public-hero-text">
+            {heroMessage.map((line, index) => (
+              <span key={line}>
+                {index > 0 ? <br /> : null}
+                {line}
+              </span>
+            ))}
+          </p>
+        </div>
+      </section>
+
+      <section className="public-photo-hero">
+        <img
+          className="public-photo-hero-image"
+          src={publicHeroPhoto}
+          alt="週末カメラのメインビジュアル"
+          width={1458}
+          height={980}
+          decoding="async"
+        />
+        <div className="public-photo-hero-overlay">
+          <h1 className="public-hero-title" aria-label="気ままに、機材と写真を楽しむブログ。">
+            {heroTitleCharacters.map((character, index) => (
+              <Fragment key={`${animationKey}-photo-${character}-${index}`}>
+                <span
+                  className="public-hero-title-char"
+                  style={{ ['--hero-char-delay' as string]: `${index * 38}ms` }}
+                  aria-hidden="true"
+                >
+                  {character}
+                </span>
+                {index === 4 ? <br className="public-hero-mobile-break" aria-hidden="true" /> : null}
+              </Fragment>
+            ))}
+          </h1>
+          <span className="public-photo-hero-rule" aria-hidden="true" />
+          <p className="public-photo-hero-text" aria-label={heroTextLabel}>
+            {heroMessage.map((line, lineIndex) => (
+              <span key={`desktop-${line}`} aria-hidden="true">
+                {lineIndex > 0 ? <br /> : null}
+                {Array.from(line).map((character, characterIndex) => (
+                  <span
+                    key={`${animationKey}-text-${lineIndex}-${character}-${characterIndex}`}
+                    className="public-photo-hero-text-char"
+                    style={{
+                      ['--hero-text-char-delay' as string]: `${lineIndex * 110 + characterIndex * 18}ms`,
+                    }}
+                  >
+                    {character}
+                  </span>
+                ))}
+              </span>
+            ))}
+          </p>
+        </div>
+      </section>
+    </>
   )
 }
 
 export function PublicHomePage() {
+  const isMobileViewport = usePublicMobileViewport()
+  const { sidebar, errorPath: sidebarErrorPath } = usePublicSidebarPayload()
+  const [homeSearchText, setHomeSearchText] = useState('')
+  const [homeSearchQuery, setHomeSearchQuery] = useState('')
+  const homeSearchPageSize = isMobileViewport ? HOME_MOBILE_SEARCH_PAGE_SIZE : HOME_SEARCH_PAGE_SIZE
+  const popularCarouselEagerCount = isMobileViewport ? 1 : 2
+  const latestArticleEagerCount = isMobileViewport ? 1 : 3
+  const homeEffectiveSearchQuery = isMobileViewport ? '' : homeSearchQuery
   const popularState = usePublicArticleList({
     ordering: 'popular',
     page: 1,
     limit: HOME_SECTION_SIZE,
   })
-  const newestState = usePublicArticleList({
+  const searchState = usePublicArticleList({
     ordering: 'newest',
     page: 1,
-    limit: HOME_SECTION_SIZE,
+    limit: homeSearchPageSize,
+    q: homeEffectiveSearchQuery,
   })
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      startTransition(() => {
+        setHomeSearchQuery(homeSearchText)
+      })
+    }, HOME_SEARCH_DEBOUNCE_MS)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [homeSearchText])
 
   if (popularState.errorPath !== '') {
     return <Navigate to={popularState.errorPath} replace />
   }
-  if (newestState.errorPath !== '') {
-    return <Navigate to={newestState.errorPath} replace />
+  if (searchState.errorPath !== '') {
+    return <Navigate to={searchState.errorPath} replace />
+  }
+  if (sidebarErrorPath !== '') {
+    return <Navigate to={sidebarErrorPath} replace />
   }
 
   const popularArticles = popularState.payload?.items ?? []
+  const latestSearchKeyword = isMobileViewport ? '' : homeSearchText.trim()
+  const latestMoreTo =
+    latestSearchKeyword === ''
+      ? '/articles/new/'
+      : `/articles/new/?q=${encodeURIComponent(latestSearchKeyword)}`
 
   return (
-    <main className="public-main">
-      <PublicHeroVisual />
-      <PublicPopularShowcase articles={popularArticles} />
-      <PublicMiniArticleCarousel articles={popularArticles} />
-      {newestState.payload ? (
-        <PublicArticleSection
-          title="新着記事"
-          description="撮ったばかりの写真と、使った機材の感触を新しい順にまとめています。"
-          articles={newestState.payload.items}
-          to="/articles/new/"
-          heroFirst
+    <main className="public-main is-home">
+      <div className="public-home-carousel public-home-carousel-primary">
+        <div className="public-home-latest-head public-home-carousel-head">
+          <div>
+            <p className="public-section-kicker">Popular Articles</p>
+            <h2 className="public-home-latest-title">人気記事</h2>
+          </div>
+        </div>
+        <PublicMiniArticleCarousel
+          articles={popularArticles}
+          eagerCount={popularCarouselEagerCount}
+          moreTo="/articles/popular/"
         />
-      ) : null}
-      {popularState.payload ? (
-        <PublicArticleSection
-          title="人気記事"
-          description="よく読まれている記事から、週末の一台を選ぶヒントを探せます。"
-          articles={popularState.payload.items}
-          to="/articles/popular/"
-        />
-      ) : null}
+      </div>
+      <PublicHomeDesktopLower
+        searchText={homeSearchText}
+        onSearchTextChange={setHomeSearchText}
+        latestPayload={searchState.payload}
+        latestMoreTo={latestMoreTo}
+        sidebar={sidebar}
+        eagerCount={latestArticleEagerCount}
+        showSearch={!isMobileViewport}
+      />
     </main>
   )
 }
@@ -700,19 +1447,50 @@ function PublicListPage({
   title,
   description,
   params,
+  mobileTwoColumnCards = false,
 }: {
   title: string
   description: string
   params: PublicArticleListParams
+  mobileTwoColumnCards?: boolean
 }) {
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const page = Number(searchParams.get('page') ?? '1')
+  const searchKeyword = searchParams.get('q') ?? ''
+  const [archiveSearchText, setArchiveSearchText] = useState(searchKeyword)
   const { payload, errorPath } = usePublicArticleList({
     ...params,
     page: Number.isFinite(page) && page > 0 ? page : 1,
     limit: PUBLIC_PAGE_SIZE,
+    q: searchKeyword,
   })
+
+  useEffect(() => {
+    setArchiveSearchText(searchKeyword)
+  }, [searchKeyword])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const normalized = archiveSearchText.trim()
+      if (normalized === searchKeyword) {
+        return
+      }
+
+      const next = new URLSearchParams(location.search)
+      if (normalized === '') {
+        next.delete('q')
+      } else {
+        next.set('q', normalized)
+      }
+      next.delete('page')
+      setSearchParams(next, { replace: true })
+    }, HOME_SEARCH_DEBOUNCE_MS)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [archiveSearchText, location.search, searchKeyword, setSearchParams])
 
   useEffect(() => {
     applyPublicPageMeta({
@@ -726,19 +1504,39 @@ function PublicListPage({
     return <Navigate to={errorPath} replace />
   }
 
+  const cardGridClassName = `public-card-grid is-archive-four${
+    mobileTwoColumnCards ? ' is-mobile-two-column' : ''
+  }`
+
   return (
     <main className="public-main">
-      <section className="public-collection-hero">
-        <p className="public-section-kicker">Archive</p>
-        <h1 className="public-collection-title">{title}</h1>
-        <p className="public-section-lead">{description}</p>
-      </section>
+      <div className="public-archive-head">
+        <div>
+          <p className="public-section-kicker">Archive</p>
+          <h1 className="public-home-latest-title">{title}</h1>
+        </div>
+        <label className="public-home-search-field">
+          <i className="bi bi-search" aria-hidden="true" />
+          <input
+            type="search"
+            value={archiveSearchText}
+            onChange={(event) => setArchiveSearchText(event.target.value)}
+            placeholder="記事タイトルから検索"
+            aria-label={`${title}を検索`}
+          />
+        </label>
+      </div>
 
       {payload ? (
         <>
-          <div className="public-card-grid">
+          <div className={cardGridClassName}>
             {payload.items.map((article, index) => (
-              <PublicArticleCard key={article.id} article={article} eager={index === 0} />
+              <PublicArticleCard
+                key={article.id}
+                article={article}
+                eager={index === 0}
+                showSupplement={false}
+              />
             ))}
           </div>
           <PublicPaginationControls
@@ -763,6 +1561,7 @@ export function PublicNewestArticlesPage() {
       title="新着記事"
       description="公開した順に、最新のカメラレビューと写真記録を並べています。"
       params={{ ordering: 'newest' }}
+      mobileTwoColumnCards
     />
   )
 }
@@ -773,15 +1572,24 @@ export function PublicPopularArticlesPage() {
       title="人気記事"
       description="PV順でよく読まれている記事をまとめています。"
       params={{ ordering: 'popular' }}
+      mobileTwoColumnCards
     />
   )
 }
 
 export function PublicCategoryArticlesPage() {
   const { categorySlug = '' } = useParams()
+  const { sidebar, errorPath } = usePublicSidebarPayload()
+  const category =
+    sidebar === null ? null : findPublicCategoryBySlug(sidebar.category_tree, categorySlug)
+
+  if (errorPath !== '') {
+    return <Navigate to={errorPath} replace />
+  }
+
   return (
     <PublicListPage
-      title={`# ${categorySlug}`}
+      title={category?.name ?? 'カテゴリー'}
       description="このカテゴリーと配下カテゴリーの記事をまとめて表示しています。"
       params={{
         ordering: 'newest',
@@ -793,9 +1601,16 @@ export function PublicCategoryArticlesPage() {
 
 export function PublicTagArticlesPage() {
   const { tagSlug = '' } = useParams()
+  const { sidebar, errorPath } = usePublicSidebarPayload()
+  const tag = sidebar?.tags.find((item) => item.slug === tagSlug) ?? null
+
+  if (errorPath !== '') {
+    return <Navigate to={errorPath} replace />
+  }
+
   return (
     <PublicListPage
-      title={`# ${tagSlug}`}
+      title={tag === null ? 'タグ' : `# ${tag.name}`}
       description="このタグが付いた記事を公開順に表示しています。"
       params={{
         ordering: 'newest',
@@ -879,91 +1694,94 @@ export function PublicArticleDetailPage() {
   }
 
   const { article, related_articles: relatedArticles, cdn_base_url: cdnBaseUrl } = payload
+  const categoryBreadcrumbSource = article.category_breadcrumb ?? []
+  const categoryBreadcrumb = categoryBreadcrumbSource.length > 0
+    ? categoryBreadcrumbSource
+    : [article.category]
+  const publishedAt = article.published_at
+  const publishedDateParts = formatPublicDateParts(publishedAt)
+  const headingPanelClassName = `public-detail-heading-panel${
+    publishedDateParts === null ? ' without-date' : ''
+  }`
+  const detailOptionItems = article.article_option.items.map((option) => ({
+    key: `option-${option.id}`,
+    content: <span>{option.label}</span>,
+  }))
 
   return (
     <main className="public-main public-article-detail-page">
-      <article className="public-article-detail-shell">
-        <nav className="public-breadcrumb" aria-label="パンくず">
-          <Link to="/">Home</Link>
-          <span>/</span>
-          <Link to={article.category.path}>{article.category.name}</Link>
-        </nav>
+      <div className="public-detail-grid row g-5">
+        <aside className="public-detail-sidebar col-lg-4 order-2 order-lg-2">
+          <PublicDetailAuthorPanel article={article} />
+          <PublicDetailRelatedList articles={relatedArticles} />
+        </aside>
 
-        <header className="public-article-header">
-          <div className="public-detail-thumb-wrap">
-            <img
-              className="public-detail-thumb"
-              src={article.thumbnail_url}
-              alt={article.title}
-              width={1200}
-              height={630}
-              loading="eager"
-              decoding="async"
-              fetchPriority="high"
-            />
-          </div>
-          <p className="public-detail-category">{article.category.name}</p>
-          <h1 className="public-detail-title">{article.title}</h1>
-          <p className="public-detail-summary">{article.summary}</p>
-          <div className="public-detail-meta">
-            <Link
-              className="public-author-link"
-              to={`/search?author_id=${article.author.id}`}
-            >
-              {article.author.icon ? (
+        <div className="col-lg-8 order-1 order-lg-1">
+          <article className="public-article-detail-shell">
+            <header className="public-article-header">
+              <nav className="public-detail-category-line" aria-label="カテゴリー階層">
+                {categoryBreadcrumb.map((category, index) => (
+                  <Fragment key={category.id}>
+                    <Link to={category.path}>{category.name}</Link>
+                    {index < categoryBreadcrumb.length - 1 ? <span>/</span> : null}
+                  </Fragment>
+                ))}
+              </nav>
+
+              <div className={headingPanelClassName}>
+                {publishedAt !== null && publishedDateParts !== null ? (
+                  <time
+                    className="public-detail-posted-at"
+                    dateTime={publishedAt}
+                    aria-label={`投稿日 ${formatPublicDate(publishedAt)}`}
+                  >
+                    <span className="public-detail-posted-year">{publishedDateParts.year}</span>
+                    <span className="public-detail-posted-month-day">
+                      {publishedDateParts.monthDay}
+                    </span>
+                  </time>
+                ) : null}
+
+                <div className="public-detail-heading-copy">
+                  <h1 className="public-detail-title">{article.title}</h1>
+                  {detailOptionItems.length > 0 ? (
+                    <nav
+                      className="public-detail-meta-line"
+                      aria-label="記事オプション"
+                    >
+                      {detailOptionItems.map((item, index) => (
+                        <Fragment key={item.key}>
+                          {item.content}
+                          {index < detailOptionItems.length - 1 ? <span>/</span> : null}
+                        </Fragment>
+                      ))}
+                    </nav>
+                  ) : null}
+                </div>
+              </div>
+              <div className="public-detail-thumb-wrap">
                 <img
-                  className="public-author-icon"
-                  src={article.author.icon}
-                  alt={article.author.display_name}
-                  width={48}
-                  height={48}
-                  loading="lazy"
+                  className="public-detail-thumb"
+                  src={article.thumbnail_url}
+                  alt={article.title}
+                  width={1200}
+                  height={630}
+                  loading="eager"
                   decoding="async"
                 />
-              ) : (
-                <span className="public-author-icon-fallback">
-                  {article.author.display_name.charAt(0)}
-                </span>
-              )}
-              <span>{article.author.display_name}</span>
-            </Link>
-            {article.published_at ? (
-              <time className="public-published-at" dateTime={article.published_at}>
-                {formatPublicDate(article.published_at)}
-              </time>
-            ) : null}
-          </div>
-          <div className="public-tag-row">
-            {article.tags.map((tag) => (
-              <Link key={tag.id} className="public-tag-pill" to={`/tag/${tag.slug}/`}>
-                #{tag.name}
-              </Link>
-            ))}
-            {article.article_option.items.map((option) => (
-              <span key={option.id} className="public-tag-pill is-option">
-                {option.label}
-              </span>
-            ))}
-          </div>
-        </header>
+              </div>
+            </header>
 
-        <div className="public-article-layout">
-          <PublicArticleBodyRenderer
-            bodyHtml={article.body_html}
-            cdnBaseUrl={cdnBaseUrl}
-            ogpByUrl={article.ogp_by_url}
-          />
+            <div className="public-article-layout">
+              <PublicArticleBodyRenderer
+                bodyHtml={article.body_html}
+                cdnBaseUrl={cdnBaseUrl}
+                ogpByUrl={article.ogp_by_url}
+              />
+            </div>
+          </article>
         </div>
-      </article>
-
-      {relatedArticles.length > 0 ? (
-        <PublicArticleSection
-          title="関連記事"
-          description="同じカテゴリーを中心に、続けて読みやすい記事を並べています。"
-          articles={relatedArticles}
-          to={article.category.path}
-        />
-      ) : null}
+      </div>
     </main>
   )
 }
@@ -998,16 +1816,55 @@ export function PublicContactPage() {
   })
   const [message, setMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
+  const [turnstileSiteKey, setTurnstileSiteKey] = useState('')
+  const [turnstileToken, setTurnstileToken] = useState('')
+  const [turnstileConfigError, setTurnstileConfigError] = useState('')
+  const [turnstileResetSignal, setTurnstileResetSignal] = useState(0)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  useEffect(() => {
+    let shouldIgnore = false
+
+    async function loadSiteConfig(): Promise<void> {
+      try {
+        const siteConfig = await fetchPublicSiteConfig()
+        if (shouldIgnore) {
+          return
+        }
+        setTurnstileSiteKey(siteConfig.turnstile_site_key)
+        setTurnstileConfigError('')
+      } catch {
+        if (!shouldIgnore) {
+          setTurnstileConfigError('Turnstile の設定取得に失敗しました。')
+        }
+      }
+    }
+
+    void loadSiteConfig()
+
+    return () => {
+      shouldIgnore = true
+    }
+  }, [])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
     setMessage('')
     setErrorMessage('')
+    if (turnstileSiteKey === '') {
+      setErrorMessage(turnstileConfigError || 'Turnstile の読み込み完了後に送信してください。')
+      return
+    }
+    if (turnstileToken === '') {
+      setErrorMessage('Turnstile の認証を完了してください。')
+      return
+    }
 
+    setIsSubmitting(true)
     try {
       const response = await submitPublicContact({
         ...form,
-        turnstile_token: '',
+        turnstile_token: turnstileToken,
       })
       setMessage(response.message)
       setForm({
@@ -1023,6 +1880,10 @@ export function PublicContactPage() {
         return
       }
       setErrorMessage('送信に失敗しました。')
+    } finally {
+      setIsSubmitting(false)
+      setTurnstileToken('')
+      setTurnstileResetSignal((current) => current + 1)
     }
   }
 
@@ -1031,9 +1892,6 @@ export function PublicContactPage() {
       <section className="public-contact-shell">
         <p className="public-section-kicker">Contact</p>
         <h1 className="public-collection-title">お問い合わせ</h1>
-        <p className="public-section-lead">
-          レビューのご依頼やブログへのご連絡はこちらからお送りください。
-        </p>
 
         <form className="public-contact-form" onSubmit={(event) => void handleSubmit(event)}>
           <div className="public-contact-grid">
@@ -1103,13 +1961,25 @@ export function PublicContactPage() {
               required
             />
           </label>
-          <p className="public-contact-note">
-            Cloudflare Turnstile は公開フロント側の追加要件として別途接続します。
-          </p>
+          {turnstileSiteKey !== '' ? (
+            <PublicTurnstileWidget
+              siteKey={turnstileSiteKey}
+              resetSignal={turnstileResetSignal}
+              onTokenChange={setTurnstileToken}
+            />
+          ) : (
+            <p className="public-contact-turnstile-message">
+              {turnstileConfigError || 'Turnstile を読み込んでいます。'}
+            </p>
+          )}
           {message !== '' ? <p className="public-contact-success">{message}</p> : null}
           {errorMessage !== '' ? <p className="public-contact-error">{errorMessage}</p> : null}
-          <button type="submit" className="public-contact-submit">
-            送信する
+          <button
+            type="submit"
+            className="public-contact-submit"
+            disabled={isSubmitting || turnstileSiteKey === '' || turnstileToken === ''}
+          >
+            {isSubmitting ? '送信中' : '送信する'}
           </button>
         </form>
       </section>
@@ -1162,106 +2032,109 @@ export function PublicServerErrorPage() {
 }
 
 export function PublicLayout() {
-  const navigate = useNavigate()
   const location = useLocation()
-  const [searchKeyword, setSearchKeyword] = useState('')
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
-  const [searchOpen, setSearchOpen] = useState(false)
+  const currentYear = new Date().getFullYear()
+  const isHomePath = location.pathname === '/'
+  const heroAnimationKey = `${location.pathname}${location.search}`
 
   useEffect(() => {
     setMobileNavOpen(false)
-    setSearchOpen(false)
-    setSearchKeyword(new URLSearchParams(location.search).get('q') ?? '')
-  }, [location.pathname, location.search])
+  }, [location.pathname])
 
-  function handleSearchSubmit(event: FormEvent<HTMLFormElement>): void {
-    event.preventDefault()
-    const normalized = searchKeyword.trim()
-    if (normalized === '') {
-      return
-    }
-    startTransition(() => {
-      navigate(`/search?q=${encodeURIComponent(normalized)}`)
+  useLayoutEffect(() => {
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: 'auto',
     })
-  }
+  }, [location.pathname, location.search])
 
   return (
     <div className="public-site-shell">
-      <header className="public-header">
+      <header className={`public-header ${isHomePath ? 'is-home' : 'is-subpage'}`}>
         <div className="public-header-inner">
           <button
             type="button"
-            className="public-mobile-menu-button"
+            className="navbar-toggler public-navbar-toggler"
             onClick={() => {
               setMobileNavOpen((current) => !current)
-              setSearchOpen(false)
             }}
+            data-bs-toggle="offcanvas"
+            data-bs-target="#publicOffcanvasNavbar"
+            aria-controls="publicOffcanvasNavbar"
             aria-label="メニューを開閉"
             aria-expanded={mobileNavOpen}
           >
-            <i className={`bi ${mobileNavOpen ? 'bi-x-lg' : 'bi-list'}`} aria-hidden="true" />
+            <span className="navbar-toggler-icon" aria-hidden="true" />
           </button>
           <Link className="public-site-logo" to="/">
             <i className="bi bi-camera" aria-hidden="true" />
             <span>週末カメラ</span>
           </Link>
-          <button
-            type="button"
-            className="public-search-toggle-button"
-            onClick={() => {
-              setSearchOpen((current) => !current)
-              setMobileNavOpen(false)
-            }}
-            aria-label="検索を開閉"
-            aria-expanded={searchOpen}
-          >
-            <i className={`bi ${searchOpen ? 'bi-x-lg' : 'bi-search'}`} aria-hidden="true" />
-          </button>
+          <span className="public-header-spacer" aria-hidden="true" />
         </div>
-        <form
-          className={`public-search-bar ${searchOpen ? 'is-open' : ''}`}
-          onSubmit={handleSearchSubmit}
-        >
-          <i className="bi bi-search" aria-hidden="true" />
-          <input
-            className="public-search-input"
-            type="search"
-            value={searchKeyword}
-            onChange={(event) => setSearchKeyword(event.target.value)}
-            placeholder="タイトル検索"
-            aria-label="記事検索"
-          />
-        </form>
+        <PublicHeroVisual animationKey={heroAnimationKey} />
       </header>
       <div
         className={`public-nav-backdrop ${mobileNavOpen ? 'is-open' : ''}`}
         onClick={() => setMobileNavOpen(false)}
         aria-hidden="true"
       />
-      <aside className={`public-mobile-nav ${mobileNavOpen ? 'is-open' : ''}`}>
+      <aside
+        id="publicOffcanvasNavbar"
+        className={`public-mobile-nav ${mobileNavOpen ? 'is-open' : ''}`}
+        tabIndex={-1}
+        aria-labelledby="publicOffcanvasNavbarLabel"
+      >
         <div className="public-mobile-nav-head">
-          <p className="public-mobile-nav-title">MENU</p>
+          <p id="publicOffcanvasNavbarLabel" className="public-mobile-nav-title">MENU</p>
         </div>
-        <Link className="public-mobile-nav-link" to="/articles/new/">
-          新着記事
+        <Link className="public-mobile-nav-link" to="/" onClick={() => setMobileNavOpen(false)}>
+          <span>トップ</span>
         </Link>
-        <Link className="public-mobile-nav-link" to="/articles/popular/">
-          人気記事
+        <Link
+          className="public-mobile-nav-link"
+          to="/articles/new/"
+          onClick={() => setMobileNavOpen(false)}
+        >
+          <span>新着記事</span>
         </Link>
-        <Link className="public-mobile-nav-link" to="/contact">
-          お問い合わせ
+        <Link
+          className="public-mobile-nav-link"
+          to="/articles/popular/"
+          onClick={() => setMobileNavOpen(false)}
+        >
+          <span>人気記事</span>
         </Link>
+        <Link
+          className="public-mobile-nav-link"
+          to="/contact"
+          onClick={() => setMobileNavOpen(false)}
+        >
+          <span>お問い合わせ</span>
+        </Link>
+        <a className="public-mobile-nav-link" href="#" onClick={() => setMobileNavOpen(false)}>
+          <span>プライバシーポリシー</span>
+        </a>
       </aside>
 
       <Outlet />
 
       <footer className="public-footer">
-        <Link className="public-footer-logo" to="/">
-          週末カメラ
-        </Link>
+        <p className="public-footer-copyright">
+          © {currentYear} 週末カメラ
+        </p>
         <p className="public-footer-copy">
           気ままに、機材と写真を楽しむブログ
         </p>
+        <nav className="public-footer-links" aria-label="フッターリンク">
+          <Link to="/">ホーム</Link>
+          <span aria-hidden="true">|</span>
+          <Link to="/contact">お問い合わせ</Link>
+          <span aria-hidden="true">|</span>
+          <a href="#">プライバシーポリシー</a>
+        </nav>
       </footer>
     </div>
   )

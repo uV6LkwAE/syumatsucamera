@@ -1,6 +1,7 @@
 """
 公開APIビューを定義する。
 """
+from django.conf import settings
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -8,8 +9,11 @@ from public.serializers import (
     PublicArticleDetailSerializer,
     PublicArticleListQuerySerializer,
     PublicArticleListSerializer,
+    PublicSidebarSerializer,
+    PublicSiteConfigSerializer,
 )
 from public.services.article_services import PublicArticleService
+from public.services.sidebar_services import PublicSidebarService
 
 
 class PublicArticleListView(APIView):
@@ -57,3 +61,37 @@ class PublicArticleDetailView(APIView):
         response_serializer = PublicArticleDetailSerializer(payload)
         return Response(response_serializer.data)
 
+
+class PublicSidebarView(APIView):
+    """
+    公開トップ補助情報API。
+    """
+
+    permission_classes = []
+
+    def get(self, request):
+        """
+        公開トップのプロフィール、カテゴリ、タグを返す。
+        """
+        payload = PublicSidebarService.get_sidebar()
+        response_serializer = PublicSidebarSerializer(payload)
+        return Response(response_serializer.data)
+
+
+class PublicSiteConfigView(APIView):
+    """
+    公開フロント用設定API。
+    """
+
+    permission_classes = []
+
+    def get(self, request):
+        """
+        公開フロント用設定を返す。
+        """
+        response_serializer = PublicSiteConfigSerializer(
+            {
+                "turnstile_site_key": settings.TURNSTILE_SITE_KEY,
+            }
+        )
+        return Response(response_serializer.data)

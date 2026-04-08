@@ -1,4 +1,4 @@
-import { createElement, Fragment, useEffect, type ReactNode } from 'react'
+import { createElement, Fragment, useEffect, useState, type ReactNode } from 'react'
 import type { PublicOgpRecord, PublicTocNode } from './types'
 
 type RenderedPublicArticleBody = {
@@ -313,6 +313,41 @@ function renderNode(
     )
   }
 
+  if (tagName === 'h4') {
+    return createElement(
+      tagName,
+      {
+        ...createElementProps(element),
+        key,
+        className: `public-article-heading ${element.getAttribute('class') ?? ''}`.trim(),
+      },
+      ...children,
+    )
+  }
+
+  if (tagName === 'blockquote' || tagName === 'backquote') {
+    return createElement(
+      tagName,
+      {
+        ...createElementProps(element),
+        key,
+      },
+      createElement('i', {
+        key: `${key}-quote-icon`,
+        className: 'bi bi-quote public-article-quote-icon',
+        'aria-hidden': 'true',
+      }),
+      createElement(
+        'div',
+        {
+          key: `${key}-quote-body`,
+          className: 'public-article-quote-body',
+        },
+        ...children,
+      ),
+    )
+  }
+
   if (tagName === 'a') {
     const href = element.getAttribute('href') ?? '#'
     const isExternal = ABSOLUTE_HTTP_PATTERN.test(href)
@@ -433,17 +468,41 @@ export function PublicArticleBodyRenderer({
   ogpByUrl: Record<string, PublicOgpRecord>
 }) {
   const renderedBody = renderPublicArticleBody(bodyHtml, cdnBaseUrl, ogpByUrl)
+  const [tocOpen, setTocOpen] = useState(true)
   usePublicXEmbedRenderer(renderedBody.hasXEmbeds)
 
   return (
     <Fragment>
-      <div className="public-article-content">{renderedBody.content}</div>
       {renderedBody.toc.length > 0 ? (
-        <aside className="public-article-toc" aria-label="目次">
-          <p className="public-article-toc-title">Index</p>
-          {renderPublicTocNodes(renderedBody.toc)}
+        <aside
+          className={`public-article-toc ${tocOpen ? 'is-open' : 'is-closed'}`}
+          aria-label="目次"
+        >
+          <button
+            type="button"
+            className="public-article-toc-toggle"
+            onClick={() => setTocOpen((current) => !current)}
+            aria-expanded={tocOpen}
+            aria-controls="publicArticleTocBody"
+          >
+            <span className="public-article-toc-title">Index</span>
+            <i
+              className="bi bi-chevron-down public-article-toc-chevron"
+              aria-hidden="true"
+            />
+          </button>
+          <div
+            id="publicArticleTocBody"
+            className="public-article-toc-body"
+            aria-hidden={!tocOpen}
+          >
+            <div className="public-article-toc-body-inner">
+              {renderPublicTocNodes(renderedBody.toc)}
+            </div>
+          </div>
         </aside>
       ) : null}
+      <div className="public-article-content">{renderedBody.content}</div>
     </Fragment>
   )
 }

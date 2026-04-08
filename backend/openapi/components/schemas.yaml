@@ -120,6 +120,56 @@ components:
           type: string
         path:
           type: string
+    PublicCategoryTreeItem:
+      type: object
+      required:
+        - id
+        - name
+        - slug
+        - path
+        - article_count
+        - children
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        path:
+          type: string
+        article_count:
+          type: integer
+        children:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/PublicCategoryTreeItem"
+    PublicAuthorSummary:
+      type: object
+      required:
+        - id
+        - display_name
+        - profile
+        - icon
+        - header_image
+      properties:
+        id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+        profile:
+          type: string
+        icon:
+          type:
+            - string
+            - "null"
+        header_image:
+          type:
+            - string
+            - "null"
     UsersAuthorSummary:
       type: object
       required:
@@ -141,6 +191,9 @@ components:
           type:
             - string
             - "null"
+    PublicProfile:
+      allOf:
+        - $ref: "#/components/schemas/PublicAuthorSummary"
     CmsTagSummary:
       type: object
       required:
@@ -154,6 +207,23 @@ components:
         name:
           type: string
         slug:
+          type: string
+    PublicSidebarTag:
+      type: object
+      required:
+        - id
+        - name
+        - slug
+        - path
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        path:
           type: string
     PublicArticleSummary:
       type: object
@@ -189,7 +259,7 @@ components:
         category:
           $ref: "#/components/schemas/PublicCategorySummary"
         author:
-          $ref: "#/components/schemas/UsersAuthorSummary"
+          $ref: "#/components/schemas/PublicAuthorSummary"
         article_option:
           $ref: "#/components/schemas/ArticleOption"
     PublicArticleList:
@@ -205,6 +275,33 @@ components:
             $ref: "#/components/schemas/PublicArticleSummary"
         pagination:
           $ref: "#/components/schemas/CommonPagination"
+    PublicSidebar:
+      type: object
+      required:
+        - profile
+        - category_tree
+        - tags
+      properties:
+        profile:
+          $ref: "#/components/schemas/PublicProfile"
+        category_tree:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/PublicCategoryTreeItem"
+        tags:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/PublicSidebarTag"
+    PublicSiteConfig:
+      type: object
+      required:
+        - turnstile_site_key
+      properties:
+        turnstile_site_key:
+          type: string
+          minLength: 1
     CmsTocNode:
       type: object
       required:
@@ -273,6 +370,7 @@ components:
             - published_at
             - views_total
             - category
+            - category_breadcrumb
             - author
             - tags
             - toc
@@ -314,8 +412,13 @@ components:
               $ref: "#/components/schemas/ArticleOption"
             category:
               $ref: "#/components/schemas/PublicCategorySummary"
+            category_breadcrumb:
+              type: array
+              maxItems: 20
+              items:
+                $ref: "#/components/schemas/PublicCategorySummary"
             author:
-              $ref: "#/components/schemas/UsersAuthorSummary"
+              $ref: "#/components/schemas/PublicAuthorSummary"
             tags:
               type: array
               maxItems: 20

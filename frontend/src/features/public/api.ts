@@ -5,6 +5,8 @@ import type {
   PublicArticleListResponse,
   PublicContactRequest,
   PublicContactResponse,
+  PublicSidebarResponse,
+  PublicSiteConfigResponse,
 } from './types'
 
 function buildPublicArticleQuery(params: PublicArticleListParams): string {
@@ -57,6 +59,18 @@ export function fetchPublicArticleDetail(
       withAuth: false,
     },
   )
+}
+
+export function fetchPublicSidebar(): Promise<PublicSidebarResponse> {
+  return apiRequest<PublicSidebarResponse>('/public/sidebar', {
+    withAuth: false,
+  })
+}
+
+export function fetchPublicSiteConfig(): Promise<PublicSiteConfigResponse> {
+  return apiRequest<PublicSiteConfigResponse>('/public/site-config', {
+    withAuth: false,
+  })
 }
 
 export function submitPublicContact(

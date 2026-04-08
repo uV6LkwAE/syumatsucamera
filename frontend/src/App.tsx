@@ -1176,11 +1176,16 @@ function NotFound() {
 }
 
 function GlobalApiLoadingIndicator() {
+  const location = useLocation()
   const isLoading = useSyncExternalStore(
     subscribeApiLoading,
     getApiLoadingSnapshot,
     getApiLoadingSnapshot,
   )
+
+  if (!location.pathname.startsWith('/cms')) {
+    return null
+  }
 
   if (!isLoading) {
     return null

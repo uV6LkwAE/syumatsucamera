@@ -68,6 +68,20 @@ class PublicTagSummarySerializer(serializers.Serializer):
     slug = serializers.CharField(read_only=True)
 
 
+class PublicTagSidebarSerializer(PublicTagSummarySerializer):
+    """
+    公開サイドバー用タグを返す。
+    """
+
+    path = serializers.SerializerMethodField()
+
+    def get_path(self, obj) -> str:
+        """
+        公開タグURLを返す。
+        """
+        return f"/tag/{obj.slug}/"
+
+
 class PublicAuthorSummarySerializer(serializers.Serializer):
     """
     公開著者要約を返す。
@@ -75,6 +89,7 @@ class PublicAuthorSummarySerializer(serializers.Serializer):
 
     id = serializers.UUIDField(read_only=True)
     display_name = serializers.SerializerMethodField()
+    profile = serializers.SerializerMethodField()
     icon = serializers.SerializerMethodField()
     header_image = serializers.SerializerMethodField()
 
@@ -83,6 +98,12 @@ class PublicAuthorSummarySerializer(serializers.Serializer):
         著者表示名を返す。
         """
         return obj.display_name or obj.email
+
+    def get_profile(self, obj) -> str:
+        """
+        著者プロフィール文を返す。
+        """
+        return obj.profile or ""
 
     def get_icon(self, obj) -> str | None:
         """
@@ -95,6 +116,37 @@ class PublicAuthorSummarySerializer(serializers.Serializer):
         CDN付き著者ヘッダー画像URLを返す。
         """
         return build_cdn_media_url(obj.header_image)
+
+
+class PublicProfileSerializer(PublicAuthorSummarySerializer):
+    """
+    公開プロフィールを返す。
+    """
+
+    profile = serializers.CharField(read_only=True)
+    meta = serializers.DictField(
+        child=serializers.CharField(),
+        read_only=True,
+    )
+
+
+class PublicCategoryTreeSerializer(serializers.Serializer):
+    """
+    公開カテゴリーツリーを返す。
+    """
+
+    id = serializers.UUIDField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    slug = serializers.CharField(read_only=True)
+    path = serializers.CharField(read_only=True)
+    article_count = serializers.IntegerField(read_only=True)
+    children = serializers.SerializerMethodField()
+
+    def get_children(self, obj) -> list:
+        """
+        子カテゴリを再帰的に返す。
+        """
+        return PublicCategoryTreeSerializer(obj.get("children", []), many=True).data
 
 
 class PublicArticleOptionItemSerializer(serializers.Serializer):
@@ -223,9 +275,17 @@ class PublicArticleBodySerializer(PublicArticleSummarySerializer):
         choices=TwitterCardType.choices,
         read_only=True,
     )
+    category_breadcrumb = serializers.SerializerMethodField()
     tags = PublicTagSummarySerializer(many=True, read_only=True)
     toc = serializers.SerializerMethodField()
     ogp_by_url = serializers.SerializerMethodField()
+
+    def get_category_breadcrumb(self, obj) -> list:
+        """
+        公開記事のカテゴリ階層を返す。
+        """
+        categories = obj.category.get_ancestors(include_self=True)
+        return PublicCategorySummarySerializer(categories, many=True).data
 
     def get_toc(self, obj) -> list:
         """
@@ -252,3 +312,20 @@ class PublicArticleDetailSerializer(serializers.Serializer):
     related_articles = PublicArticleSummarySerializer(many=True, read_only=True)
     cdn_base_url = serializers.CharField(read_only=True)
 
+
+class PublicSiteConfigSerializer(serializers.Serializer):
+    """
+    公開フロント用設定を返す。
+    """
+
+    turnstile_site_key = serializers.CharField(read_only=True)
+
+
+class PublicSidebarSerializer(serializers.Serializer):
+    """
+    公開トップの補助情報を返す。
+    """
+
+    profile = PublicProfileSerializer(read_only=True)
+    category_tree = PublicCategoryTreeSerializer(many=True, read_only=True)
+    tags = PublicTagSidebarSerializer(many=True, read_only=True)
