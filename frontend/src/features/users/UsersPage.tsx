@@ -12,6 +12,9 @@ type UsersUserSummary = {
   display_name: string | null
   icon: string | null
   header_image: string | null
+  x_url: string | null
+  instagram_url: string | null
+  website_url: string | null
   role: UserRole
   is_active: boolean
   last_login_at: string | null
@@ -28,6 +31,9 @@ type UsersUserDetail = {
   icon: string | null
   header_image: string | null
   profile: string | null
+  x_url: string | null
+  instagram_url: string | null
+  website_url: string | null
   role: UserRole
   is_active: boolean
   created_at: string
@@ -49,6 +55,9 @@ type CreateForm = {
 type UpdateForm = {
   display_name: string
   profile: string
+  x_url: string
+  instagram_url: string
+  website_url: string
   role: UserRole
   is_active: boolean
   icon: string
@@ -95,6 +104,9 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
   const [updateForm, setUpdateForm] = useState<UpdateForm>({
     display_name: '',
     profile: '',
+    x_url: '',
+    instagram_url: '',
+    website_url: '',
     role: 'author',
     is_active: false,
     icon: '',
@@ -135,6 +147,9 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
       setUpdateForm({
         display_name: payload.display_name ?? '',
         profile: payload.profile ?? '',
+        x_url: payload.x_url ?? '',
+        instagram_url: payload.instagram_url ?? '',
+        website_url: payload.website_url ?? '',
         role: payload.role,
         is_active: payload.is_active,
         icon: payload.icon ?? '',
@@ -191,6 +206,9 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
         const formData = new FormData()
         formData.append('display_name', updateForm.display_name)
         formData.append('profile', updateForm.profile)
+        formData.append('x_url', updateForm.x_url.trim())
+        formData.append('instagram_url', updateForm.instagram_url.trim())
+        formData.append('website_url', updateForm.website_url.trim())
         formData.append('role', updateForm.role)
         formData.append('is_active', String(updateForm.is_active))
         if (updateIconFile !== null) {
@@ -210,6 +228,10 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
           body: {
             display_name: updateForm.display_name,
             profile: updateForm.profile,
+            x_url: updateForm.x_url.trim() === '' ? null : updateForm.x_url.trim(),
+            instagram_url:
+              updateForm.instagram_url.trim() === '' ? null : updateForm.instagram_url.trim(),
+            website_url: updateForm.website_url.trim() === '' ? null : updateForm.website_url.trim(),
             role: updateForm.role,
             is_active: updateForm.is_active,
             icon: updateForm.icon === '' ? null : updateForm.icon,
@@ -386,9 +408,18 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
           </div>
           <form className="console-form-grid row g-3" onSubmit={(event) => void onSubmitUpdate(event)}>
             <label className="console-label col-12 col-md-6">
+              メールアドレス
+              <input
+                className="console-input form-control cms-profile-input cms-profile-readonly-input"
+                type="email"
+                value={selectedUser.email}
+                disabled
+              />
+            </label>
+            <label className="console-label col-12 col-md-6">
               表示名
               <input
-                className="console-input form-control"
+                className="console-input form-control cms-profile-input"
                 required
                 value={updateForm.display_name}
                 onChange={(event) =>
@@ -399,11 +430,45 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
             <label className="console-label col-12">
               自己紹介
               <textarea
-                className="console-textarea form-control"
+                className="console-textarea form-control cms-profile-textarea"
                 required
                 value={updateForm.profile}
+                rows={10}
                 onChange={(event) =>
                   setUpdateForm((prev) => ({ ...prev, profile: event.target.value }))
+                }
+              />
+            </label>
+            <label className="console-label col-12 col-lg-4">
+              X URL
+              <input
+                className="console-input form-control"
+                type="url"
+                value={updateForm.x_url}
+                onChange={(event) =>
+                  setUpdateForm((prev) => ({ ...prev, x_url: event.target.value }))
+                }
+              />
+            </label>
+            <label className="console-label col-12 col-lg-4">
+              Instagram URL
+              <input
+                className="console-input form-control"
+                type="url"
+                value={updateForm.instagram_url}
+                onChange={(event) =>
+                  setUpdateForm((prev) => ({ ...prev, instagram_url: event.target.value }))
+                }
+              />
+            </label>
+            <label className="console-label col-12 col-lg-4">
+              Webサイト URL
+              <input
+                className="console-input form-control"
+                type="url"
+                value={updateForm.website_url}
+                onChange={(event) =>
+                  setUpdateForm((prev) => ({ ...prev, website_url: event.target.value }))
                 }
               />
             </label>

@@ -37,6 +37,9 @@ class UsersSessionUserSerializer(serializers.Serializer):
     icon = serializers.CharField(allow_null=True, read_only=True)
     header_image = serializers.CharField(allow_null=True, read_only=True)
     profile = serializers.CharField(allow_null=True, read_only=True)
+    x_url = serializers.CharField(allow_null=True, read_only=True)
+    instagram_url = serializers.CharField(allow_null=True, read_only=True)
+    website_url = serializers.CharField(allow_null=True, read_only=True)
     meta = serializers.DictField(
         child=serializers.CharField(),
         read_only=True,
@@ -74,6 +77,9 @@ class UsersUserSummarySerializer(serializers.Serializer):
     display_name = serializers.CharField(allow_null=True, read_only=True)
     icon = serializers.CharField(allow_null=True, read_only=True)
     header_image = serializers.CharField(allow_null=True, read_only=True)
+    x_url = serializers.CharField(allow_null=True, read_only=True)
+    instagram_url = serializers.CharField(allow_null=True, read_only=True)
+    website_url = serializers.CharField(allow_null=True, read_only=True)
     meta = serializers.DictField(
         child=serializers.CharField(),
         read_only=True,
@@ -151,6 +157,24 @@ class UsersUserUpdateRequestSerializer(serializers.Serializer):
         write_only=True,
     )
     profile = serializers.CharField(max_length=300)
+    x_url = serializers.URLField(
+        max_length=500,
+        allow_blank=True,
+        allow_null=True,
+        required=False,
+    )
+    instagram_url = serializers.URLField(
+        max_length=500,
+        allow_blank=True,
+        allow_null=True,
+        required=False,
+    )
+    website_url = serializers.URLField(
+        max_length=500,
+        allow_blank=True,
+        allow_null=True,
+        required=False,
+    )
     meta = serializers.JSONField(required=False)
     role = serializers.ChoiceField(choices=UserRole.choices)
     is_active = serializers.BooleanField()
@@ -246,6 +270,9 @@ class ActivationUserDetailSerializer(serializers.Serializer):
     icon = serializers.CharField(allow_null=True, read_only=True)
     header_image = serializers.CharField(allow_null=True, read_only=True)
     profile = serializers.CharField(allow_null=True, read_only=True)
+    x_url = serializers.CharField(allow_null=True, read_only=True)
+    instagram_url = serializers.CharField(allow_null=True, read_only=True)
+    website_url = serializers.CharField(allow_null=True, read_only=True)
     meta = serializers.DictField(
         child=serializers.CharField(),
         read_only=True,

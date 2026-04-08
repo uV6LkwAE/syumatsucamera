@@ -49,6 +49,9 @@ class UserAdmin(DjangoUserAdmin):
                     "profile",
                     "icon",
                     "header_image",
+                    "x_url",
+                    "instagram_url",
+                    "website_url",
                     "last_login",
                 )
             },

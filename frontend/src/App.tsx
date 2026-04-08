@@ -131,6 +131,9 @@ type CmsSessionUser = {
   icon: string | null
   header_image: string | null
   profile: string | null
+  x_url: string | null
+  instagram_url: string | null
+  website_url: string | null
   meta: Record<string, string>
   meta_help_text?: string
   role: 'admin' | 'author'
@@ -152,6 +155,9 @@ type ProfileMetaItem = {
 type ProfileFormState = {
   display_name: string
   profile: string
+  x_url: string
+  instagram_url: string
+  website_url: string
   meta_items: ProfileMetaItem[]
 }
 
@@ -164,6 +170,7 @@ type ProfileValidationResult = {
 const PROFILE_META_MAX_ITEMS = 20
 const PROFILE_DISPLAY_NAME_MAX_LENGTH = 100
 const PROFILE_BIO_MAX_LENGTH = 300
+const PROFILE_URL_MAX_LENGTH = 500
 const PROFILE_META_KEY_MAX_LENGTH = 50
 const PROFILE_META_VALUE_MAX_LENGTH = 300
 
@@ -238,6 +245,27 @@ function normalizeProfileMeta(items: ProfileMetaItem[]): ProfileValidationResult
   }
 }
 
+function validateOptionalProfileUrl(label: string, value: string): string {
+  const normalizedValue = value.trim()
+  if (normalizedValue === '') {
+    return ''
+  }
+  if (normalizedValue.length > PROFILE_URL_MAX_LENGTH) {
+    return `${label}は${PROFILE_URL_MAX_LENGTH}文字以内で入力してください。`
+  }
+
+  try {
+    const parsedUrl = new URL(normalizedValue)
+    if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') {
+      return `${label}は http または https のURLで入力してください。`
+    }
+  } catch {
+    return `${label}はURL形式で入力してください。`
+  }
+
+  return ''
+}
+
 function validateProfileForm(
   form: ProfileFormState,
   options: {
@@ -276,6 +304,19 @@ function validateProfileForm(
     return {
       valid: false,
       message: `自己紹介は${PROFILE_BIO_MAX_LENGTH}文字以内で入力してください。`,
+      normalizedMeta: {},
+    }
+  }
+
+  const socialUrlErrors = [
+    validateOptionalProfileUrl('X URL', form.x_url),
+    validateOptionalProfileUrl('Instagram URL', form.instagram_url),
+    validateOptionalProfileUrl('WebサイトURL', form.website_url),
+  ].filter((message) => message !== '')
+  if (socialUrlErrors.length > 0) {
+    return {
+      valid: false,
+      message: socialUrlErrors[0],
       normalizedMeta: {},
     }
   }
@@ -497,6 +538,9 @@ function CmsConsolePage() {
   const [profileForm, setProfileForm] = useState<ProfileFormState>({
     display_name: '',
     profile: '',
+    x_url: '',
+    instagram_url: '',
+    website_url: '',
     meta_items: [],
   })
   const [profileIconFile, setProfileIconFile] = useState<File | null>(null)
@@ -510,6 +554,9 @@ function CmsConsolePage() {
     setProfileForm({
       display_name: sessionUser?.display_name ?? '',
       profile: sessionUser?.profile ?? '',
+      x_url: sessionUser?.x_url ?? '',
+      instagram_url: sessionUser?.instagram_url ?? '',
+      website_url: sessionUser?.website_url ?? '',
       meta_items: toProfileMetaItems(sessionUser?.meta),
     })
     setProfileIconFile(null)
@@ -519,7 +566,15 @@ function CmsConsolePage() {
     setProfileEditMode(false)
     setProfileMessage('')
     setProfileError('')
-  }, [sessionUser?.id, sessionUser?.display_name, sessionUser?.profile, sessionUser?.meta])
+  }, [
+    sessionUser?.id,
+    sessionUser?.display_name,
+    sessionUser?.profile,
+    sessionUser?.x_url,
+    sessionUser?.instagram_url,
+    sessionUser?.website_url,
+    sessionUser?.meta,
+  ])
 
   useEffect(() => {
     if (profileIconFile === null) {
@@ -562,6 +617,21 @@ function CmsConsolePage() {
     : (sessionUser?.header_image ?? '')
   const canPickProfileImages = canEditProfile && profileEditMode
   const profileMetaEntries = Object.entries(sessionUser?.meta ?? {})
+  const profileSocialLinks = [
+    { key: 'x_url', label: 'X', icon: 'bi-twitter-x', url: sessionUser?.x_url ?? '' },
+    {
+      key: 'instagram_url',
+      label: 'Instagram',
+      icon: 'bi-instagram',
+      url: sessionUser?.instagram_url ?? '',
+    },
+    {
+      key: 'website_url',
+      label: 'Webサイト',
+      icon: 'bi-link-45deg',
+      url: sessionUser?.website_url ?? '',
+    },
+  ].filter((item) => item.url.trim() !== '')
 
   function addProfileMetaItem(): void {
     setProfileForm((prev) => {
@@ -611,6 +681,9 @@ function CmsConsolePage() {
       const formData = new FormData()
       formData.append('display_name', profileForm.display_name.trim())
       formData.append('profile', profileForm.profile.trim())
+      formData.append('x_url', profileForm.x_url.trim())
+      formData.append('instagram_url', profileForm.instagram_url.trim())
+      formData.append('website_url', profileForm.website_url.trim())
       formData.append('role', sessionUser.role)
       formData.append('is_active', String(sessionUser.is_active))
       if (profileIconFile !== null) {
@@ -628,6 +701,9 @@ function CmsConsolePage() {
       setProfileForm({
         display_name: payload.display_name ?? '',
         profile: payload.profile ?? '',
+        x_url: payload.x_url ?? '',
+        instagram_url: payload.instagram_url ?? '',
+        website_url: payload.website_url ?? '',
         meta_items: toProfileMetaItems(payload.meta),
       })
       setProfileIconFile(null)
@@ -776,7 +852,24 @@ function CmsConsolePage() {
               )}
             </div>
 
-            <p className="cms-profile-email">{sessionUser?.email ?? '-'}</p>
+            {profileEditMode ? (
+              <div className="cms-profile-edit-section">
+                <div className="cms-profile-field-head">
+                  <label className="cms-profile-field-label" htmlFor="profile-email">
+                    メールアドレス
+                  </label>
+                </div>
+                <input
+                  type="email"
+                  className="console-input form-control cms-profile-input cms-profile-readonly-input"
+                  id="profile-email"
+                  value={sessionUser?.email ?? ''}
+                  disabled
+                />
+              </div>
+            ) : (
+              <p className="cms-profile-email">{sessionUser?.email ?? '-'}</p>
+            )}
 
             {profileEditMode ? (
               <>
@@ -796,6 +889,7 @@ function CmsConsolePage() {
                     aria-label="自己紹介"
                     value={profileForm.profile}
                     maxLength={PROFILE_BIO_MAX_LENGTH}
+                    rows={10}
                     onChange={(event) =>
                       setProfileForm((prev) => ({
                         ...prev,
@@ -803,6 +897,79 @@ function CmsConsolePage() {
                       }))
                     }
                   />
+                </div>
+                <div className="cms-profile-social-editor">
+                  <div className="cms-profile-meta-editor-title-wrap">
+                    <h2 className="cms-profile-meta-editor-title">リンク</h2>
+                    <span className="cms-profile-meta-editor-caption">
+                      プロフィールに紐づけるURLを入力します。
+                    </span>
+                  </div>
+                  <div className="cms-profile-social-grid row g-3">
+                    <label className="console-label col-12 col-lg-4">
+                      <span className="cms-profile-field-head">
+                        <span className="cms-profile-field-label">X URL</span>
+                        <span className="cms-profile-field-counter">
+                          {profileForm.x_url.length}/{PROFILE_URL_MAX_LENGTH}
+                        </span>
+                      </span>
+                      <input
+                        className="console-input form-control cms-profile-input cms-profile-url-input"
+                        type="url"
+                        value={profileForm.x_url}
+                        maxLength={PROFILE_URL_MAX_LENGTH}
+                        placeholder="https://x.com/..."
+                        onChange={(event) =>
+                          setProfileForm((prev) => ({
+                            ...prev,
+                            x_url: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="console-label col-12 col-lg-4">
+                      <span className="cms-profile-field-head">
+                        <span className="cms-profile-field-label">Instagram URL</span>
+                        <span className="cms-profile-field-counter">
+                          {profileForm.instagram_url.length}/{PROFILE_URL_MAX_LENGTH}
+                        </span>
+                      </span>
+                      <input
+                        className="console-input form-control cms-profile-input cms-profile-url-input"
+                        type="url"
+                        value={profileForm.instagram_url}
+                        maxLength={PROFILE_URL_MAX_LENGTH}
+                        placeholder="https://www.instagram.com/..."
+                        onChange={(event) =>
+                          setProfileForm((prev) => ({
+                            ...prev,
+                            instagram_url: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="console-label col-12 col-lg-4">
+                      <span className="cms-profile-field-head">
+                        <span className="cms-profile-field-label">Webサイト URL</span>
+                        <span className="cms-profile-field-counter">
+                          {profileForm.website_url.length}/{PROFILE_URL_MAX_LENGTH}
+                        </span>
+                      </span>
+                      <input
+                        className="console-input form-control cms-profile-input cms-profile-url-input"
+                        type="url"
+                        value={profileForm.website_url}
+                        maxLength={PROFILE_URL_MAX_LENGTH}
+                        placeholder="https://example.com/"
+                        onChange={(event) =>
+                          setProfileForm((prev) => ({
+                            ...prev,
+                            website_url: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                  </div>
                 </div>
                 <div className="cms-profile-meta-editor">
                   <div className="cms-profile-meta-editor-head d-flex flex-column flex-md-row align-items-start justify-content-between gap-2">
@@ -929,6 +1096,22 @@ function CmsConsolePage() {
             ) : (
               <>
                 <p className="cms-profile-description">{sessionUser?.profile ?? ''}</p>
+                {profileSocialLinks.length > 0 && (
+                  <div className="cms-profile-social-list">
+                    {profileSocialLinks.map((item) => (
+                      <a
+                        key={item.key}
+                        className="cms-profile-social-link"
+                        href={item.url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <i className={`bi ${item.icon}`} aria-hidden="true" />
+                        <span>{item.label}</span>
+                      </a>
+                    ))}
+                  </div>
+                )}
                 {profileMetaEntries.length > 0 && (
                   <dl className="cms-profile-meta-list">
                     {profileMetaEntries.map(([key, value]) => (

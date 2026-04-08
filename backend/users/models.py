@@ -65,6 +65,24 @@ class User(AbstractBaseUser, PermissionsMixin):
         blank=True,
         verbose_name="ヘッダー画像URL",
     )
+    x_url = models.URLField(
+        max_length=500,
+        null=True,
+        blank=True,
+        verbose_name="X URL",
+    )
+    instagram_url = models.URLField(
+        max_length=500,
+        null=True,
+        blank=True,
+        verbose_name="Instagram URL",
+    )
+    website_url = models.URLField(
+        max_length=500,
+        null=True,
+        blank=True,
+        verbose_name="WebサイトURL",
+    )
     meta = models.JSONField(
         default=dict,
         blank=True,
@@ -146,6 +164,15 @@ class User(AbstractBaseUser, PermissionsMixin):
 
         if self.header_image is not None:
             self.header_image = self.header_image.strip() or None
+
+        if self.x_url is not None:
+            self.x_url = self.x_url.strip() or None
+
+        if self.instagram_url is not None:
+            self.instagram_url = self.instagram_url.strip() or None
+
+        if self.website_url is not None:
+            self.website_url = self.website_url.strip() or None
 
         if self.meta is None:
             self.meta = {}

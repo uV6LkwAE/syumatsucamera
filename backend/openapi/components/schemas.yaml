@@ -505,6 +505,9 @@ components:
         - display_name
         - icon
         - header_image
+        - x_url
+        - instagram_url
+        - website_url
         - role
         - is_active
       properties:
@@ -526,6 +529,21 @@ components:
           type:
             - string
             - "null"
+        x_url:
+          type:
+            - string
+            - "null"
+          format: uri
+        instagram_url:
+          type:
+            - string
+            - "null"
+          format: uri
+        website_url:
+          type:
+            - string
+            - "null"
+          format: uri
         profile:
           type:
             - string
@@ -1168,6 +1186,9 @@ components:
         - display_name
         - icon
         - header_image
+        - x_url
+        - instagram_url
+        - website_url
         - meta
         - role
         - is_active
@@ -1191,6 +1212,21 @@ components:
           type:
             - string
             - "null"
+        x_url:
+          type:
+            - string
+            - "null"
+          format: uri
+        instagram_url:
+          type:
+            - string
+            - "null"
+          format: uri
+        website_url:
+          type:
+            - string
+            - "null"
+          format: uri
         meta:
           type: object
           additionalProperties:
@@ -1282,6 +1318,21 @@ components:
           type:
             - string
             - "null"
+        x_url:
+          type:
+            - string
+            - "null"
+          format: uri
+        instagram_url:
+          type:
+            - string
+            - "null"
+          format: uri
+        website_url:
+          type:
+            - string
+            - "null"
+          format: uri
         profile:
           type:
             - string
@@ -1361,6 +1412,21 @@ components:
           format: binary
         profile:
           type: string
+        x_url:
+          type:
+            - string
+            - "null"
+          format: uri
+        instagram_url:
+          type:
+            - string
+            - "null"
+          format: uri
+        website_url:
+          type:
+            - string
+            - "null"
+          format: uri
         meta:
           type: object
           additionalProperties:

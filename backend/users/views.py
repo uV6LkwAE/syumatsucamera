@@ -114,6 +114,17 @@ class UsersViewSet(ViewSet):
             display_name=validated_data["display_name"],
             profile=validated_data["profile"],
             meta=validated_data["meta"] if "meta" in validated_data else user.meta,
+            x_url=validated_data["x_url"] if "x_url" in validated_data else user.x_url,
+            instagram_url=(
+                validated_data["instagram_url"]
+                if "instagram_url" in validated_data
+                else user.instagram_url
+            ),
+            website_url=(
+                validated_data["website_url"]
+                if "website_url" in validated_data
+                else user.website_url
+            ),
             role=validated_data["role"],
             is_active=validated_data["is_active"],
             icon=validated_data["icon"] if "icon" in validated_data else user.icon,

@@ -136,6 +136,9 @@ class UsersService:
         display_name: str,
         profile: str,
         meta: dict[str, str],
+        x_url: str | None,
+        instagram_url: str | None,
+        website_url: str | None,
         role: str,
         is_active: bool,
         icon: str | None,
@@ -173,6 +176,9 @@ class UsersService:
             user.display_name = display_name
             user.profile = profile
             user.meta = meta
+            user.x_url = x_url
+            user.instagram_url = instagram_url
+            user.website_url = website_url
             user.role = role
             user.is_active = is_active
             user.icon = next_icon
@@ -184,6 +190,9 @@ class UsersService:
                     "display_name",
                     "profile",
                     "meta",
+                    "x_url",
+                    "instagram_url",
+                    "website_url",
                     "role",
                     "is_active",
                     "icon",
