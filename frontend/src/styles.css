@@ -3378,17 +3378,18 @@ body {
 
 .cms-twitter-card-grid {
   margin-top: 0;
+  max-width: 36rem;
 }
 
 .cms-twitter-card-option {
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
+  gap: 0.65rem;
   width: 100%;
   min-height: 100%;
-  padding: 1rem;
+  padding: 0.75rem;
   border: 1px solid #d1dceb;
-  border-radius: 1rem;
+  border-radius: 0.7rem;
   background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
   cursor: pointer;
   transition:
@@ -3410,7 +3411,7 @@ body {
 .cms-twitter-card-preview {
   width: 100%;
   overflow: hidden;
-  border-radius: 0.9rem;
+  border-radius: 0.55rem;
   border: 1px solid #dbe5f0;
   background: #f7fbff;
 }
@@ -3424,16 +3425,16 @@ body {
 .cms-twitter-card-radio-row {
   display: flex;
   align-items: center;
-  gap: 0.7rem;
-  min-height: 2rem;
+  gap: 0.55rem;
+  min-height: 1.6rem;
   color: #26425f;
-  font-size: 0.95rem;
+  font-size: 0.86rem;
   font-weight: 600;
 }
 
 .cms-twitter-card-radio-row input[type="radio"] {
-  width: 1.2rem;
-  height: 1.2rem;
+  width: 1rem;
+  height: 1rem;
   margin: 0;
   flex-shrink: 0;
 }
@@ -3753,6 +3754,32 @@ body {
 }
 
 @media (max-width: 767.98px) {
+  .cms-twitter-card-grid {
+    max-width: 20rem;
+    --bs-gutter-y: 0.65rem;
+  }
+
+  .cms-twitter-card-option {
+    gap: 0.5rem;
+    padding: 0.6rem;
+    border-radius: 0.55rem;
+  }
+
+  .cms-twitter-card-preview {
+    border-radius: 0.45rem;
+  }
+
+  .cms-twitter-card-radio-row {
+    gap: 0.45rem;
+    min-height: 1.35rem;
+    font-size: 0.8rem;
+  }
+
+  .cms-twitter-card-radio-row input[type="radio"] {
+    width: 0.9rem;
+    height: 0.9rem;
+  }
+
   .cms-article-option-grid {
     grid-template-columns: 1fr;
   }
