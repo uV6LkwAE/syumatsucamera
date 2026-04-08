@@ -3465,6 +3465,10 @@ body {
   margin-top: 1rem;
 }
 
+.cms-article-tag-input-row {
+  margin-top: 0;
+}
+
 .cms-article-tag-box {
   margin-top: 18px;
   display: flex;
@@ -3482,11 +3486,22 @@ body {
 .cms-tag-chip {
   display: inline-flex;
   align-items: center;
+  gap: 0.4rem;
   padding: 6px 10px;
+  border: 0;
   border-radius: 999px;
   background: #edf3fa;
   color: #325172;
   font-size: 12px;
+  line-height: 1.4;
+}
+
+.cms-tag-chip.is-removable {
+  cursor: pointer;
+}
+
+.cms-tag-chip.is-removable:hover {
+  background: #dfeaf5;
 }
 
 .cms-article-help-text {

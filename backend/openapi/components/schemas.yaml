@@ -798,10 +798,16 @@ components:
             - private
         tag_ids:
           type: array
-          maxItems: 20
+          maxItems: 5
           items:
             type: string
             format: uuid
+        tag_names:
+          type: array
+          maxItems: 5
+          items:
+            type: string
+            maxLength: 100
         twitter_card:
           type: string
           enum:

@@ -3,11 +3,15 @@ cms アプリのモデルを定義する。
 """
 import uuid
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 from mptt.models import MPTTModel, TreeForeignKey
 
 from users.models import User
+
+
+ARTICLE_TAG_MAX_COUNT = 5
 
 
 class ArticleStatus(models.TextChoices):
@@ -298,6 +302,27 @@ class ArticleTag(models.Model):
                 name="cms_article_tag_unique",
             )
         ]
+
+    def clean(self):
+        """
+        1記事あたりのタグ件数を検証する。
+        """
+        super().clean()
+        if self.article_id is None:
+            return
+
+        existing_tags = ArticleTag.objects.filter(article_id=self.article_id)
+        if self.pk is not None:
+            existing_tags = existing_tags.exclude(pk=self.pk)
+        if existing_tags.count() >= ARTICLE_TAG_MAX_COUNT:
+            raise ValidationError({"article": f"タグは1記事あたり{ARTICLE_TAG_MAX_COUNT}件までです。"})
+
+    def save(self, *args, **kwargs):
+        """
+        直接保存時にもタグ件数を検証する。
+        """
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
 
 class ArticleOption(models.Model):

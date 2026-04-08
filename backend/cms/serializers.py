@@ -4,7 +4,14 @@ cms アプリのシリアライザーを定義する。
 from django.conf import settings
 from rest_framework import serializers
 
-from cms.models import ArticleStatus, ImageJobStatus, PublishRequestStatus, SaveLogStatus, TwitterCardType
+from cms.models import (
+    ARTICLE_TAG_MAX_COUNT,
+    ArticleStatus,
+    ImageJobStatus,
+    PublishRequestStatus,
+    SaveLogStatus,
+    TwitterCardType,
+)
 
 
 class CommonPaginationSerializer(serializers.Serializer):
@@ -279,6 +286,15 @@ class CmsArticleUpsertRequestSerializer(serializers.Serializer):
         child=serializers.UUIDField(),
         required=False,
         allow_empty=True,
+        max_length=ARTICLE_TAG_MAX_COUNT,
+        default=list,
+    )
+    tag_names = serializers.ListField(
+        child=serializers.CharField(min_length=1, max_length=100),
+        required=False,
+        allow_empty=True,
+        max_length=ARTICLE_TAG_MAX_COUNT,
+        default=list,
     )
     twitter_card = serializers.ChoiceField(
         choices=TwitterCardType.choices,

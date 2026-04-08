@@ -19,6 +19,7 @@ from cms.services.article_save_log_services import ArticleSaveLogService
 from cms.services.article_session_services import ArticleSessionService
 from cms.services.common import build_pagination_payload, unique_slugify
 from cms.services.media_services import MediaService
+from cms.services.tag_services import TagService
 from users.models import User, UserRole
 
 
@@ -146,7 +147,10 @@ class ArticleService:
         )
 
         category = ArticleService._get_category(category_id=payload["category_id"])
-        tags = ArticleService._resolve_tags(tag_ids=payload.get("tag_ids", []))
+        tags = TagService.resolve_tags_for_article_upsert(
+            tag_ids=payload.get("tag_ids", []),
+            tag_names=payload.get("tag_names", []),
+        )
         MediaService.validate_image_diff(body_html=payload["body_html"], image_diff=image_diff)
 
         if not is_create:
@@ -259,18 +263,6 @@ class ArticleService:
             return Category.objects.get(id=category_id)
         except Category.DoesNotExist as exc:
             raise NotFound("カテゴリが存在しません。") from exc
-
-    @staticmethod
-    def _resolve_tags(*, tag_ids: list) -> list[Tag]:
-        """
-        入力タグIDからタグ一覧を取得する。
-        """
-        if not tag_ids:
-            return []
-        tags = list(Tag.objects.filter(id__in=tag_ids))
-        if len(tags) != len(set(map(str, tag_ids))):
-            raise ValidationError({"tag_ids": ["存在しないタグが含まれています。"]})
-        return tags
 
     @staticmethod
     def _validate_status_change(*, user: User, requested_status: str) -> None:

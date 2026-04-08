@@ -56,7 +56,7 @@ type ArticleFormState = {
   isAd: boolean
   selectedOptionIds: string[]
   customOptionLabels: string[]
-  tagIds: string[]
+  tagNames: string[]
 }
 
 type ArticleEditorBootstrapPayload = {
@@ -75,6 +75,8 @@ type ArticleEditorBootstrapCacheEntry = {
 const ARTICLE_TITLE_MAX_LENGTH = 255
 const ARTICLE_SUMMARY_MAX_LENGTH = 200
 const ARTICLE_CUSTOM_OPTION_MAX_LENGTH = 100
+const ARTICLE_TAG_MAX_LENGTH = 100
+const ARTICLE_TAG_MAX_COUNT = 5
 
 const DEFAULT_IMAGE_OPTIONS: ImageProcessingOptions = {
   resize: true,
@@ -95,7 +97,7 @@ const DEFAULT_ARTICLE_FORM: ArticleFormState = {
   isAd: false,
   selectedOptionIds: [],
   customOptionLabels: [],
-  tagIds: [],
+  tagNames: [],
 }
 
 const SESSION_REFRESH_INTERVAL_MS = 120_000
@@ -372,6 +374,7 @@ export default function CmsArticleEditorPage({
   const [thumbnailUploadFileName, setThumbnailUploadFileName] = useState('')
   const [thumbnailPreviewPath, setThumbnailPreviewPath] = useState('')
   const [customOptionDraft, setCustomOptionDraft] = useState('')
+  const [tagDraft, setTagDraft] = useState('')
 
   const statusOptions = toStatusOptions(sessionUser?.role, form.status)
 
@@ -414,11 +417,13 @@ export default function CmsArticleEditorPage({
               .filter((item) => !item.is_system)
               .map((item) => item.id),
             customOptionLabels: [],
-            tagIds: payload.article.tags.map((tag) => tag.id),
+            tagNames: payload.article.tags.map((tag) => tag.name),
           })
           setThumbnailMode(thumbnailAsset === null ? 'generate_from_title' : 'keep_current')
           setThumbnailUploadFileName('')
           setThumbnailPreviewPath(thumbnailAsset?.public_path ?? '')
+          setCustomOptionDraft('')
+          setTagDraft('')
         } else {
           setArticle(null)
           setInitialMediaAssets([])
@@ -428,6 +433,7 @@ export default function CmsArticleEditorPage({
           setThumbnailUploadFileName('')
           setThumbnailPreviewPath('')
           setCustomOptionDraft('')
+          setTagDraft('')
         }
       } catch (error) {
         if (active) {
@@ -590,7 +596,7 @@ export default function CmsArticleEditorPage({
         summary: form.summary,
         body_html: form.bodyHtml,
         status: form.status,
-        tag_ids: form.tagIds,
+        tag_names: form.tagNames,
         twitter_card: form.twitterCard,
         article_option: {
           is_pr: form.isPr,
@@ -725,6 +731,35 @@ export default function CmsArticleEditorPage({
       }
     })
     setCustomOptionDraft('')
+    setErrorMessage('')
+  }
+
+  function addTagName(): void {
+    const normalizedName = tagDraft.trim()
+    if (normalizedName === '') {
+      return
+    }
+    if (normalizedName.length > ARTICLE_TAG_MAX_LENGTH) {
+      setErrorMessage(`タグ名は${ARTICLE_TAG_MAX_LENGTH}文字以内で入力してください。`)
+      return
+    }
+    const alreadyAdded = form.tagNames.some(
+      (tagName) => tagName.toLocaleLowerCase() === normalizedName.toLocaleLowerCase(),
+    )
+    if (alreadyAdded) {
+      setTagDraft('')
+      return
+    }
+    if (form.tagNames.length >= ARTICLE_TAG_MAX_COUNT) {
+      setErrorMessage(`タグは${ARTICLE_TAG_MAX_COUNT}件以内で設定してください。`)
+      return
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      tagNames: [...prev.tagNames, normalizedName],
+    }))
+    setTagDraft('')
     setErrorMessage('')
   }
 
@@ -878,6 +913,74 @@ export default function CmsArticleEditorPage({
             />
           )}
         </div>
+      </div>
+
+      <div className="console-card">
+        <CmsTabGuide
+          title="タグ"
+          helpLines={[
+            '記事に関連するタグを入力し、追加してください。',
+            '既存タグと同じ名前の場合は、既存タグに紐づけます。',
+          ]}
+          compact
+          showDivider={false}
+        />
+        <div className="console-form-grid row g-3 cms-article-tag-input-row">
+          <label className="console-label col-12 col-lg">
+            <span className="cms-article-field-head">
+              <span>タグ名</span>
+              <span className="cms-article-field-counter">
+                {tagDraft.length}/{ARTICLE_TAG_MAX_LENGTH}
+              </span>
+            </span>
+            <input
+              className="console-input form-control"
+              type="text"
+              value={tagDraft}
+              onChange={(event) => setTagDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter') {
+                  return
+                }
+                event.preventDefault()
+                addTagName()
+              }}
+              maxLength={ARTICLE_TAG_MAX_LENGTH}
+              placeholder="例: Nikon Z9"
+            />
+          </label>
+          <div className="col-12 col-lg-auto d-flex align-items-end">
+            <button
+              type="button"
+              className="console-secondary"
+              onClick={addTagName}
+            >
+              追加
+            </button>
+          </div>
+        </div>
+        {form.tagNames.length > 0 ? (
+          <div className="cms-article-tag-list">
+            {form.tagNames.map((tagName) => (
+              <button
+                key={tagName}
+                type="button"
+                className="cms-tag-chip is-removable"
+                onClick={() =>
+                  setForm((prev) => ({
+                    ...prev,
+                    tagNames: prev.tagNames.filter((item) => item !== tagName),
+                  }))
+                }
+              >
+                #{tagName}
+                <i className="bi bi-x-lg" aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="cms-article-help-text">タグは未設定です。</p>
+        )}
       </div>
 
       <div className="console-card">
