@@ -1,11 +1,14 @@
 """
 公開記事参照サービスを定義する。
 """
+from urllib.parse import urljoin
+
 from django.conf import settings
 from rest_framework.exceptions import NotFound
 
 from cms.models import Article, ArticleStatus, Category, Tag
 from cms.services.common import build_pagination_payload
+from core.media_urls import build_cdn_media_url
 from cms.services.pv_services import PvService
 
 
@@ -13,6 +16,8 @@ class PublicArticleService:
     """
     公開記事APIの業務ロジックを扱う。
     """
+
+    DEFAULT_OG_IMAGE_PATH = "/assets/default_thumbnail.png"
 
     @staticmethod
     def list_articles(
@@ -75,6 +80,27 @@ class PublicArticleService:
         }
 
     @staticmethod
+    def get_article_meta(*, slug: str, site_origin: str) -> dict:
+        """
+        Cloudflare Worker向けの記事メタ情報を返す。
+        """
+        try:
+            article = PublicArticleService._base_article_queryset().get(slug=slug)
+        except (Article.DoesNotExist, Article.MultipleObjectsReturned) as exc:
+            raise NotFound("記事が存在しません。") from exc
+
+        canonical_url = urljoin(site_origin.rstrip("/") + "/", f"articles/{article.slug}")
+        return {
+            "title": article.title,
+            "description": article.summary.strip(),
+            "canonical_url": canonical_url,
+            "og_image_url": PublicArticleService._build_article_og_image_url(
+                article=article,
+                site_origin=site_origin,
+            ),
+        }
+
+    @staticmethod
     def _base_article_queryset():
         """
         公開記事一覧向けQuerySetを返す。
@@ -86,6 +112,26 @@ class PublicArticleService:
             "author",
             "thumbnail_asset",
         )
+
+    @staticmethod
+    def _build_article_og_image_url(*, article: Article, site_origin: str) -> str:
+        """
+        記事メタ情報用のOGP画像URLを返す。
+        """
+        if article.thumbnail_asset is None:
+            return urljoin(
+                site_origin.rstrip("/") + "/",
+                PublicArticleService.DEFAULT_OG_IMAGE_PATH.lstrip("/"),
+            )
+
+        file_name = article.thumbnail_asset.file_name
+        shard_a = file_name[:2]
+        shard_b = file_name[2:4]
+        media_path = f"{settings.MEDIA_URL}images/{shard_a}/{shard_b}/{file_name}"
+        thumbnail_url = build_cdn_media_url(media_path)
+        if thumbnail_url is None:
+            raise RuntimeError("公開記事のサムネイルURLを生成できません。")
+        return thumbnail_url
 
     @staticmethod
     def _detail_article_queryset():

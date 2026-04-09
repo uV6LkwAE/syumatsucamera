@@ -322,6 +322,17 @@ class PublicArticleDetailSerializer(serializers.Serializer):
     cdn_base_url = serializers.CharField(read_only=True)
 
 
+class PublicArticleMetaSerializer(serializers.Serializer):
+    """
+    Cloudflare Worker向けの記事メタ情報を返す。
+    """
+
+    title = serializers.CharField(read_only=True)
+    description = serializers.CharField(read_only=True)
+    canonical_url = serializers.URLField(read_only=True)
+    og_image_url = serializers.URLField(read_only=True)
+
+
 class PublicSiteConfigSerializer(serializers.Serializer):
     """
     公開フロント用設定を返す。

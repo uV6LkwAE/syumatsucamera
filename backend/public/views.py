@@ -9,11 +9,21 @@ from public.serializers import (
     PublicArticleDetailSerializer,
     PublicArticleListQuerySerializer,
     PublicArticleListSerializer,
+    PublicArticleMetaSerializer,
     PublicSidebarSerializer,
     PublicSiteConfigSerializer,
 )
 from public.services.article_services import PublicArticleService
 from public.services.sidebar_services import PublicSidebarService
+
+
+def build_public_site_origin(request) -> str:
+    """
+    公開側の絶対URL生成に使うoriginを返す。
+    """
+    if settings.DEBUG:
+        return request.build_absolute_uri("/").rstrip("/")
+    return f"https://{request.get_host()}"
 
 
 class PublicArticleListView(APIView):
@@ -59,6 +69,25 @@ class PublicArticleDetailView(APIView):
             article_slug=article_slug,
         )
         response_serializer = PublicArticleDetailSerializer(payload)
+        return Response(response_serializer.data)
+
+
+class PublicArticleMetaView(APIView):
+    """
+    Cloudflare Worker向けの記事メタ情報API。
+    """
+
+    permission_classes = []
+
+    def get(self, request, slug: str):
+        """
+        記事slugからメタ情報を返す。
+        """
+        payload = PublicArticleService.get_article_meta(
+            slug=slug,
+            site_origin=build_public_site_origin(request),
+        )
+        response_serializer = PublicArticleMetaSerializer(payload)
         return Response(response_serializer.data)
 
 

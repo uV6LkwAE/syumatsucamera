@@ -6,11 +6,17 @@ from django.urls import path
 from public.views import (
     PublicArticleDetailView,
     PublicArticleListView,
+    PublicArticleMetaView,
     PublicSidebarView,
     PublicSiteConfigView,
 )
 
 urlpatterns = [
+    path(
+        "articles/<str:slug>/meta/",
+        PublicArticleMetaView.as_view(),
+        name="public-article-meta",
+    ),
     path(
         "public/articles",
         PublicArticleListView.as_view(),
