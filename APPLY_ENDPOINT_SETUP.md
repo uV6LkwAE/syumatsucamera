@@ -52,8 +52,13 @@ flock -n 9 || { echo "already running" | tee -a "${LOG_FILE}"; exit 1; }
   test -n "${POSTGRES_DB}"
   test -n "${POSTGRES_USER}"
   test -n "${POSTGRES_PASSWORD}"
-  test -n "${DJANGO_SUPERUSER_USERNAME}"
+  test -n "${DJANGO_SUPERUSER_EMAIL}"
   test -n "${DJANGO_SUPERUSER_PASSWORD}"
+  test -n "${DJANGO_SUPERUSER_CF_ACCESS_SUB}"
+  test -n "${DJANGO_SUPERUSER_DISPLAY_NAME}"
+  test -n "${DJANGO_SUPERUSER_PROFILE}"
+  test -n "${DJANGO_SUPERUSER_ICON}"
+  test -n "${DJANGO_SUPERUSER_HEADER_IMAGE}"
   test -n "${DEPLOY_REPO_URL}"
   test -n "${DEPLOY_REPO_TOKEN}"
   test -n "${TUNNEL_TOKEN}"
@@ -112,14 +117,23 @@ flock -n 9 || { echo "already running" | tee -a "${LOG_FILE}"; exit 1; }
     exit 1
   fi
 
-  # 毎回 migrate を実行する
-  kubectl exec deploy/backend -- python manage.py migrate --noinput
+  # rollout 中に旧 Pod へ exec しないよう、最新 backend Pod 名を確定する
+  BACKEND_POD="$(kubectl get pods -l app=backend --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1].metadata.name}')"
+  test -n "${BACKEND_POD}"
 
-  # 初回不足時のみ Django superuser を作成する
-  kubectl exec deploy/backend -- env \
-    DJANGO_SUPERUSER_USERNAME="${DJANGO_SUPERUSER_USERNAME}" \
+  # 毎回 migrate を実行する
+  kubectl exec "${BACKEND_POD}" -- python manage.py migrate --noinput
+
+  # 初回不足時のみ管理者ユーザーを作成する
+  kubectl exec "${BACKEND_POD}" -- env \
+    DJANGO_SUPERUSER_EMAIL="${DJANGO_SUPERUSER_EMAIL}" \
     DJANGO_SUPERUSER_PASSWORD="${DJANGO_SUPERUSER_PASSWORD}" \
-    python manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); username = '${DJANGO_SUPERUSER_USERNAME}'; password = '${DJANGO_SUPERUSER_PASSWORD}'; user, created = User.objects.get_or_create(username=username, defaults={'is_staff': True, 'is_superuser': True}); (user.set_password(password), setattr(user, 'is_staff', True), setattr(user, 'is_superuser', True), user.save()) if created else None; print('superuser created' if created else 'superuser exists')"
+    DJANGO_SUPERUSER_CF_ACCESS_SUB="${DJANGO_SUPERUSER_CF_ACCESS_SUB}" \
+    DJANGO_SUPERUSER_DISPLAY_NAME="${DJANGO_SUPERUSER_DISPLAY_NAME}" \
+    DJANGO_SUPERUSER_PROFILE="${DJANGO_SUPERUSER_PROFILE}" \
+    DJANGO_SUPERUSER_ICON="${DJANGO_SUPERUSER_ICON}" \
+    DJANGO_SUPERUSER_HEADER_IMAGE="${DJANGO_SUPERUSER_HEADER_IMAGE}" \
+    python manage.py shell -c "from users.bootstrap_admin import ensure_initial_admin; import os; result = ensure_initial_admin(email=os.environ['DJANGO_SUPERUSER_EMAIL'], password=os.environ['DJANGO_SUPERUSER_PASSWORD'], cf_access_sub=os.environ['DJANGO_SUPERUSER_CF_ACCESS_SUB'], display_name=os.environ['DJANGO_SUPERUSER_DISPLAY_NAME'], profile=os.environ['DJANGO_SUPERUSER_PROFILE'], icon=os.environ['DJANGO_SUPERUSER_ICON'], header_image=os.environ['DJANGO_SUPERUSER_HEADER_IMAGE']); print('admin created' if result.created else 'admin exists')"
 
   # 最新イメージ反映のために対象 Deployment を再起動し、完了待ち
   kubectl rollout restart deployment/nginx deployment/backend deployment/worker
@@ -156,8 +170,13 @@ TUNNEL_TOKEN=replace_me
 POSTGRES_DB=syumatsucamera
 POSTGRES_USER=app_prod_user
 POSTGRES_PASSWORD=replace_me
-DJANGO_SUPERUSER_USERNAME=admin
+DJANGO_SUPERUSER_EMAIL=admin@example.com
 DJANGO_SUPERUSER_PASSWORD=replace_me
+DJANGO_SUPERUSER_CF_ACCESS_SUB=google-oauth2|replace_me
+DJANGO_SUPERUSER_DISPLAY_NAME=Admin
+DJANGO_SUPERUSER_PROFILE=initial admin
+DJANGO_SUPERUSER_ICON=/media/users/icons/default.png
+DJANGO_SUPERUSER_HEADER_IMAGE=/media/users/headers/default.png
 ```
 
 注記:
