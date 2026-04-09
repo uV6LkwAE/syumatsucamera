@@ -1,4 +1,11 @@
-import { createElement, Fragment, useEffect, useState, type ReactNode } from 'react'
+import {
+  createElement,
+  Fragment,
+  useEffect,
+  useState,
+  type ComponentPropsWithoutRef,
+  type ReactNode,
+} from 'react'
 import type { PublicArticleOptionItem, PublicOgpRecord, PublicTocNode } from './types'
 
 type RenderedPublicArticleBody = {
@@ -229,6 +236,81 @@ function createElementProps(element: Element): Record<string, unknown> {
   return props
 }
 
+async function copyText(text: string): Promise<void> {
+  if (window.isSecureContext && navigator.clipboard !== undefined) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', 'true')
+  textarea.style.position = 'fixed'
+  textarea.style.top = '-9999px'
+  textarea.style.left = '-9999px'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.focus()
+  textarea.select()
+  textarea.setSelectionRange(0, textarea.value.length)
+
+  const copied = document.execCommand('copy')
+  document.body.removeChild(textarea)
+  if (!copied) {
+    throw new Error('Copy failed')
+  }
+}
+
+function PublicArticlePreBlock({
+  preProps,
+  codeText,
+  children,
+}: {
+  preProps: ComponentPropsWithoutRef<'pre'>
+  codeText: string
+  children: ReactNode[]
+}) {
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    if (!copied) {
+      return undefined
+    }
+    const timerId = window.setTimeout(() => {
+      setCopied(false)
+    }, 1600)
+    return () => {
+      window.clearTimeout(timerId)
+    }
+  }, [copied])
+
+  async function handleCopy(): Promise<void> {
+    try {
+      await copyText(codeText)
+      setCopied(true)
+    } catch {
+      setCopied(false)
+    }
+  }
+
+  return (
+    <div className="public-article-pre-shell">
+      <button
+        type="button"
+        className={`public-article-pre-copy-button${copied ? ' is-copied' : ''}`}
+        onClick={() => {
+          void handleCopy()
+        }}
+        aria-label={copied ? 'コードをコピーしました' : 'コードをコピー'}
+        title={copied ? 'コピーしました' : 'コピー'}
+      >
+        <i className={`bi ${copied ? 'bi-check2' : 'bi-copy'}`} aria-hidden="true" />
+      </button>
+      <pre {...preProps}>{children}</pre>
+    </div>
+  )
+}
+
 function renderNode(
   node: ChildNode,
   key: string,
@@ -287,6 +369,22 @@ function renderNode(
   const children = Array.from(element.childNodes).map((childNode, index) =>
     renderNode(childNode, `${key}-${index}`, cdnBaseUrl, ogpByUrl, tocState, stateRef),
   )
+
+  if (tagName === 'pre') {
+    const preProps = {
+      ...createElementProps(element),
+      key: `${key}-pre`,
+    } as ComponentPropsWithoutRef<'pre'>
+    return (
+      <PublicArticlePreBlock
+        key={key}
+        preProps={preProps}
+        codeText={element.textContent ?? ''}
+      >
+        {children}
+      </PublicArticlePreBlock>
+    )
+  }
 
   if (tagName === 'h2' || tagName === 'h3' || tagName === 'h4') {
     const level = Number(tagName.slice(1)) as 2 | 3 | 4

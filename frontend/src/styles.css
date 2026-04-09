@@ -5871,9 +5871,47 @@ body {
   margin-bottom: 0;
 }
 
+.public-article-pre-shell {
+  position: relative;
+  margin: 0 0 1.6rem;
+}
+
+.public-article-pre-copy-button {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.7rem;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.45rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(247, 250, 242, 0.88);
+  transition:
+    background-color var(--motion-fast-duration) ease,
+    border-color var(--motion-fast-duration) ease,
+    color var(--motion-fast-duration) ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.public-article-pre-copy-button:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.public-article-pre-copy-button.is-copied {
+  border-color: rgba(131, 160, 104, 0.45);
+  background: rgba(131, 160, 104, 0.22);
+  color: #ffffff;
+}
+
 .public-article-content pre {
   overflow-x: auto;
-  margin: 0 0 1.6rem;
+  margin: 0;
   padding: 1rem 1.1rem;
   border: 1px solid rgba(131, 160, 104, 0.22);
   border-radius: 0.5rem;
