@@ -130,24 +130,26 @@ class UsersService:
 
     @staticmethod
     @transaction.atomic
-    def update_user_by_admin(
+    def _update_user(
         *,
         user: User,
+        email: str | None,
         display_name: str,
         profile: str,
         meta: dict[str, str],
         x_url: str | None,
         instagram_url: str | None,
         website_url: str | None,
-        role: str,
-        is_active: bool,
         icon: str | None,
         header_image: str | None,
+        role: str | None = None,
+        is_active: bool | None = None,
+        update_admin_fields: bool = False,
         icon_file: UploadedFile | None = None,
         header_image_file: UploadedFile | None = None,
     ) -> User:
         """
-        管理者によるユーザー更新を実行する。
+        ユーザー更新の共通処理を実行する。
         """
         old_icon = user.icon
         old_header_image = user.header_image
@@ -173,33 +175,42 @@ class UsersService:
                 )
                 created_paths.append(next_header_image)
 
+            if email is not None:
+                user.email = User.objects.normalize_required_email(email)
             user.display_name = display_name
             user.profile = profile
             user.meta = meta
             user.x_url = x_url
             user.instagram_url = instagram_url
             user.website_url = website_url
-            user.role = role
-            user.is_active = is_active
             user.icon = next_icon
             user.header_image = next_header_image
 
-            user.full_clean()
-            user.save(
-                update_fields=[
-                    "display_name",
-                    "profile",
-                    "meta",
-                    "x_url",
-                    "instagram_url",
-                    "website_url",
+            update_fields = [
+                "email",
+                "display_name",
+                "profile",
+                "meta",
+                "x_url",
+                "instagram_url",
+                "website_url",
+                "icon",
+                "header_image",
+                "updated_at",
+            ]
+
+            if update_admin_fields:
+                if role is None or is_active is None:
+                    raise RuntimeError("管理更新に必要な項目が不足しています。")
+                user.role = role
+                user.is_active = is_active
+                update_fields.extend([
                     "role",
                     "is_active",
-                    "icon",
-                    "header_image",
-                    "updated_at",
-                ]
-            )
+                ])
+
+            user.full_clean()
+            user.save(update_fields=update_fields)
         except ValidationError as exc:
             for saved_path in created_paths:
                 UsersImageService.delete_media_file(saved_path)
@@ -221,6 +232,80 @@ class UsersService:
             UsersImageService.delete_media_file(old_header_image)
 
         return user
+
+    @staticmethod
+    @transaction.atomic
+    def update_session_user_profile(
+        *,
+        user: User,
+        email: str,
+        display_name: str,
+        profile: str,
+        meta: dict[str, str],
+        x_url: str | None,
+        instagram_url: str | None,
+        website_url: str | None,
+        icon: str | None,
+        header_image: str | None,
+        icon_file: UploadedFile | None = None,
+        header_image_file: UploadedFile | None = None,
+    ) -> User:
+        """
+        セッション中ユーザー自身のプロフィール更新を実行する。
+        """
+        return UsersService._update_user(
+            user=user,
+            email=email,
+            display_name=display_name,
+            profile=profile,
+            meta=meta,
+            x_url=x_url,
+            instagram_url=instagram_url,
+            website_url=website_url,
+            icon=icon,
+            header_image=header_image,
+            icon_file=icon_file,
+            header_image_file=header_image_file,
+        )
+
+    @staticmethod
+    @transaction.atomic
+    def update_user_by_admin(
+        *,
+        user: User,
+        display_name: str,
+        profile: str,
+        meta: dict[str, str],
+        x_url: str | None,
+        instagram_url: str | None,
+        website_url: str | None,
+        role: str,
+        is_active: bool,
+        icon: str | None,
+        header_image: str | None,
+        icon_file: UploadedFile | None = None,
+        header_image_file: UploadedFile | None = None,
+    ) -> User:
+        """
+        管理者によるユーザー更新を実行する。
+        """
+        return UsersService._update_user(
+            user=user,
+            email=None,
+            display_name=display_name,
+            profile=profile,
+            meta=meta,
+            x_url=x_url,
+            instagram_url=instagram_url,
+            website_url=website_url,
+            role=role,
+            is_active=is_active,
+            icon=icon,
+            header_image=header_image,
+            update_admin_fields=True,
+            icon_file=icon_file,
+            header_image_file=header_image_file,
+        )
 
     @staticmethod
     def build_activation_issue_response(*, user: User) -> dict:

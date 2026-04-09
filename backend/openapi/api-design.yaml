@@ -188,6 +188,50 @@ paths:
             application/json:
               schema:
                 $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
+    patch:
+      tags:
+        - users
+      summary: CMS利用中ユーザー自身のプロフィールを更新する
+      description: |
+        認証: CloudflareAccessJwt
+        権限: admin または author
+        permission_class: AuthorAdminReadWrite
+        セッション中ユーザー本人のプロフィールのみ更新する。
+      operationId: patchCmsSessionMe
+      security:
+        - CloudflareAccessJwt:
+            - admin
+        - CloudflareAccessJwt:
+            - author
+      x-permission-class: AuthorAdminReadWrite
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "./components/schemas.yaml#/components/schemas/UsersSessionProfileUpdateRequest"
+          application/json:
+            schema:
+              $ref: "./components/schemas.yaml#/components/schemas/UsersSessionProfileUpdateRequest"
+      responses:
+        "200":
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/UsersSessionUser"
+        "400":
+          description: 入力エラー
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonValidationError"
+        "401":
+          description: 認証失敗
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
   /api/cms/articles:
     get:
       tags:

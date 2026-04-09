@@ -576,6 +576,53 @@ components:
             - author
         is_active:
           type: boolean
+    UsersSessionProfileUpdateRequest:
+      type: object
+      required:
+        - email
+        - display_name
+        - profile
+      properties:
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        icon:
+          type:
+            - string
+            - "null"
+        icon_file:
+          type: string
+          format: binary
+        header_image:
+          type:
+            - string
+            - "null"
+        header_image_file:
+          type: string
+          format: binary
+        profile:
+          type: string
+        x_url:
+          type:
+            - string
+            - "null"
+          format: uri
+        instagram_url:
+          type:
+            - string
+            - "null"
+          format: uri
+        website_url:
+          type:
+            - string
+            - "null"
+          format: uri
+        meta:
+          type: object
+          additionalProperties:
+            type: string
     CmsArticleSummary:
       type: object
       required:

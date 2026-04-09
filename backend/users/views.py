@@ -22,6 +22,7 @@ from users.serializers import (
     UsersDevelopmentAccessTokenSerializer,
     UsersListQuerySerializer,
     UsersProvisionCreateRequestSerializer,
+    UsersSessionProfileUpdateRequestSerializer,
     UsersSessionUserSerializer,
     UsersUserListSerializer,
     UsersUserSerializer,
@@ -47,13 +48,47 @@ class UsersViewSet(ViewSet):
             permission_classes = [AdminOnlyReadWrite]
         return [permission() for permission in permission_classes]
 
-    @action(detail=False, methods=["get"], url_path="session/me")
+    @action(detail=False, methods=["get", "patch"], url_path="session/me")
     def session_me(self, request):
         """
-        セッションユーザー情報を返す。
+        セッションユーザー情報の取得と自己更新を扱う。
         """
         if not getattr(request.user, "is_authenticated", False):
             raise NotAuthenticated("認証情報がありません。")
+
+        if request.method.lower() == "patch":
+            request_serializer = UsersSessionProfileUpdateRequestSerializer(data=request.data)
+            request_serializer.is_valid(raise_exception=True)
+            validated_data = request_serializer.validated_data
+
+            updated_user = UsersService.update_session_user_profile(
+                user=request.user,
+                email=validated_data["email"],
+                display_name=validated_data["display_name"],
+                profile=validated_data["profile"],
+                meta=validated_data["meta"] if "meta" in validated_data else request.user.meta,
+                x_url=validated_data["x_url"] if "x_url" in validated_data else request.user.x_url,
+                instagram_url=(
+                    validated_data["instagram_url"]
+                    if "instagram_url" in validated_data
+                    else request.user.instagram_url
+                ),
+                website_url=(
+                    validated_data["website_url"]
+                    if "website_url" in validated_data
+                    else request.user.website_url
+                ),
+                icon=validated_data["icon"] if "icon" in validated_data else request.user.icon,
+                header_image=(
+                    validated_data["header_image"]
+                    if "header_image" in validated_data
+                    else request.user.header_image
+                ),
+                icon_file=validated_data.get("icon_file"),
+                header_image_file=validated_data.get("header_image_file"),
+            )
+            serializer = UsersSessionUserSerializer(updated_user)
+            return Response(serializer.data)
 
         serializer = UsersSessionUserSerializer(request.user)
         return Response(serializer.data)

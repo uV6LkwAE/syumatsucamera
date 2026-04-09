@@ -116,7 +116,7 @@ class UsersProvisionCreateRequestSerializer(serializers.Serializer):
     仮登録ユーザー作成リクエストのシリアライザー。
     """
 
-    email = serializers.EmailField()
+    email = serializers.EmailField(required=False)
     role = serializers.ChoiceField(choices=UserRole.choices)
     icon_file = serializers.ImageField(
         required=False,
@@ -130,11 +130,12 @@ class UsersProvisionCreateRequestSerializer(serializers.Serializer):
     )
 
 
-class UsersUserUpdateRequestSerializer(serializers.Serializer):
+class UsersProfileUpdateRequestSerializer(serializers.Serializer):
     """
-    ユーザー更新リクエストのシリアライザー。
+    自己プロフィール更新リクエストの共通シリアライザー。
     """
 
+    email = serializers.EmailField()
     display_name = serializers.CharField(max_length=100)
     icon = serializers.CharField(
         max_length=500,
@@ -176,8 +177,6 @@ class UsersUserUpdateRequestSerializer(serializers.Serializer):
         required=False,
     )
     meta = serializers.JSONField(required=False)
-    role = serializers.ChoiceField(choices=UserRole.choices)
-    is_active = serializers.BooleanField()
 
     def validate(self, attrs):
         """
@@ -244,6 +243,22 @@ class UsersUserUpdateRequestSerializer(serializers.Serializer):
             normalized[key] = value_text
 
         return normalized
+
+
+class UsersUserUpdateRequestSerializer(UsersProfileUpdateRequestSerializer):
+    """
+    ユーザー更新リクエストのシリアライザー。
+    """
+    role = serializers.ChoiceField(choices=UserRole.choices)
+    is_active = serializers.BooleanField()
+
+
+class UsersSessionProfileUpdateRequestSerializer(UsersProfileUpdateRequestSerializer):
+    """
+    セッション中ユーザーの自己プロフィール更新リクエスト。
+    """
+
+    email = serializers.EmailField()
 
 
 class UsersActivationIssueResponseSerializer(serializers.Serializer):

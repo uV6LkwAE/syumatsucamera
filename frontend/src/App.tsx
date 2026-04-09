@@ -161,6 +161,7 @@ type ProfileMetaItem = {
 }
 
 type ProfileFormState = {
+  email: string
   display_name: string
   profile: string
   x_url: string
@@ -176,6 +177,7 @@ type ProfileValidationResult = {
 }
 
 const PROFILE_META_MAX_ITEMS = 20
+const PROFILE_EMAIL_MAX_LENGTH = 255
 const PROFILE_DISPLAY_NAME_MAX_LENGTH = 100
 const PROFILE_BIO_MAX_LENGTH = 300
 const PROFILE_URL_MAX_LENGTH = 500
@@ -274,6 +276,21 @@ function validateOptionalProfileUrl(label: string, value: string): string {
   return ''
 }
 
+function validateProfileEmail(value: string): string {
+  const normalizedValue = value.trim()
+  if (normalizedValue === '') {
+    return 'メールアドレスは必須です。'
+  }
+  if (normalizedValue.length > PROFILE_EMAIL_MAX_LENGTH) {
+    return `メールアドレスは${PROFILE_EMAIL_MAX_LENGTH}文字以内で入力してください。`
+  }
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailPattern.test(normalizedValue)) {
+    return 'メールアドレスはメール形式で入力してください。'
+  }
+  return ''
+}
+
 function validateProfileForm(
   form: ProfileFormState,
   options: {
@@ -296,6 +313,15 @@ function validateProfileForm(
     return {
       valid: false,
       message: `表示名は${PROFILE_DISPLAY_NAME_MAX_LENGTH}文字以内で入力してください。`,
+      normalizedMeta: {},
+    }
+  }
+
+  const emailError = validateProfileEmail(form.email)
+  if (emailError !== '') {
+    return {
+      valid: false,
+      message: emailError,
       normalizedMeta: {},
     }
   }
@@ -547,6 +573,7 @@ function CmsConsolePage() {
   const [profileMessage, setProfileMessage] = useState('')
   const [profileError, setProfileError] = useState('')
   const [profileForm, setProfileForm] = useState<ProfileFormState>({
+    email: '',
     display_name: '',
     profile: '',
     x_url: '',
@@ -563,6 +590,7 @@ function CmsConsolePage() {
 
   useEffect(() => {
     setProfileForm({
+      email: sessionUser?.email ?? '',
       display_name: sessionUser?.display_name ?? '',
       profile: sessionUser?.profile ?? '',
       x_url: sessionUser?.x_url ?? '',
@@ -579,6 +607,7 @@ function CmsConsolePage() {
     setProfileError('')
   }, [
     sessionUser?.id,
+    sessionUser?.email,
     sessionUser?.display_name,
     sessionUser?.profile,
     sessionUser?.x_url,
@@ -614,7 +643,7 @@ function CmsConsolePage() {
   const displayName = sessionUser?.display_name?.trim() ?? ''
   const userLabel = displayName !== '' ? displayName : (sessionUser?.email ?? 'ユーザー')
 
-  const canEditProfile = sessionUser !== null && sessionUser.role === 'admin'
+  const canEditProfile = sessionUser !== null
   const profileValidation = validateProfileForm(profileForm, {
     requireMediaFields: sessionUser?.is_active ?? false,
     existingIcon: sessionUser?.icon ?? '',
@@ -677,7 +706,7 @@ function CmsConsolePage() {
 
   async function saveProfile(): Promise<void> {
     if (!canEditProfile || sessionUser === null) {
-      setProfileError('プロフィール編集は管理者のみ実行できます。')
+      setProfileError('プロフィール編集を実行できません。')
       return
     }
     if (!profileValidation.valid) {
@@ -690,13 +719,12 @@ function CmsConsolePage() {
     setProfileMessage('')
     try {
       const formData = new FormData()
+      formData.append('email', profileForm.email.trim())
       formData.append('display_name', profileForm.display_name.trim())
       formData.append('profile', profileForm.profile.trim())
       formData.append('x_url', profileForm.x_url.trim())
       formData.append('instagram_url', profileForm.instagram_url.trim())
       formData.append('website_url', profileForm.website_url.trim())
-      formData.append('role', sessionUser.role)
-      formData.append('is_active', String(sessionUser.is_active))
       if (profileIconFile !== null) {
         formData.append('icon_file', profileIconFile)
       }
@@ -705,11 +733,12 @@ function CmsConsolePage() {
       }
       formData.append('meta', JSON.stringify(profileValidation.normalizedMeta))
 
-      const payload = await apiRequest<CmsSessionUser>(`/users/${sessionUser.id}`, {
+      const payload = await apiRequest<CmsSessionUser>('/users/session/me', {
         method: 'PATCH',
         body: formData,
       })
       setProfileForm({
+        email: payload.email,
         display_name: payload.display_name ?? '',
         profile: payload.profile ?? '',
         x_url: payload.x_url ?? '',
@@ -765,7 +794,7 @@ function CmsConsolePage() {
             onClick={(event) => {
               event.stopPropagation()
               if (!canEditProfile) {
-                setProfileError('プロフィール編集は管理者のみ実行できます。')
+                setProfileError('プロフィール編集を実行できません。')
                 return
               }
               if (profileEditMode) {
@@ -865,20 +894,31 @@ function CmsConsolePage() {
 
             {profileEditMode ? (
               <div className="cms-profile-edit-section">
-                <div className="cms-profile-field-head">
-                  <label className="cms-profile-field-label" htmlFor="profile-email">
-                    メールアドレス
-                  </label>
+                  <div className="cms-profile-field-head">
+                    <label className="cms-profile-field-label" htmlFor="profile-email">
+                      メールアドレス
+                    </label>
+                    <span className="cms-profile-field-counter">
+                      {profileForm.email.length}/{PROFILE_EMAIL_MAX_LENGTH}
+                    </span>
+                  </div>
+                  <input
+                    type="email"
+                    className="console-input form-control cms-profile-input"
+                    id="profile-email"
+                    name="email"
+                    aria-label="メールアドレス"
+                    value={profileForm.email}
+                    maxLength={PROFILE_EMAIL_MAX_LENGTH}
+                    onChange={(event) =>
+                      setProfileForm((prev) => ({
+                        ...prev,
+                        email: event.target.value,
+                      }))
+                    }
+                  />
                 </div>
-                <input
-                  type="email"
-                  className="console-input form-control cms-profile-input cms-profile-readonly-input"
-                  id="profile-email"
-                  value={sessionUser?.email ?? ''}
-                  disabled
-                />
-              </div>
-            ) : (
+              ) : (
               <p className="cms-profile-email">{sessionUser?.email ?? '-'}</p>
             )}
 
@@ -1274,9 +1314,8 @@ function CmsConsolePage() {
             title="プロフィールの作成と編集"
             helpLines={[
               '記事ページに執筆者の紹介として表示されます。',
-              'ヘッダー画像とアイコン画像を更新できます。',
-              '管理者のみプロフィールを編集できます。',
-              '追加項目は表示用プロフィールとして公開側でも利用できます。'
+              '追加項目は使用機材などキーペアになるものを任意で追加できます。',
+              '自身のSNSリンクを追加可能です。'
             ]}
           />
           {renderProfileHero()}
