@@ -10,7 +10,7 @@ type RenderedPublicArticleBody = {
 type TocBuildState = {
   roots: PublicTocNode[]
   stack: PublicTocNode[]
-  headingTrail: Record<1 | 2 | 3, string>
+  headingTrail: Record<2 | 3 | 4, string>
   idCounts: Map<string, number>
 }
 
@@ -43,19 +43,19 @@ function generateHeadingBaseId(seedText: string): string {
 
 function buildHeadingId(
   headingText: string,
-  level: 1 | 2 | 3,
+  level: 2 | 3 | 4,
   tocState: TocBuildState,
 ): string {
   tocState.headingTrail[level] = headingText
-  if (level === 1) {
-    tocState.headingTrail[2] = ''
-    tocState.headingTrail[3] = ''
-  }
   if (level === 2) {
     tocState.headingTrail[3] = ''
+    tocState.headingTrail[4] = ''
+  }
+  if (level === 3) {
+    tocState.headingTrail[4] = ''
   }
 
-  const breadcrumb = ([1, 2, 3] as const)
+  const breadcrumb = ([2, 3, 4] as const)
     .map((trailLevel) => tocState.headingTrail[trailLevel].trim())
     .filter((text) => text !== '')
     .join('>')
@@ -288,8 +288,8 @@ function renderNode(
     renderNode(childNode, `${key}-${index}`, cdnBaseUrl, ogpByUrl, tocState, stateRef),
   )
 
-  if (tagName === 'h1' || tagName === 'h2' || tagName === 'h3') {
-    const level = Number(tagName.slice(1)) as 1 | 2 | 3
+  if (tagName === 'h2' || tagName === 'h3' || tagName === 'h4') {
+    const level = Number(tagName.slice(1)) as 2 | 3 | 4
     const headingText = (element.textContent ?? '').trim()
     const id = buildHeadingId(headingText, level, tocState)
     appendTocNode(
@@ -313,7 +313,7 @@ function renderNode(
     )
   }
 
-  if (tagName === 'h4') {
+  if (tagName === 'h1') {
     return createElement(
       tagName,
       {
@@ -394,9 +394,9 @@ export function renderPublicArticleBody(
     roots: [],
     stack: [],
     headingTrail: {
-      1: '',
       2: '',
       3: '',
+      4: '',
     },
     idCounts: new Map(),
   }
@@ -446,10 +446,20 @@ export function renderPublicTocNodes(nodes: PublicTocNode[]): ReactNode {
 
   return (
     <ol className="public-toc-list">
-      {nodes.map((node) => (
+      {nodes.map((node, index) => (
         <li key={node.id} className={`public-toc-item public-toc-level-${node.level}`}>
           <a className="public-toc-link" href={`#${node.id}`}>
-            {node.text}
+            {node.level === 2 ? (
+              <span className="public-toc-index" aria-hidden="true">
+                {index + 1}.
+              </span>
+            ) : (
+              <i
+                className={`bi bi-caret-right-fill public-toc-caret public-toc-caret-level-${node.level}`}
+                aria-hidden="true"
+              />
+            )}
+            <span className="public-toc-link-text">{node.text}</span>
           </a>
           {renderPublicTocNodes(node.children)}
         </li>
@@ -524,7 +534,10 @@ export function PublicArticleBodyRenderer({
             aria-expanded={tocOpen}
             aria-controls="publicArticleTocBody"
           >
-            <span className="public-article-toc-title">Index</span>
+            <span className="public-article-toc-title">
+              <i className="bi bi-list-task public-article-toc-title-icon" aria-hidden="true" />
+              <span>Index</span>
+            </span>
             <i
               className="bi bi-chevron-down public-article-toc-chevron"
               aria-hidden="true"

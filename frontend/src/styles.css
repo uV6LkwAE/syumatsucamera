@@ -5591,6 +5591,15 @@ body {
   padding-inline: 1rem;
 }
 
+@media (min-width: 992px) {
+  .public-detail-author-panel > h2,
+  .public-detail-author-panel > .public-detail-side-kicker,
+  .public-detail-related-panel h2,
+  .public-detail-related-panel .public-detail-side-kicker {
+    padding-left: 0;
+  }
+}
+
 .public-detail-related-list {
   display: grid;
   margin-top: 0.7rem;
@@ -6061,6 +6070,9 @@ body {
 }
 
 .public-article-toc-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
   margin: 0;
   color: #62784e;
   font-size: 0.74rem;
@@ -6068,6 +6080,11 @@ body {
   letter-spacing: 0.18em;
   text-transform: uppercase;
   text-align: center;
+}
+
+.public-article-toc-title-icon {
+  font-size: 0.9rem;
+  line-height: 1;
 }
 
 .public-article-toc-body {
@@ -6145,19 +6162,69 @@ body {
 }
 
 .public-toc-item + .public-toc-item {
-  margin-top: 0.6rem;
+  margin-top: 0.28rem;
 }
 
 .public-toc-item .public-toc-list {
-  margin-top: 0.55rem;
-  padding-left: 0.95rem;
+  margin-top: 0.24rem;
+  padding-left: 1.1rem;
 }
 
 .public-toc-link {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
   color: #4f5a4b;
+  text-align: left;
+  line-height: 1.55;
+  text-decoration: none;
+}
+
+.public-toc-item.public-toc-level-2 > .public-toc-link {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.public-toc-item.public-toc-level-3 > .public-toc-link {
+  gap: 0.45rem;
   font-size: 0.82rem;
-  line-height: 1.7;
+  font-weight: 600;
+}
+
+.public-toc-item.public-toc-level-4 > .public-toc-link {
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.public-toc-index {
+  display: inline-block;
+  flex: 0 0 auto;
+  color: #83a068;
+  font-size: 0.98em;
+  font-weight: 800;
+  line-height: inherit;
+}
+
+.public-toc-caret {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #8ea27b;
+  line-height: 1;
+}
+
+.public-toc-caret-level-3 {
+  font-size: 0.78rem;
+}
+
+.public-toc-caret-level-4 {
+  font-size: 0.68rem;
+}
+
+.public-toc-link-text {
+  min-width: 0;
 }
 
 .public-contact-form {
