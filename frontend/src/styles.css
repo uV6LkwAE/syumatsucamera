@@ -4278,8 +4278,7 @@ body {
   min-height: 60vh;
 }
 
-.public-hero,
-.public-error-shell {
+.public-hero {
   border-radius: 1.5rem;
   background: #ffffff;
   box-shadow: 0 12px 32px rgba(27, 45, 20, 0.08);
@@ -4510,6 +4509,10 @@ body {
 .public-section-title,
 .public-collection-title {
   font-size: clamp(1.6rem, 5vw, 2.2rem);
+}
+
+.public-collection-title {
+  margin-bottom: 1.2rem;
 }
 
 .public-card-grid {
@@ -5359,6 +5362,9 @@ body {
 
 .public-error-shell {
   padding: 1.6rem 1.4rem;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .public-article-detail-shell {
