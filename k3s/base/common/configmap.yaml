@@ -22,3 +22,4 @@ data:
   LOG_FILE_INFO: "info.log"
   LOG_FILE_CRITICAL: "critical.log"
   CDN_BASE_URL: "https://media.syumatsucamera.com/"
+  DEFAULT_OG_IMAGE_PATH: "/assets/default_thumbnail.png"
