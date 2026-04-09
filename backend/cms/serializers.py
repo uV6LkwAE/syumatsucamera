@@ -341,6 +341,7 @@ class CmsArticleSessionSerializer(serializers.Serializer):
     """
 
     article_id = serializers.UUIDField(allow_null=True, read_only=True)
+    default_thumbnail_preview_path = serializers.CharField(read_only=True)
     lock_token = serializers.UUIDField(read_only=True)
     locked_by_id = serializers.UUIDField(read_only=True)
     locked_by = CmsAuthorSummarySerializer(read_only=True)
@@ -392,6 +393,7 @@ class CmsArticleSerializer(serializers.Serializer):
     published_at = serializers.DateTimeField(allow_null=True, read_only=True)
     views_total = serializers.IntegerField(read_only=True)
     thumbnail_asset_id = serializers.UUIDField(allow_null=True, read_only=True)
+    thumbnail_preview_path = serializers.SerializerMethodField()
     twitter_card = serializers.ChoiceField(choices=TwitterCardType.choices, read_only=True)
     article_option = serializers.SerializerMethodField()
     tags = CmsTagSummarySerializer(many=True, read_only=True)
@@ -413,6 +415,14 @@ class CmsArticleSerializer(serializers.Serializer):
         TOCを返す。
         """
         return CmsTocNodeSerializer(obj.toc_json or [], many=True).data
+
+    def get_thumbnail_preview_path(self, obj) -> str:
+        """
+        編集画面向けのサムネイルプレビュー用パスを返す。
+        """
+        if obj.thumbnail_asset is None:
+            return settings.DEFAULT_OG_IMAGE_PATH
+        return self._build_public_path(file_name=obj.thumbnail_asset.file_name)
 
     def get_media_assets(self, obj) -> list:
         """

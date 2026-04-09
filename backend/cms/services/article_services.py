@@ -226,7 +226,9 @@ class ArticleService:
             )
         )
 
-        if old_thumbnail_asset is not None and old_thumbnail_asset.id != thumbnail_asset.id:
+        if old_thumbnail_asset is not None and (
+            thumbnail_asset is None or old_thumbnail_asset.id != thumbnail_asset.id
+        ):
             transaction.on_commit(lambda: ArticleService._delete_thumbnail_asset(old_thumbnail_asset))
 
         return ArticleMutationResult(

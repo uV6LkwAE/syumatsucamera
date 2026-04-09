@@ -1,14 +1,12 @@
 """
 公開記事参照サービスを定義する。
 """
-from urllib.parse import urljoin
-
 from django.conf import settings
 from rest_framework.exceptions import NotFound
 
 from cms.models import Article, ArticleStatus, Category, Tag
 from cms.services.common import build_pagination_payload
-from core.media_urls import build_cdn_media_url
+from core.media_urls import build_cdn_media_url, build_public_asset_url
 from cms.services.pv_services import PvService
 
 
@@ -16,8 +14,6 @@ class PublicArticleService:
     """
     公開記事APIの業務ロジックを扱う。
     """
-
-    DEFAULT_OG_IMAGE_PATH = "/assets/default_thumbnail.png"
 
     @staticmethod
     def list_articles(
@@ -89,7 +85,10 @@ class PublicArticleService:
         except (Article.DoesNotExist, Article.MultipleObjectsReturned) as exc:
             raise NotFound("記事が存在しません。") from exc
 
-        canonical_url = urljoin(site_origin.rstrip("/") + "/", f"articles/{article.slug}")
+        canonical_url = build_public_asset_url(
+            site_origin=site_origin,
+            asset_path=f"/articles/{article.slug}",
+        )
         return {
             "title": article.title,
             "description": article.summary.strip(),
@@ -119,9 +118,9 @@ class PublicArticleService:
         記事メタ情報用のOGP画像URLを返す。
         """
         if article.thumbnail_asset is None:
-            return urljoin(
-                site_origin.rstrip("/") + "/",
-                PublicArticleService.DEFAULT_OG_IMAGE_PATH.lstrip("/"),
+            return build_public_asset_url(
+                site_origin=site_origin,
+                asset_path=settings.DEFAULT_OG_IMAGE_PATH,
             )
 
         file_name = article.thumbnail_asset.file_name

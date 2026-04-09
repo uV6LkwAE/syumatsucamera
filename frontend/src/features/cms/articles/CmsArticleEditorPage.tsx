@@ -375,6 +375,7 @@ export default function CmsArticleEditorPage({
 
   const [thumbnailMode, setThumbnailMode] = useState<InternalThumbnailMode>('generate_from_title')
   const [thumbnailUploadFileName, setThumbnailUploadFileName] = useState('')
+  const [defaultThumbnailPreviewPath, setDefaultThumbnailPreviewPath] = useState('')
   const [thumbnailPreviewPath, setThumbnailPreviewPath] = useState('')
   const [tagDraft, setTagDraft] = useState('')
   const [tagSuggestions, setTagSuggestions] = useState<CmsTagSuggestion[]>([])
@@ -404,6 +405,7 @@ export default function CmsArticleEditorPage({
         setOptionCatalog(payload.optionCatalog)
         setLockToken(payload.session.lock_token)
         setLockExpiresAt(payload.session.lock_expires_at)
+        setDefaultThumbnailPreviewPath(payload.session.default_thumbnail_preview_path)
 
         if (payload.article !== null) {
           const thumbnailAsset = findCurrentThumbnail(payload.article.media_assets)
@@ -420,9 +422,9 @@ export default function CmsArticleEditorPage({
             selectedOptionIds: payload.article.article_option.items.map((item) => item.id),
             tagNames: payload.article.tags.map((tag) => tag.name),
           })
-          setThumbnailMode(thumbnailAsset === null ? 'generate_from_title' : 'keep_current')
+          setThumbnailMode(thumbnailAsset === null ? 'use_default' : 'keep_current')
           setThumbnailUploadFileName('')
-          setThumbnailPreviewPath(thumbnailAsset?.public_path ?? '')
+          setThumbnailPreviewPath(payload.article.thumbnail_preview_path)
           setTagDraft('')
           setTagSuggestions([])
           setTagSuggestionError('')
@@ -434,7 +436,7 @@ export default function CmsArticleEditorPage({
           setForm(DEFAULT_ARTICLE_FORM)
           setThumbnailMode('generate_from_title')
           setThumbnailUploadFileName('')
-          setThumbnailPreviewPath('')
+          setThumbnailPreviewPath(payload.session.default_thumbnail_preview_path)
           setTagDraft('')
           setTagSuggestions([])
           setTagSuggestionError('')
@@ -744,6 +746,24 @@ export default function CmsArticleEditorPage({
     })
   }
 
+  function handleThumbnailModeChange(nextMode: InternalThumbnailMode): void {
+    setThumbnailMode(nextMode)
+    if (nextMode === 'use_default') {
+      setThumbnailPreviewPath(defaultThumbnailPreviewPath)
+      setThumbnailUploadFileName('')
+      return
+    }
+    if (nextMode === 'keep_current') {
+      setThumbnailPreviewPath(currentThumbnailAsset?.public_path ?? article?.thumbnail_preview_path ?? '')
+      setThumbnailUploadFileName('')
+      return
+    }
+    setThumbnailPreviewPath('')
+    if (nextMode !== 'use_uploaded') {
+      setThumbnailUploadFileName('')
+    }
+  }
+
   function addTagName(rawName = tagDraft): void {
     const normalizedName = rawName.trim()
     if (normalizedName === '') {
@@ -809,9 +829,7 @@ export default function CmsArticleEditorPage({
                 { value: 'generate_from_title' as const, label: 'タイトルから生成' },
                 { value: 'use_uploaded' as const, label: '画像をアップロード' },
               ]}
-              onChange={(nextValue) =>
-                setThumbnailMode(nextValue as InternalThumbnailMode)
-              }
+              onChange={(nextValue) => handleThumbnailModeChange(nextValue as InternalThumbnailMode)}
             />
           </label>
 

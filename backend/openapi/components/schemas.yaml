@@ -906,6 +906,7 @@ components:
         - status
         - views_total
         - thumbnail_asset_id
+        - thumbnail_preview_path
         - twitter_card
         - article_option
         - tags
@@ -949,6 +950,8 @@ components:
         thumbnail_asset_id:
           type: string
           format: uuid
+        thumbnail_preview_path:
+          type: string
         twitter_card:
           type: string
           enum:
@@ -990,6 +993,7 @@ components:
     CmsArticleSession:
       type: object
       required:
+        - default_thumbnail_preview_path
         - lock_token
         - locked_by
         - lock_expires_at
@@ -997,6 +1001,8 @@ components:
         article_id:
           type: string
           format: uuid
+        default_thumbnail_preview_path:
+          type: string
         lock_token:
           type: string
           format: uuid

@@ -167,10 +167,13 @@ class MediaService:
             shutil.rmtree(path)
 
     @staticmethod
-    def create_or_replace_thumbnail_asset(*, article: Article, thumbnail_request: dict) -> MediaAsset:
+    def create_or_replace_thumbnail_asset(*, article: Article, thumbnail_request: dict) -> MediaAsset | None:
         """
         サムネイル用アセットのプレースホルダを作成する。
         """
+        if thumbnail_request["mode"] == "use_default":
+            return None
+
         suffix = ".png"
         requested_file_name = thumbnail_request.get("file_name")
         if requested_file_name and "." in requested_file_name:

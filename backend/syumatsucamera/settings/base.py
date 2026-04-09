@@ -89,6 +89,7 @@ _REQUIRED_ENV_VARS = [
     "LOG_FILE_INFO",
     "LOG_FILE_CRITICAL",
     "CDN_BASE_URL",
+    "DEFAULT_OG_IMAGE_PATH",
 ]
 
 if not CI_SKIP_REQUIRED_ENV_CHECK:
@@ -212,6 +213,7 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 CDN_BASE_URL = _env("CDN_BASE_URL").strip()
+DEFAULT_OG_IMAGE_PATH = _env("DEFAULT_OG_IMAGE_PATH").strip()
 CMS_THUMBNAIL_FONT_REGULAR_PATH = BASE_DIR / "cms" / "assets" / "fonts" / "NotoSansJP-Regular.otf"
 CMS_THUMBNAIL_FONT_BOLD_PATH = BASE_DIR / "cms" / "assets" / "fonts" / "NotoSansJP-Bold.otf"
 CMS_THUMBNAIL_BRAND_NAME = "週末カメラ"

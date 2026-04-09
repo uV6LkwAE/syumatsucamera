@@ -221,6 +221,7 @@ class ArticleSessionService:
         locked_by = User.objects.get(id=session.locked_by_id)
         return {
             "article_id": article.id if article is not None else None,
+            "default_thumbnail_preview_path": settings.DEFAULT_OG_IMAGE_PATH,
             "lock_token": session.lock_token,
             "locked_by_id": locked_by.id,
             "locked_by": locked_by,

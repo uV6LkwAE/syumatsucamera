@@ -116,6 +116,7 @@ export type CmsArticleDetail = {
   published_at: string | null
   views_total: number
   thumbnail_asset_id: string | null
+  thumbnail_preview_path: string
   twitter_card: CmsTwitterCard
   article_option: CmsArticleOption
   tags: CmsTagSummary[]
@@ -143,6 +144,7 @@ export type CmsArticleMutationResponse = {
 
 export type CmsArticleSessionResponse = {
   article_id: string | null
+  default_thumbnail_preview_path: string
   lock_token: string
   locked_by_id: string
   locked_by: CmsAuthorSummary

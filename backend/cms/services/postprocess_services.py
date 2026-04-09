@@ -163,6 +163,16 @@ class ArticlePostprocessService:
         サムネイルを確定する。
         """
         if article.thumbnail_asset is None:
+            if thumbnail_request["mode"] != "use_default":
+                raise RuntimeError("サムネイルアセットが存在しません。")
+            ArticleSaveLogService.create_log(
+                request_user_id=request_user_id,
+                article_id=article.id,
+                lock_token=lock_token,
+                target="default_thumbnail",
+                status=SaveLogStatus.COMPLETED,
+                message="固定デフォルトサムネイルを設定しました。",
+            )
             return
 
         mode = thumbnail_request["mode"]

@@ -246,7 +246,7 @@ class PublicArticleSummarySerializer(serializers.Serializer):
         CDN付きサムネイルURLを返す。
         """
         if obj.thumbnail_asset is None:
-            raise RuntimeError("公開記事のサムネイルアセットが存在しません。")
+            return settings.DEFAULT_OG_IMAGE_PATH
 
         file_name = obj.thumbnail_asset.file_name
         shard_a = file_name[:2]
