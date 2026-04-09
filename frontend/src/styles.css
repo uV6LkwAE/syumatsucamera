@@ -1132,6 +1132,7 @@ body {
 
 .cms-profile-banner {
   position: relative;
+  aspect-ratio: 21 / 9;
   min-height: 140px;
   background: #eef2f7;
   background-size: cover;
@@ -4902,12 +4903,99 @@ body {
   padding: 0;
 }
 
+.public-author-archive-profile {
+  margin-bottom: 2rem;
+}
+
+.public-author-archive-card {
+  overflow: hidden;
+  border: 1px solid rgba(131, 160, 104, 0.18);
+  border-radius: 0.7rem;
+  background: #ffffff;
+  box-shadow: 0 1.1rem 2.5rem rgba(27, 45, 20, 0.08);
+}
+
+.public-author-archive-header-frame {
+  aspect-ratio: 21 / 9;
+  background: #e9efe5;
+  overflow: hidden;
+}
+
+.public-author-archive-header {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.public-author-archive-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 1rem;
+  padding: 1.15rem 1.2rem 1.2rem;
+}
+
+.public-author-archive-card.has-header-image .public-author-archive-main {
+  padding-top: 0;
+}
+
+.public-author-archive-icon {
+  width: 5rem;
+  height: 5rem;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 3px solid #ffffff;
+  box-shadow:
+    0 0 0 1px rgba(131, 160, 104, 0.28),
+    0 0.65rem 1.35rem rgba(27, 45, 20, 0.12);
+}
+
+.public-author-archive-card.has-header-image .public-author-archive-icon {
+  margin-top: -2.5rem;
+  position: relative;
+  z-index: 1;
+}
+
+.public-author-archive-icon-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #edf2e8;
+  color: #62784e;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.public-author-archive-copy {
+  min-width: 0;
+  text-align: left;
+}
+
+.public-author-archive-name {
+  margin: 0;
+  color: #1b1f1a;
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.public-author-archive-text {
+  margin-top: 0.7rem;
+}
+
+.public-author-archive-social-links {
+  justify-content: flex-start;
+  margin-top: 0.85rem;
+}
+
 .public-profile-mobile-head {
   display: none;
 }
 
 .public-profile-header {
-  aspect-ratio: 16 / 5.6;
+  aspect-ratio: 21 / 9;
   background: #e9efe5;
   overflow: hidden;
 }
@@ -5485,7 +5573,7 @@ body {
 .public-detail-author-header-frame {
   display: block;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 21 / 9;
   overflow: hidden;
   background: #eef3ea;
 }
@@ -6512,35 +6600,40 @@ body {
   }
 
   .public-profile-header,
-  .public-detail-author-header-frame {
-    aspect-ratio: 16 / 9;
+  .public-detail-author-header-frame,
+  .public-author-archive-header-frame {
+    aspect-ratio: 21 / 9;
   }
 
   .public-profile-body,
-  .public-detail-author-main {
+  .public-detail-author-main,
+  .public-author-archive-main {
     gap: 0.75rem;
     padding: 0 1rem 1rem;
-    text-align: center;
   }
 
   .public-profile-icon,
-  .public-detail-author-icon {
+  .public-detail-author-icon,
+  .public-author-archive-icon {
     width: 4.35rem;
     height: 4.35rem;
   }
 
   .public-profile-icon,
-  .public-detail-author-card.has-header-image .public-detail-author-icon {
+  .public-detail-author-card.has-header-image .public-detail-author-icon,
+  .public-author-archive-card.has-header-image .public-author-archive-icon {
     margin-top: -2.175rem;
   }
 
   .public-profile-copy,
-  .public-detail-author-copy {
+  .public-detail-author-copy,
+  .public-author-archive-copy {
     width: 100%;
   }
 
   .public-profile-text.is-mobile-faded,
-  .public-detail-author-text.is-mobile-faded {
+  .public-detail-author-text.is-mobile-faded,
+  .public-author-archive-text.is-mobile-faded {
     max-height: var(--public-profile-fade-height);
     overflow: hidden;
     -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 72%, transparent 100%);
@@ -6653,6 +6746,46 @@ body {
 }
 
 @media (max-width: 767.98px) {
+  .public-mini-carousel-label {
+    top: 0.4rem;
+    left: 0.4rem;
+    max-width: calc(100% - 0.8rem);
+    padding: 0.24rem 0.5rem;
+    font-size: 0.6rem;
+    line-height: 1.15;
+  }
+
+  .public-category-label {
+    left: 0.5rem;
+    bottom: 0.5rem;
+    max-width: calc(100% - 1rem);
+    padding: 0.24rem 0.5rem;
+    font-size: 0.6rem;
+    line-height: 1.15;
+  }
+
+  .public-author-archive-profile {
+    margin-bottom: 1.55rem;
+  }
+
+  .public-author-archive-main {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+    padding: 0 1rem 1rem;
+  }
+
+  .public-author-archive-copy {
+    width: 100%;
+  }
+
+  .public-author-archive-name {
+    font-size: 1rem;
+  }
+
+  .public-author-archive-social-links {
+    margin-top: 0.75rem;
+  }
+
   .public-mini-carousel-shell {
     container-type: inline-size;
     --public-mini-card-gap: 0.75rem;
@@ -6997,7 +7130,9 @@ body {
   }
 
   .public-card-grid.is-archive-four {
+    width: 100%;
     grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1.35rem 1.1rem;
   }
 
   .public-article-card.is-hero {

@@ -581,7 +581,6 @@ function PublicArticleCard({
         </div>
         <div className="public-article-card-body">
           <h2 className="public-article-card-title">{article.title}</h2>
-          <p className="public-article-card-summary">{article.summary}</p>
           {showSupplement ? (
             <>
               <div className="public-article-card-meta">
@@ -863,6 +862,68 @@ function PublicArticleSection({
   )
 }
 
+function PublicAuthorArchiveProfile({
+  author,
+}: {
+  author: PublicAuthorSummary
+}) {
+  const authorProfile = author.profile?.trim() ?? ''
+  const authorProfileParagraphs = buildProfileTextParagraphs(authorProfile)
+  const hasAuthorHeaderImage = author.header_image !== null
+
+  return (
+    <section className="public-author-archive-profile">
+      <div
+        className={`public-author-archive-card${hasAuthorHeaderImage ? ' has-header-image' : ''}`}
+      >
+        {hasAuthorHeaderImage ? (
+          <div className="public-author-archive-header-frame">
+            <img
+              className="public-author-archive-header"
+              src={author.header_image}
+              alt=""
+              width={1260}
+              height={540}
+              loading="lazy"
+              decoding="async"
+            />
+          </div>
+        ) : null}
+        <div className="public-author-archive-main">
+          {author.icon ? (
+            <img
+              className="public-author-archive-icon"
+              src={author.icon}
+              alt={author.display_name}
+              width={72}
+              height={72}
+              loading="lazy"
+              decoding="async"
+            />
+          ) : (
+            <span className="public-author-archive-icon public-author-archive-icon-fallback">
+              {author.display_name.charAt(0)}
+            </span>
+          )}
+          <div className="public-author-archive-copy">
+            <h2 className="public-author-archive-name">{author.display_name}</h2>
+            {authorProfileParagraphs.length > 0 ? (
+              <PublicProfileTextBlock
+                paragraphs={authorProfileParagraphs}
+                className="public-author-archive-text"
+              />
+            ) : null}
+            <PublicProfileSocialLinks
+              profile={author}
+              className="public-author-archive-social-links"
+            />
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function PublicDetailAuthorPanel({ article }: { article: PublicArticleBody }) {
   const authorProfile = article.author.profile?.trim() ?? ''
   const authorProfileParagraphs = buildProfileTextParagraphs(authorProfile)
@@ -881,8 +942,8 @@ function PublicDetailAuthorPanel({ article }: { article: PublicArticleBody }) {
               className="public-detail-author-header"
               src={article.author.header_image}
               alt=""
-              width={640}
-              height={360}
+              width={1260}
+              height={540}
               loading="lazy"
               decoding="async"
             />
@@ -1105,8 +1166,8 @@ function PublicHomeDesktopLower({
                     className="public-profile-header-image"
                     src={sidebar.profile.header_image ?? ''}
                     alt=""
-                    width={1200}
-                    height={420}
+                    width={1260}
+                    height={540}
                     loading="lazy"
                     decoding="async"
                   />
@@ -1492,7 +1553,6 @@ export function PublicHomePage() {
         <PublicMiniArticleCarousel
           articles={popularArticles}
           eagerCount={popularCarouselEagerCount}
-          moreTo="/articles/popular/"
         />
       </div>
       <PublicHomeDesktopLower
@@ -1513,11 +1573,13 @@ function PublicListPage({
   description,
   params,
   mobileTwoColumnCards = false,
+  resolveTitle,
 }: {
   title: string
   description: string
   params: PublicArticleListParams
   mobileTwoColumnCards?: boolean
+  resolveTitle?: (payload: PublicArticleListResponse | null) => string
 }) {
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -1569,6 +1631,7 @@ function PublicListPage({
     return <Navigate to={errorPath} replace />
   }
 
+  const displayTitle = resolveTitle ? resolveTitle(payload) : title
   const cardGridClassName = `public-card-grid is-archive-four${
     mobileTwoColumnCards ? ' is-mobile-two-column' : ''
   }`
@@ -1578,7 +1641,7 @@ function PublicListPage({
       <div className="public-archive-head">
         <div>
           <p className="public-section-kicker">Archive</p>
-          <h1 className="public-home-latest-title">{title}</h1>
+          <h1 className="public-home-latest-title">{displayTitle}</h1>
         </div>
         <label className="public-home-search-field">
           <i className="bi bi-search" aria-hidden="true" />
@@ -1587,7 +1650,7 @@ function PublicListPage({
             value={archiveSearchText}
             onChange={(event) => setArchiveSearchText(event.target.value)}
             placeholder="記事タイトルから検索"
-            aria-label={`${title}を検索`}
+            aria-label={`${displayTitle}を検索`}
           />
         </label>
       </div>
@@ -1689,20 +1752,37 @@ export function PublicSearchPage() {
   const [searchParams] = useSearchParams()
   const keyword = searchParams.get('q') ?? ''
   const authorId = searchParams.get('author_id') ?? ''
+  const isAuthorFiltered = authorId.trim() !== ''
 
   return (
     <PublicListPage
-      title="検索結果"
+      title={isAuthorFiltered ? 'この著者が書いた記事' : '検索結果'}
       description={
-        keyword.trim() === ''
-          ? '検索条件に一致する記事を表示します。'
-          : `「${keyword.trim()}」に一致する記事を表示しています。`
+        isAuthorFiltered
+          ? 'この著者が公開している記事を表示しています。'
+          : (
+            keyword.trim() === ''
+              ? '検索条件に一致する記事を表示します。'
+              : `「${keyword.trim()}」に一致する記事を表示しています。`
+          )
       }
       params={{
         q: keyword,
         author_id: authorId === '' ? undefined : authorId,
         ordering: 'newest',
       }}
+      mobileTwoColumnCards={isAuthorFiltered}
+      resolveTitle={
+        isAuthorFiltered
+          ? (payload) => {
+            const authorName = payload?.items[0]?.author.display_name?.trim() ?? ''
+            if (authorName === '') {
+              return 'この著者が書いた記事'
+            }
+            return `${authorName}が書いた記事`
+          }
+          : undefined
+      }
     />
   )
 }

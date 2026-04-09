@@ -27,7 +27,7 @@ class UsersImageService:
         },
         "header_image": {
             "request_field": "header_image_file",
-            "ratio_numerator": 16,
+            "ratio_numerator": 21,
             "ratio_denominator": 9,
         },
     }
