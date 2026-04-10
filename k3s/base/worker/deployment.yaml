@@ -44,3 +44,10 @@ spec:
                 name: app-config
             - secretRef:
                 name: app-secret
+          volumeMounts:
+            - name: media-storage
+              mountPath: /app/media
+      volumes:
+        - name: media-storage
+          persistentVolumeClaim:
+            claimName: app-media

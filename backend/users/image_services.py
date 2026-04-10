@@ -37,7 +37,7 @@ class UsersImageService:
         """
         media ルートディレクトリを返す。
         """
-        media_root = Path(settings.BASE_DIR) / "media"
+        media_root = Path(settings.MEDIA_ROOT)
         media_root.mkdir(parents=True, exist_ok=True)
         return media_root
 
