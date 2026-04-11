@@ -3477,6 +3477,147 @@ body {
   max-width: 100%;
 }
 
+.cms-article-editor-page .jodit-wysiwyg {
+  color: #2f332e;
+  font-family:
+    "Noto Sans JP",
+    "Hiragino Sans",
+    "Hiragino Kaku Gothic ProN",
+    "Hiragino Kaku Gothic Pro",
+    "Yu Gothic Medium",
+    "Yu Gothic",
+    "Meiryo",
+    sans-serif;
+  font-size: 0.94rem;
+  line-height: 1.9;
+}
+
+.cms-article-editor-page .jodit-wysiwyg p {
+  margin: 0 0 1.5rem;
+}
+
+.cms-article-editor-page .jodit-wysiwyg ul,
+.cms-article-editor-page .jodit-wysiwyg ol {
+  padding-left: 1.3rem;
+  margin: 0 0 1.5rem;
+}
+
+.cms-article-editor-page .jodit-wysiwyg blockquote:not(.twitter-tweet),
+.cms-article-editor-page .jodit-wysiwyg backquote {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.75rem;
+  margin: 0 0 1.6rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid rgba(131, 160, 104, 0.22);
+  border-radius: 0.5rem;
+  background: #f8faf6;
+  color: #4f5a4b;
+}
+
+.cms-article-editor-page .jodit-wysiwyg pre {
+  overflow-x: auto;
+  margin: 0;
+  padding: 1rem 1.1rem;
+  border: 1px solid rgba(131, 160, 104, 0.22);
+  border-radius: 0.5rem;
+  background: #1f271e;
+  color: #f7faf2;
+  font-size: 0.86rem;
+  line-height: 1.75;
+  tab-size: 2;
+}
+
+.cms-article-editor-page .jodit-wysiwyg code {
+  padding: 0.12rem 0.35rem;
+  border: 1px solid rgba(131, 160, 104, 0.22);
+  border-radius: 0.35rem;
+  background: #eef4e8;
+  color: #2f4d22;
+  font-size: 0.88em;
+  overflow-wrap: anywhere;
+}
+
+.cms-article-editor-page .jodit-wysiwyg pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  overflow-wrap: normal;
+}
+
+.cms-article-editor-page .jodit-wysiwyg h1,
+.cms-article-editor-page .jodit-wysiwyg h2 {
+  position: relative;
+  margin: 2.55rem 0 1rem;
+  padding: 0 0 0.82rem;
+  border-bottom: 1px solid rgba(47, 51, 46, 0.16);
+  color: #1b1f1a;
+  font-size: 1.12rem;
+  font-weight: 800;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+}
+
+.cms-article-editor-page .jodit-wysiwyg h1::after,
+.cms-article-editor-page .jodit-wysiwyg h2::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  width: 4.5rem;
+  height: 2px;
+  border-radius: 999px;
+  background: #83a068;
+}
+
+.cms-article-editor-page .jodit-wysiwyg h3 {
+  position: relative;
+  margin: 2.2rem 0 0.9rem;
+  padding: 0 0 0.55rem 0.9rem;
+  border-bottom: 1px solid rgba(131, 160, 104, 0.32);
+  color: #1b1f1a;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+}
+
+.cms-article-editor-page .jodit-wysiwyg h3::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.2em;
+  bottom: 0.75rem;
+  width: 3px;
+  border-radius: 999px;
+  background: #83a068;
+}
+
+.cms-article-editor-page .jodit-wysiwyg h4 {
+  margin: 1.85rem 0 0.75rem;
+  padding: 0 0 0.45rem;
+  border-bottom: 1px dashed rgba(131, 160, 104, 0.34);
+  color: #4f5a4b;
+  font-size: 0.94rem;
+  font-weight: 800;
+  line-height: 1.55;
+  letter-spacing: 0.04em;
+}
+
+.cms-article-editor-page .jodit-wysiwyg img {
+  display: block;
+  width: 500px !important;
+  max-width: 100%;
+  height: auto !important;
+  margin: 0 0 1.6rem;
+  border-radius: 1rem;
+  box-shadow: 0 10px 28px rgba(27, 45, 20, 0.08);
+  object-fit: contain;
+}
+
 .cms-article-editor-shell {
   display: flex;
   flex-direction: column;
@@ -3524,8 +3665,65 @@ body {
   align-items: center;
   gap: 10px;
   color: #183651;
+  cursor: pointer;
   font-size: 0.95rem;
   font-weight: 600;
+}
+
+.cms-image-option-toggle input[type="checkbox"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+}
+
+.cms-image-option-switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 24px;
+  border: 1px solid #b9c8d9;
+  border-radius: 999px;
+  background: #dfe8f2;
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.cms-image-option-switch::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(20, 41, 66, 0.24);
+  transition: transform 0.16s ease;
+}
+
+.cms-image-option-toggle input[type="checkbox"]:checked + .cms-image-option-switch {
+  border-color: #2874b9;
+  background: #2874b9;
+}
+
+.cms-image-option-toggle input[type="checkbox"]:checked + .cms-image-option-switch::before {
+  transform: translateX(18px);
+}
+
+.cms-image-option-toggle input[type="checkbox"]:focus-visible + .cms-image-option-switch {
+  outline: 3px solid rgba(40, 116, 185, 0.28);
+  outline-offset: 2px;
+}
+
+.cms-image-option-toggle input[type="checkbox"]:disabled + .cms-image-option-switch,
+.cms-image-option-toggle input[type="checkbox"]:disabled ~ span:last-child {
+  cursor: wait;
+  opacity: 0.58;
 }
 
 .cms-image-option-help {

@@ -1,4 +1,12 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent as ReactDragEvent,
+} from 'react'
 import { useNavigate, useOutletContext, useParams } from 'react-router-dom'
 import JoditEditor from 'jodit-react'
 import 'jodit/es2021/jodit.min.css'
@@ -46,6 +54,23 @@ type ImageProcessingOptions = CmsImageProcessingOptions
 
 type JoditEditorInstance = {
   value: string
+  s?: {
+    focus?: (options?: FocusOptions) => boolean
+    insertCursorAtPoint?: (x: number, y: number) => boolean
+    insertImage?: (
+      url: string,
+      styles?: Record<string, string> | null,
+      defaultWidth?: number | string | null,
+    ) => void
+  }
+  e?: {
+    fire?: (eventName: string, ...args: unknown[]) => void
+  }
+}
+
+type BrowserCaretPosition = {
+  offsetNode: Node
+  offset: number
 }
 
 type ArticleFormState = {
@@ -271,6 +296,25 @@ function renameFileWithUuid(file: File): File {
   })
 }
 
+function getDroppedFiles(dataTransfer: DataTransfer): File[] {
+  return Array.from(dataTransfer.files)
+}
+
+function hasDroppedFiles(dataTransfer: DataTransfer): boolean {
+  if (dataTransfer.files.length > 0) {
+    return true
+  }
+  return Array.from(dataTransfer.items).some((item) => item.kind === 'file')
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
 function toStatusOptions(
   role: 'admin' | 'author' | undefined,
   currentStatus: ArticleFormState['status'],
@@ -362,6 +406,7 @@ export default function CmsArticleEditorPage({
   const editorShellRef = useRef<HTMLDivElement | null>(null)
   const imageOptionPanelRef = useRef<HTMLDivElement | null>(null)
   const editorInstanceRef = useRef<JoditEditorInstance | null>(null)
+  const editorSelectionRangeRef = useRef<Range | null>(null)
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -378,6 +423,9 @@ export default function CmsArticleEditorPage({
   const [currentThumbnailAsset, setCurrentThumbnailAsset] = useState<CmsArticleMediaAsset | null>(null)
 
   const [form, setForm] = useState<ArticleFormState>(DEFAULT_ARTICLE_FORM)
+  // jodit-react は value 変更のたびに内部の jodit.value を再同期するため、
+  // 編集中の本文と保存用 state を分離してスクロール位置の巻き戻りを防ぐ。
+  const [editorBodyHtml, setEditorBodyHtml] = useState(DEFAULT_ARTICLE_FORM.bodyHtml)
   const [uploadedImageOptions, setUploadedImageOptions] = useState<Record<string, ImageProcessingOptions>>({})
   const [selectedImageFileName, setSelectedImageFileName] = useState('')
   const [selectedImageSource, setSelectedImageSource] = useState('')
@@ -394,6 +442,12 @@ export default function CmsArticleEditorPage({
   const [showTagSuggestions, setShowTagSuggestions] = useState(false)
 
   const statusOptions = toStatusOptions(sessionUser?.role, form.status)
+  const handleEditorRef = useCallback((instance: JoditEditorInstance | null) => {
+    editorInstanceRef.current = instance
+  }, [])
+  const handleEditorBlur = useCallback((nextContent: string) => {
+    setForm((prev) => ({ ...prev, bodyHtml: nextContent }))
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -429,6 +483,7 @@ export default function CmsArticleEditorPage({
           setArticle(payload.article)
           setInitialMediaAssets(payload.article.media_assets)
           setCurrentThumbnailAsset(thumbnailAsset)
+          setEditorBodyHtml(normalizeStoredArticleHtml(payload.article.body_html))
           setForm({
             categoryId: payload.article.category_id,
             title: payload.article.title,
@@ -453,6 +508,7 @@ export default function CmsArticleEditorPage({
           setArticle(null)
           setInitialMediaAssets([])
           setCurrentThumbnailAsset(null)
+          setEditorBodyHtml(DEFAULT_ARTICLE_FORM.bodyHtml)
           setForm(DEFAULT_ARTICLE_FORM)
           setUploadedImageOptions({})
           setThumbnailMode('generate_from_title')
@@ -627,6 +683,299 @@ export default function CmsArticleEditorPage({
     return editorInstanceRef.current?.value ?? form.bodyHtml
   }
 
+  function getEditorElement(): HTMLElement | null {
+    return editorShellRef.current?.querySelector('.jodit-wysiwyg') ?? null
+  }
+
+  function getRangeContainer(range: Range): Node | null {
+    const container = range.commonAncestorContainer
+    if (container.nodeType === Node.ELEMENT_NODE) {
+      return container
+    }
+    return container.parentNode
+  }
+
+  function isRangeInsideEditor(range: Range): boolean {
+    const editorElement = getEditorElement()
+    const rangeContainer = getRangeContainer(range)
+    return (
+      editorElement !== null
+      && rangeContainer !== null
+      && editorElement.contains(rangeContainer)
+    )
+  }
+
+  function selectEditorRange(range: Range): boolean {
+    if (!isRangeInsideEditor(range)) {
+      return false
+    }
+
+    const selection = window.getSelection()
+    if (selection === null) {
+      return false
+    }
+
+    selection.removeAllRanges()
+    selection.addRange(range)
+    editorSelectionRangeRef.current = range.cloneRange()
+    return true
+  }
+
+  function saveEditorSelection(): void {
+    const selection = window.getSelection()
+    if (selection === null || selection.rangeCount === 0) {
+      return
+    }
+
+    const range = selection.getRangeAt(0)
+    if (!isRangeInsideEditor(range)) {
+      return
+    }
+
+    editorSelectionRangeRef.current = range.cloneRange()
+  }
+
+  function restoreEditorSelection(): boolean {
+    const range = editorSelectionRangeRef.current
+    if (range !== null) {
+      try {
+        if (selectEditorRange(range.cloneRange())) {
+          return true
+        }
+      } catch {
+        editorSelectionRangeRef.current = null
+      }
+    }
+
+    return editorInstanceRef.current?.s?.focus?.({ preventScroll: true }) ?? false
+  }
+
+  function buildRangeAtPoint(x: number, y: number): Range | null {
+    const documentWithCaret = document as Document & {
+      caretPositionFromPoint?: (x: number, y: number) => BrowserCaretPosition | null
+      caretRangeFromPoint?: (x: number, y: number) => Range | null
+    }
+
+    const caretPosition = documentWithCaret.caretPositionFromPoint?.(x, y)
+    if (caretPosition !== undefined && caretPosition !== null) {
+      const range = document.createRange()
+      range.setStart(caretPosition.offsetNode, caretPosition.offset)
+      range.collapse(true)
+      return range
+    }
+
+    return documentWithCaret.caretRangeFromPoint?.(x, y) ?? null
+  }
+
+  function setEditorCursorAtPoint(x: number, y: number): boolean {
+    const inserted = editorInstanceRef.current?.s?.insertCursorAtPoint?.(x, y) ?? false
+    if (inserted) {
+      saveEditorSelection()
+      return true
+    }
+
+    const range = buildRangeAtPoint(x, y)
+    if (range === null) {
+      return false
+    }
+    return selectEditorRange(range)
+  }
+
+  function insertUploadedImagePaths(
+    imagePaths: string[],
+    point?: { x: number; y: number },
+  ): void {
+    if (imagePaths.length === 0) {
+      return
+    }
+
+    if (point !== undefined) {
+      setEditorCursorAtPoint(point.x, point.y)
+    } else {
+      restoreEditorSelection()
+    }
+
+    const editor = editorInstanceRef.current
+    for (const imagePath of imagePaths) {
+      if (editor?.s?.insertImage !== undefined) {
+        editor.s.insertImage(imagePath, null, null)
+      } else {
+        document.execCommand(
+          'insertHTML',
+          false,
+          `<p><img src="${escapeHtmlAttribute(imagePath)}" alt="" /></p>`,
+        )
+      }
+    }
+
+    editor?.e?.fire?.('synchro')
+    const nextBodyHtml = editor?.value ?? getEditorElement()?.innerHTML ?? form.bodyHtml
+    setForm((prev) => ({
+      ...prev,
+      bodyHtml: nextBodyHtml,
+    }))
+    saveEditorSelection()
+  }
+
+  function isEditorDropTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) {
+      return false
+    }
+
+    const editorElement = target.closest('.jodit-wysiwyg')
+    return (
+      editorElement !== null
+      && editorShellRef.current !== null
+      && editorShellRef.current.contains(editorElement)
+    )
+  }
+
+  function getEditorImageTarget(target: EventTarget | null): HTMLImageElement | null {
+    if (!(target instanceof HTMLElement)) {
+      return null
+    }
+
+    const selectedImage = target.closest('img')
+    if (!(selectedImage instanceof HTMLImageElement)) {
+      return null
+    }
+
+    const editorElement = selectedImage.closest('.jodit-wysiwyg')
+    if (
+      editorElement === null
+      || editorShellRef.current === null
+      || !editorShellRef.current.contains(editorElement)
+    ) {
+      return null
+    }
+
+    return selectedImage
+  }
+
+  function getEventClientPoint(event: Event): { x: number; y: number } | null {
+    const pointerEvent = event as Event & {
+      clientX?: unknown
+      clientY?: unknown
+      touches?: TouchList
+      changedTouches?: TouchList
+    }
+
+    if (typeof pointerEvent.clientX === 'number' && typeof pointerEvent.clientY === 'number') {
+      return {
+        x: pointerEvent.clientX,
+        y: pointerEvent.clientY,
+      }
+    }
+
+    const touch = pointerEvent.touches?.[0] ?? pointerEvent.changedTouches?.[0]
+    if (touch === undefined) {
+      return null
+    }
+    return {
+      x: touch.clientX,
+      y: touch.clientY,
+    }
+  }
+
+  function getEditorImageAtPoint(x: number, y: number): HTMLImageElement | null {
+    const editorElement = getEditorElement()
+    if (editorElement === null) {
+      return null
+    }
+
+    for (const element of document.elementsFromPoint(x, y)) {
+      const selectedImage = element instanceof HTMLImageElement
+        ? element
+        : element.closest('img')
+      if (
+        selectedImage instanceof HTMLImageElement
+        && editorElement.contains(selectedImage)
+      ) {
+        return selectedImage
+      }
+    }
+
+    const images = Array.from(editorElement.querySelectorAll('img'))
+    return images.find((image) => {
+      const rect = image.getBoundingClientRect()
+      return (
+        x >= rect.left
+        && x <= rect.right
+        && y >= rect.top
+        && y <= rect.bottom
+      )
+    }) ?? null
+  }
+
+  function getEditorImageFromEvent(event: Event): HTMLImageElement | null {
+    const selectedImage = getEditorImageTarget(event.target)
+    if (selectedImage !== null) {
+      return selectedImage
+    }
+
+    const point = getEventClientPoint(event)
+    if (point === null) {
+      return null
+    }
+    return getEditorImageAtPoint(point.x, point.y)
+  }
+
+  async function uploadArticleImages(files: File[]): Promise<string[]> {
+    if (files.some((file) => !isAllowedArticleImageFile(file))) {
+      throw new Error('アップロードできる画像形式は jpg/jpeg/gif のみです。')
+    }
+
+    const uploadedPaths: string[] = []
+    for (const file of files) {
+      const uploaded = await uploadTempImage(file)
+      uploadedPaths.push(uploaded.path)
+      setUploadedImageOptions((prev) => ({
+        ...prev,
+        [uploaded.file_name]: DEFAULT_IMAGE_OPTIONS,
+      }))
+    }
+    return uploadedPaths
+  }
+
+  function handleEditorDragOver(event: ReactDragEvent<HTMLDivElement>): void {
+    if (!isEditorDropTarget(event.target) || !hasDroppedFiles(event.dataTransfer)) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+    event.dataTransfer.dropEffect = 'copy'
+  }
+
+  function handleEditorDrop(event: ReactDragEvent<HTMLDivElement>): void {
+    if (!isEditorDropTarget(event.target) || !hasDroppedFiles(event.dataTransfer)) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    const droppedFiles = getDroppedFiles(event.dataTransfer)
+    const dropPoint = {
+      x: event.clientX,
+      y: event.clientY,
+    }
+    setEditorCursorAtPoint(dropPoint.x, dropPoint.y)
+    setErrorMessage('')
+
+    void uploadArticleImages(droppedFiles)
+      .then((uploadedPaths) => {
+        insertUploadedImagePaths(uploadedPaths)
+      })
+      .catch((error) => {
+        if (error instanceof Error) {
+          setErrorMessage(error.message)
+        } else {
+          setErrorMessage(toApiMessage(error))
+        }
+      })
+  }
+
   function selectImageBySource(source: string): void {
     const fileName = extractMediaFileName(source)
     if (fileName === '') {
@@ -649,6 +998,49 @@ export default function CmsArticleEditorPage({
   }
 
   useEffect(() => {
+    const captureOptions: AddEventListenerOptions = {
+      capture: true,
+      passive: false,
+    }
+    const editorImageEvents = [
+      'pointerdown',
+      'pointerup',
+      'mousedown',
+      'mouseup',
+      'touchstart',
+      'touchend',
+      'click',
+    ]
+
+    function stopEditorImageEvent(event: Event): HTMLImageElement | null {
+      const selectedImage = getEditorImageFromEvent(event)
+      if (selectedImage === null) {
+        return null
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      return selectedImage
+    }
+
+    function handleEditorImageEvent(event: Event): void {
+      const selectedImage = stopEditorImageEvent(event)
+      if (selectedImage === null) {
+        return
+      }
+
+      const shouldSelectImage = (
+        event.type === 'pointerdown'
+        || event.type === 'mousedown'
+        || event.type === 'touchstart'
+      )
+      if (shouldSelectImage) {
+        const source = selectedImage.getAttribute('src')?.trim() || selectedImage.currentSrc.trim()
+        selectImageBySource(source)
+      }
+    }
+
     function handleDocumentClick(event: MouseEvent): void {
       const shell = editorShellRef.current
       const panel = imageOptionPanelRef.current
@@ -665,22 +1057,21 @@ export default function CmsArticleEditorPage({
         return
       }
 
-      const selectedImage = target.closest('img')
-      if (selectedImage !== null && shell.contains(selectedImage)) {
-        const source = selectedImage.getAttribute('src')?.trim() ?? ''
-        selectImageBySource(source)
-        return
-      }
-
       if (!shell.contains(target)) {
         setSelectedImageFileName('')
         setSelectedImageSource('')
       }
     }
 
-    document.addEventListener('click', handleDocumentClick, true)
+    for (const eventName of editorImageEvents) {
+      window.addEventListener(eventName, handleEditorImageEvent, captureOptions)
+    }
+    document.addEventListener('click', handleDocumentClick, captureOptions)
     return () => {
-      document.removeEventListener('click', handleDocumentClick, true)
+      for (const eventName of editorImageEvents) {
+        window.removeEventListener(eventName, handleEditorImageEvent, captureOptions)
+      }
+      document.removeEventListener('click', handleDocumentClick, captureOptions)
     }
   }, [])
 
@@ -870,6 +1261,66 @@ export default function CmsArticleEditorPage({
       setSubmittingPublishRequest(false)
     }
   }
+
+  const joditConfig = useMemo(() => ({
+    readonly: false,
+    language: 'ja',
+    height: 900,
+    toolbarSticky: false,
+    imageDefaultWidth: null,
+    disablePlugins: ['imageProcessor', 'resizer'],
+    toolbarInlineDisableFor: ['img'],
+    popup: {
+      img: [],
+    },
+    uploader: {
+      insertImageAsBase64URI: false,
+      imagesExtensions: [...ARTICLE_IMAGE_EXTENSIONS],
+      headers: {
+        'Cf-Access-Jwt-Assertion': getStoredAccessJwt(),
+      },
+      processFileName(this: unknown, key: string, file: File): [string, File, string] {
+        const renamed = renameFileWithUuid(file)
+        return [key, renamed, renamed.name]
+      },
+      customUploadFunction: async (
+        requestData: FormData | Record<string, unknown> | string,
+        showProgress: (progress: number) => void,
+      ) => {
+        if (!(requestData instanceof FormData)) {
+          throw new Error('画像アップロードデータの形式が不正です。')
+        }
+
+        const files: File[] = []
+        for (const value of requestData.values()) {
+          if (value instanceof File) {
+            files.push(value)
+          }
+        }
+
+        const uploadedPaths = await uploadArticleImages(files)
+        showProgress(100)
+        return {
+          success: true,
+          time: new Date().toISOString(),
+          data: {
+            baseurl: '',
+            files: uploadedPaths,
+            isImages: uploadedPaths.map(() => true),
+          },
+        }
+      },
+      defaultHandlerSuccess(data: { baseurl?: string; files?: unknown[] }) {
+        const baseurl = typeof data.baseurl === 'string' ? data.baseurl : ''
+        const imagePaths = Array.isArray(data.files)
+          ? data.files
+            .filter((fileName): fileName is string => typeof fileName === 'string')
+            .map((fileName) => `${baseurl}${fileName}`)
+          : []
+        insertUploadedImagePaths(imagePaths)
+      },
+    },
+  }), [lockToken])
 
   if (loading) {
     if (embedded) {
@@ -1339,67 +1790,21 @@ export default function CmsArticleEditorPage({
 
       <div className="console-card">
         <CmsTabGuide title="本文" helpLines={[]} compact showDivider={false} />
-        <div ref={editorShellRef} className="cms-article-editor-shell">
+        <div
+          ref={editorShellRef}
+          className="cms-article-editor-shell"
+          onDragOverCapture={handleEditorDragOver}
+          onDropCapture={handleEditorDrop}
+          onFocusCapture={saveEditorSelection}
+          onKeyUpCapture={saveEditorSelection}
+          onMouseUpCapture={saveEditorSelection}
+          onTouchEndCapture={saveEditorSelection}
+        >
           <JoditEditor
-            value={form.bodyHtml}
-            editorRef={(instance) => {
-              editorInstanceRef.current = instance as JoditEditorInstance | null
-            }}
-            config={{
-              readonly: false,
-              language: 'ja',
-              height: 680,
-              toolbarSticky: false,
-              uploader: {
-                insertImageAsBase64URI: false,
-                imagesExtensions: [...ARTICLE_IMAGE_EXTENSIONS],
-                headers: {
-                  'Cf-Access-Jwt-Assertion': getStoredAccessJwt(),
-                },
-                processFileName(this: unknown, key: string, file: File): [string, File, string] {
-                  const renamed = renameFileWithUuid(file)
-                  return [key, renamed, renamed.name]
-                },
-                customUploadFunction: async (
-                  requestData: FormData | Record<string, unknown> | string,
-                  showProgress: (progress: number) => void,
-                ) => {
-                  if (!(requestData instanceof FormData)) {
-                    throw new Error('画像アップロードデータの形式が不正です。')
-                  }
-
-                  const files: File[] = []
-                  for (const value of requestData.values()) {
-                    if (value instanceof File) {
-                      files.push(value)
-                    }
-                  }
-
-                  const uploadedPaths: string[] = []
-                  for (const file of files) {
-                    const uploaded = await uploadTempImage(file)
-                    uploadedPaths.push(uploaded.path)
-                    setUploadedImageOptions((prev) => ({
-                      ...prev,
-                      [uploaded.file_name]: DEFAULT_IMAGE_OPTIONS,
-                    }))
-                  }
-
-                  showProgress(100)
-                  return {
-                    success: true,
-                    time: new Date().toISOString(),
-                    data: {
-                      baseurl: '',
-                      files: uploadedPaths,
-                      isImages: uploadedPaths.map(() => true),
-                    },
-                  }
-                },
-              },
-            }}
-            onBlur={(nextContent) => setForm((prev) => ({ ...prev, bodyHtml: nextContent }))}
-            onChange={() => undefined}
+            value={editorBodyHtml}
+            editorRef={handleEditorRef}
+            config={joditConfig}
+            onBlur={handleEditorBlur}
           />
           {selectedImageFileName !== '' ? (
             <div ref={imageOptionPanelRef} className="cms-image-option-panel">
@@ -1416,6 +1821,7 @@ export default function CmsArticleEditorPage({
                   }}
                   disabled={updatingImageOptions}
                 />
+                <span className="cms-image-option-switch" aria-hidden="true" />
                 <span>リサイズ</span>
               </label>
               <label className="cms-image-option-toggle">
@@ -1427,6 +1833,7 @@ export default function CmsArticleEditorPage({
                   }}
                   disabled={updatingImageOptions}
                 />
+                <span className="cms-image-option-switch" aria-hidden="true" />
                 <span>EXIF透かし</span>
               </label>
               <label className="cms-image-option-toggle">
@@ -1438,6 +1845,7 @@ export default function CmsArticleEditorPage({
                   }}
                   disabled={updatingImageOptions}
                 />
+                <span className="cms-image-option-switch" aria-hidden="true" />
                 <span>サイトロゴ透かし</span>
               </label>
               <p className="cms-image-option-help">
