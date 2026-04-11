@@ -53,6 +53,12 @@ export type CmsArticleOptionListResponse = {
   items: CmsArticleOptionItem[]
 }
 
+export type CmsImageProcessingOptions = {
+  resize: boolean
+  exif_watermark: boolean
+  site_logo_watermark: boolean
+}
+
 export type CmsTagSummary = {
   id: string
   name: string
@@ -100,6 +106,7 @@ export type CmsArticleMediaAsset = {
   file_name: string
   public_path: string
   is_thumbnail: boolean
+  processing_options: CmsImageProcessingOptions
 }
 
 export type CmsArticleDetail = {

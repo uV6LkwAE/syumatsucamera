@@ -13,6 +13,7 @@ from cms.models import (
     TwitterCardType,
 )
 from cms.services.article_option_services import ArticleOptionService
+from cms.services.media_services import MediaService
 
 
 class CommonPaginationSerializer(serializers.Serializer):
@@ -115,6 +116,7 @@ class CmsMediaAssetSerializer(serializers.Serializer):
     file_name = serializers.CharField(read_only=True)
     public_path = serializers.CharField(read_only=True)
     is_thumbnail = serializers.BooleanField(read_only=True)
+    processing_options = serializers.DictField(read_only=True)
 
 
 class ArticleOptionSerializer(serializers.Serializer):
@@ -240,8 +242,6 @@ class MediaAssetImageProcessingOptionsSerializer(serializers.Serializer):
     resize = serializers.BooleanField()
     exif_watermark = serializers.BooleanField()
     site_logo_watermark = serializers.BooleanField()
-    custom_text_overlay = serializers.BooleanField()
-    custom_text = serializers.CharField(required=False, allow_blank=True)
 
 
 class MediaAssetNewImageSerializer(serializers.Serializer):
@@ -263,6 +263,7 @@ class MediaAssetThumbnailRequestSerializer(serializers.Serializer):
             "use_uploaded",
             "use_default",
             "generate_from_title",
+            "keep_current",
         ]
     )
     file_name = serializers.CharField(required=False)
@@ -414,7 +415,9 @@ class CmsArticleSerializer(serializers.Serializer):
         """
         TOCを返す。
         """
-        return CmsTocNodeSerializer(obj.toc_json or [], many=True).data
+        if obj.body_html.strip() == "":
+            return []
+        return CmsTocNodeSerializer(MediaService.build_toc(body_html=obj.body_html), many=True).data
 
     def get_thumbnail_preview_path(self, obj) -> str:
         """
@@ -422,7 +425,7 @@ class CmsArticleSerializer(serializers.Serializer):
         """
         if obj.thumbnail_asset is None:
             return settings.DEFAULT_OG_IMAGE_PATH
-        return self._build_public_path(file_name=obj.thumbnail_asset.file_name)
+        return MediaService.build_public_media_path(file_name=obj.thumbnail_asset.file_name)
 
     def get_media_assets(self, obj) -> list:
         """
@@ -434,8 +437,11 @@ class CmsArticleSerializer(serializers.Serializer):
                 {
                     "id": asset.id,
                     "file_name": asset.file_name,
-                    "public_path": self._build_public_path(file_name=asset.file_name),
+                    "public_path": MediaService.build_public_media_path(file_name=asset.file_name),
                     "is_thumbnail": str(asset.id) == str(obj.thumbnail_asset_id),
+                    "processing_options": MediaService.normalize_processing_options(
+                        processing_options=asset.processing_options_json
+                    ),
                 }
             )
         return CmsMediaAssetSerializer(items, many=True).data
@@ -455,15 +461,6 @@ class CmsArticleSerializer(serializers.Serializer):
                 "lock_expires_at": obj.lock_expires_at,
             }
         ).data
-
-    def _build_public_path(self, *, file_name: str) -> str:
-        """
-        メディア公開用相対パスを返す。
-        """
-        shard_a = file_name[:2]
-        shard_b = file_name[2:4]
-        return f"{settings.MEDIA_URL}images/{shard_a}/{shard_b}/{file_name}"
-
 
 class CmsArticleMutationResponseSerializer(serializers.Serializer):
     """

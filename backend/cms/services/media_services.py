@@ -18,7 +18,12 @@ from cms.models import (
     MediaAsset,
 )
 
-IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "gif"}
+IMAGE_EXTENSIONS = {"jpg", "jpeg", "gif"}
+IMAGE_FORMATS_BY_EXTENSION = {
+    "jpg": {"JPEG", "MPO"},
+    "jpeg": {"JPEG", "MPO"},
+    "gif": {"GIF"},
+}
 
 
 class MediaService:
@@ -30,7 +35,32 @@ class MediaService:
     THUMBNAIL_HEIGHT = 630
 
     @staticmethod
-    def validate_uploaded_image(*, uploaded_file) -> None:
+    def default_processing_options() -> dict:
+        """
+        記事画像の既定処理オプションを返す。
+        """
+        return {
+            "resize": True,
+            "exif_watermark": False,
+            "site_logo_watermark": False,
+        }
+
+    @staticmethod
+    def normalize_processing_options(*, processing_options: dict | None) -> dict:
+        """
+        処理オプションを既定値込みで正規化する。
+        """
+        normalized = MediaService.default_processing_options()
+        if processing_options is None:
+            return normalized
+
+        for key in normalized:
+            if key in processing_options:
+                normalized[key] = bool(processing_options[key])
+        return normalized
+
+    @staticmethod
+    def validate_uploaded_image(*, uploaded_file, file_name: str) -> None:
         """
         アップロード画像の形式とサイズを検証する。
         """
@@ -39,13 +69,25 @@ class MediaService:
                 {"file": ["画像サイズは50MB以下である必要があります。"]}
             )
 
+        extension = file_name.rsplit(".", 1)[1].lower()
+        allowed_formats = IMAGE_FORMATS_BY_EXTENSION.get(extension)
+        if allowed_formats is None:
+            raise ValidationError(
+                {"file": ["対応していない画像形式です。jpg/jpeg/gif を使用してください。"]}
+            )
+
         try:
             image = Image.open(uploaded_file)
+            image_format = image.format
             image.verify()
         except Exception as exc:
             raise ValidationError({"file": ["画像ファイルの形式が不正です。"]}) from exc
         finally:
             uploaded_file.seek(0)
+        if image_format not in allowed_formats:
+            raise ValidationError(
+                {"file": ["対応していない画像形式です。jpg/jpeg/gif を使用してください。"]}
+            )
 
     @staticmethod
     def validate_temp_file_name(*, file_name: str) -> None:
@@ -60,7 +102,9 @@ class MediaService:
         except ValueError as exc:
             raise ValidationError({"file_name": ["ファイル名のUUIDが不正です。"]}) from exc
         if ext.lower() not in IMAGE_EXTENSIONS:
-            raise ValidationError({"file_name": ["対応していない画像拡張子です。"]})
+            raise ValidationError(
+                {"file_name": ["対応していない画像拡張子です。jpg/jpeg/gif を使用してください。"]}
+            )
 
     @staticmethod
     def save_temp_upload(*, lock_token: str, uploaded_file) -> dict:
@@ -69,7 +113,10 @@ class MediaService:
         """
         file_name = uploaded_file.name
         MediaService.validate_temp_file_name(file_name=file_name)
-        MediaService.validate_uploaded_image(uploaded_file=uploaded_file)
+        MediaService.validate_uploaded_image(
+            uploaded_file=uploaded_file,
+            file_name=file_name,
+        )
 
         target_dir = MediaService.build_temp_dir(lock_token=lock_token)
         target_path = target_dir / file_name
@@ -112,13 +159,6 @@ class MediaService:
             new_image_names | MediaService._thumbnail_source_candidates(thumbnail_request)
         ):
             raise ValidationError({"image_diff": ["本文内のtmp画像と差分JSONが一致しません。"]})
-
-        for new_image in new_images:
-            options = new_image["options"]
-            if options["custom_text_overlay"] and not options.get("custom_text", "").strip():
-                raise ValidationError(
-                    {"image_diff": ["カスタムテキスト挿入時は custom_text が必須です。"]}
-                )
 
         thumbnail_file_name = thumbnail_request.get("file_name")
         if thumbnail_file_name:
@@ -173,6 +213,8 @@ class MediaService:
         """
         if thumbnail_request["mode"] == "use_default":
             return None
+        if thumbnail_request["mode"] == "keep_current":
+            return article.thumbnail_asset
 
         suffix = ".png"
         requested_file_name = thumbnail_request.get("file_name")
@@ -207,9 +249,15 @@ class MediaService:
             raw = file_obj.read()
 
         image = Image.open(io.BytesIO(raw))
-        width, height = image.size
-        checksum = hashlib.sha256(raw).hexdigest()
         exif_json = MediaService.extract_exif(image=image)
+        public_raw, width, height = MediaService.build_public_image_bytes(
+            image=image,
+            raw=raw,
+            stored_file_name=stored_file_name,
+            processing_options=processing_options,
+            exif_json=exif_json,
+        )
+        checksum = hashlib.sha256(public_raw).hexdigest()
 
         original_path, public_path = MediaService.build_final_paths(file_name=stored_file_name)
         original_path.parent.mkdir(parents=True, exist_ok=True)
@@ -218,7 +266,7 @@ class MediaService:
         with original_path.open("wb") as destination:
             destination.write(raw)
         with public_path.open("wb") as destination:
-            destination.write(raw)
+            destination.write(public_raw)
 
         if asset is None:
             asset = MediaAsset.objects.create(
@@ -230,7 +278,9 @@ class MediaService:
         asset.height = height
         asset.checksum_sha256 = checksum
         asset.exif_json = exif_json
-        asset.processing_options_json = processing_options
+        asset.processing_options_json = MediaService.normalize_processing_options(
+            processing_options=processing_options
+        )
         asset.save(
             update_fields=[
                 "width",
@@ -242,6 +292,75 @@ class MediaService:
             ]
         )
         return asset
+
+    @staticmethod
+    def build_public_image_bytes(
+        *,
+        image: Image.Image,
+        raw: bytes,
+        stored_file_name: str,
+        processing_options: dict,
+        exif_json: dict | None,
+    ) -> tuple[bytes, int, int]:
+        """
+        公開用画像 bytes とサイズを返す。
+        """
+        extension = stored_file_name.rsplit(".", 1)[1].lower()
+        if extension == "gif":
+            width, height = image.size
+            return raw, width, height
+
+        normalized_options = MediaService.normalize_processing_options(
+            processing_options=processing_options
+        )
+        working_image = ImageOps.exif_transpose(image).convert("RGBA")
+
+        if (
+            normalized_options["resize"]
+            and len(raw) > settings.CMS_ARTICLE_IMAGE_RESIZE_SKIP_MAX_BYTES
+        ):
+            working_image = MediaService._resize_image(working_image=working_image)
+
+        if normalized_options["exif_watermark"]:
+            working_image = MediaService._apply_exif_watermark(
+                working_image=working_image,
+                exif_json=exif_json,
+            )
+
+        if normalized_options["site_logo_watermark"]:
+            working_image = MediaService._apply_site_logo_watermark(
+                working_image=working_image
+            )
+
+        return MediaService._serialize_public_image(
+            working_image=working_image,
+            extension=extension,
+        )
+
+    @staticmethod
+    def rewrite_temp_paths_to_public(
+        *,
+        body_html: str,
+        lock_token: str,
+        public_paths_by_source_file_name: dict[str, str],
+    ) -> str:
+        """
+        本文内の tmp 画像URLを公開URLへ置換する。
+        """
+        soup = BeautifulSoup(body_html, "lxml")
+        prefix = f"{settings.MEDIA_URL}tmp/{lock_token}/"
+
+        for image in soup.find_all("img"):
+            source = str(image.get("src", "")).strip()
+            if not source.startswith(prefix):
+                continue
+            file_name = source.removeprefix(prefix)
+            public_path = public_paths_by_source_file_name.get(file_name)
+            if public_path is None:
+                raise RuntimeError(f"公開先画像パスが見つかりません: {file_name}")
+            image["src"] = public_path
+
+        return MediaService._serialize_html_fragment(soup=soup)
 
     @staticmethod
     def generate_thumbnail_image(
@@ -578,6 +697,15 @@ class MediaService:
         return original_path, public_path
 
     @staticmethod
+    def build_public_media_path(*, file_name: str) -> str:
+        """
+        公開メディアの相対パスを返す。
+        """
+        shard_a = file_name[:2]
+        shard_b = file_name[2:4]
+        return f"{settings.MEDIA_URL}images/{shard_a}/{shard_b}/{file_name}"
+
+    @staticmethod
     def extract_exif(*, image: Image.Image) -> dict | None:
         """
         取得可能な範囲でEXIFメタ情報を抽出する。
@@ -605,6 +733,224 @@ class MediaService:
             if value is not None:
                 payload[label] = str(value)
         return payload or None
+
+    @staticmethod
+    def _resize_image(*, working_image: Image.Image) -> Image.Image:
+        """
+        長辺上限に合わせて画像を縮小する。
+        """
+        width, height = working_image.size
+        long_edge = max(width, height)
+        if long_edge <= settings.CMS_ARTICLE_IMAGE_MAX_LONG_EDGE:
+            return working_image
+
+        resize_ratio = settings.CMS_ARTICLE_IMAGE_MAX_LONG_EDGE / long_edge
+        resized_width = max(1, round(width * resize_ratio))
+        resized_height = max(1, round(height * resize_ratio))
+        return working_image.resize(
+            (resized_width, resized_height),
+            Image.Resampling.LANCZOS,
+        )
+
+    @staticmethod
+    def _apply_exif_watermark(
+        *,
+        working_image: Image.Image,
+        exif_json: dict | None,
+    ) -> Image.Image:
+        """
+        EXIF透かしを左下へ描画する。
+        """
+        if not exif_json:
+            return working_image
+
+        lines = [
+            f"{label}: {value}"
+            for label, value in exif_json.items()
+            if str(value).strip() != ""
+        ]
+        if not lines:
+            return working_image
+
+        font_size = max(16, round(max(working_image.size) * 0.018))
+        font = MediaService._load_thumbnail_font(
+            font_path=settings.CMS_THUMBNAIL_FONT_REGULAR_PATH,
+            size=font_size,
+        )
+        padding_x = max(12, round(max(working_image.size) * 0.012))
+        padding_y = max(10, round(max(working_image.size) * 0.01))
+        margin = max(16, round(max(working_image.size) * 0.016))
+        line_gap = max(4, round(font_size * 0.3))
+
+        overlay = Image.new("RGBA", working_image.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+        text_boxes = [
+            MediaService._measure_text_box(draw=draw, text=line, font=font)
+            for line in lines
+        ]
+        text_width = max((box[2] - box[0]) for box in text_boxes)
+        text_heights = [box[3] - box[1] for box in text_boxes]
+        box_width = text_width + (padding_x * 2)
+        box_height = sum(text_heights) + (padding_y * 2) + (line_gap * (len(lines) - 1))
+        x0 = margin
+        y0 = working_image.height - margin - box_height
+        x1 = x0 + box_width
+        y1 = y0 + box_height
+
+        draw.rounded_rectangle(
+            (x0, y0, x1, y1),
+            radius=max(8, round(font_size * 0.55)),
+            fill=(0, 0, 0, 148),
+        )
+
+        current_y = y0 + padding_y
+        for line, text_box, text_height in zip(lines, text_boxes, text_heights):
+            draw.text(
+                (x0 + padding_x, current_y - text_box[1]),
+                line,
+                fill=(255, 255, 255, 255),
+                font=font,
+            )
+            current_y += text_height + line_gap
+
+        return Image.alpha_composite(working_image, overlay)
+
+    @staticmethod
+    def _apply_site_logo_watermark(*, working_image: Image.Image) -> Image.Image:
+        """
+        サイトロゴ透かしを右下へ描画する。
+        """
+        brand_logo_path = settings.CMS_THUMBNAIL_BRAND_IMAGE_PATH
+        if not brand_logo_path.exists():
+            raise RuntimeError(f"ブランドロゴPNGが存在しません: {brand_logo_path}")
+
+        with Image.open(brand_logo_path) as source_logo:
+            brand_logo = source_logo.convert("RGBA")
+
+        long_edge = max(working_image.size)
+        target_width = max(
+            1,
+            round(long_edge * settings.CMS_ARTICLE_SITE_LOGO_WATERMARK_WIDTH_RATIO),
+        )
+        source_width, source_height = brand_logo.size
+        target_height = max(1, round(source_height * (target_width / source_width)))
+        resized_logo = brand_logo.resize(
+            (target_width, target_height),
+            Image.Resampling.LANCZOS,
+        )
+
+        alpha_channel = resized_logo.getchannel("A")
+        alpha_channel = alpha_channel.point(
+            lambda alpha: int(alpha * settings.CMS_ARTICLE_SITE_LOGO_WATERMARK_OPACITY)
+        )
+        resized_logo.putalpha(alpha_channel)
+
+        margin = max(18, round(long_edge * 0.018))
+        paste_x = working_image.width - target_width - margin
+        paste_y = working_image.height - target_height - margin
+        overlay = Image.new("RGBA", working_image.size, (0, 0, 0, 0))
+        overlay.paste(resized_logo, (paste_x, paste_y), resized_logo)
+        return Image.alpha_composite(working_image, overlay)
+
+    @staticmethod
+    def _serialize_public_image(
+        *,
+        working_image: Image.Image,
+        extension: str,
+    ) -> tuple[bytes, int, int]:
+        """
+        公開用画像を拡張子に応じた形式でシリアライズする。
+        """
+        width, height = working_image.size
+
+        if extension not in {"jpg", "jpeg"}:
+            raise RuntimeError(f"対応していない公開画像形式です: {extension}")
+
+        public_raw = MediaService._encode_public_image(
+            working_image=working_image,
+            extension=extension,
+            quality=settings.CMS_ARTICLE_IMAGE_QUALITY_HIGH,
+        )
+        if len(public_raw) <= settings.CMS_ARTICLE_IMAGE_PUBLIC_MAX_BYTES:
+            return public_raw, width, height
+
+        public_raw = MediaService._encode_public_image_at_target_size(
+            working_image=working_image,
+            extension=extension,
+        )
+        return public_raw, width, height
+
+    @staticmethod
+    def _encode_public_image(
+        *,
+        working_image: Image.Image,
+        extension: str,
+        quality: int | None,
+    ) -> bytes:
+        """
+        公開用画像を指定品質でエンコードする。
+        """
+        buffer = io.BytesIO()
+
+        if extension in {"jpg", "jpeg"}:
+            if quality is None:
+                raise RuntimeError("JPEG品質が指定されていません。")
+            working_image.convert("RGB").save(
+                buffer,
+                format="JPEG",
+                quality=quality,
+                optimize=True,
+                progressive=True,
+            )
+        else:
+            raise RuntimeError(f"対応していない公開画像形式です: {extension}")
+
+        return buffer.getvalue()
+
+    @staticmethod
+    def _encode_public_image_at_target_size(
+        *,
+        working_image: Image.Image,
+        extension: str,
+    ) -> bytes:
+        """
+        上限サイズ以下を満たす最大品質の画像bytesを二分探索で返す。
+        """
+        low = settings.CMS_ARTICLE_IMAGE_QUALITY_LOW
+        high = settings.CMS_ARTICLE_IMAGE_QUALITY_HIGH - 1
+        target_size = settings.CMS_ARTICLE_IMAGE_PUBLIC_MAX_BYTES
+        best_raw: bytes | None = None
+
+        while low <= high:
+            quality = (low + high) // 2
+            candidate_raw = MediaService._encode_public_image(
+                working_image=working_image,
+                extension=extension,
+                quality=quality,
+            )
+            if len(candidate_raw) <= target_size:
+                best_raw = candidate_raw
+                low = quality + 1
+            else:
+                high = quality - 1
+
+        if best_raw is not None:
+            return best_raw
+
+        return MediaService._encode_public_image(
+            working_image=working_image,
+            extension=extension,
+            quality=settings.CMS_ARTICLE_IMAGE_QUALITY_LOW,
+        )
+
+    @staticmethod
+    def _serialize_html_fragment(*, soup: BeautifulSoup) -> str:
+        """
+        BeautifulSoup から本文HTML断片を返す。
+        """
+        if soup.body is not None:
+            return soup.body.decode_contents()
+        return str(soup)
 
     @staticmethod
     def build_toc(*, body_html: str) -> list[dict]:

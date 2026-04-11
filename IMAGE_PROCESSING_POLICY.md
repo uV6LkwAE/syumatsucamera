@@ -33,20 +33,16 @@
       "file_name": "9f2c8a1e-1234-5678-9abc-def012345678.jpg",
       "options": {
         "resize": true,
-        "exif_watermark": true,
-        "site_logo_watermark": false,
-        "custom_text_overlay": false,
-        "custom_text": ""
+        "exif_watermark": false,
+        "site_logo_watermark": false
       }
     },
     {
-      "file_name": "61c84b3e-0df5-4f50-a2af-27464c5ab210.png",
+      "file_name": "61c84b3e-0df5-4f50-a2af-27464c5ab210.gif",
       "options": {
         "resize": true,
         "exif_watermark": false,
-        "site_logo_watermark": true,
-        "custom_text_overlay": true,
-        "custom_text": "DRAFT"
+        "site_logo_watermark": true
       }
     }
   ],
@@ -55,7 +51,6 @@
   ],
   "thumbnail_request": {
     "mode": "generate_from_title",
-    "file_name": "7c89d972-7a3f-4ca1-8a31-25a99aa3380e-thumb.jpg",
     "title_text": "Kyoto Trip"
   }
 }
@@ -68,20 +63,28 @@
 - `new_images[].file_name` は `tmp` 上の対象ファイル名である。
 - `new_images[].options` で画像ごとの処理オンオフを指定する。
 - `options.resize` はリサイズの実行可否を示す。
+- `options.resize=true` でも、元ファイルサイズが `500KB` 以下ならリサイズのみスキップする。
+- `500KB` 以下でリサイズのみスキップした場合でも、他の処理オプションは通常通り実行する。
+- 記事本文画像・ユーザーアップロードサムネイルの許可形式は `jpg`, `jpeg`, `gif` のみとする。
+- `png` は品質を下げられないためアップロード許可対象から外す。
+- `webp` は運用上アップロードしないためアップロード許可対象から外す。
+- リサイズ・透かし処理後の公開用画像が `500,000 bytes` を超える場合、JPEG は品質を下げて再エンコードする。
+- 品質探索範囲は環境変数 `CMS_ARTICLE_IMAGE_QUALITY_LOW=50`, `CMS_ARTICLE_IMAGE_QUALITY_HIGH=90` で指定する。
+- 品質探索は、上限サイズ以下を満たす最大品質を二分探索で選択する。
 - `options.exif_watermark` はEXIF由来の透かし挿入可否を示す。
 - `options.site_logo_watermark` はサイトロゴ透かし挿入可否を示す。
-- `options.custom_text_overlay` はカスタムテキスト挿入可否を示す。
-- `options.custom_text_overlay=true` の場合は `options.custom_text` を必須とする。
+- GIF は加工対象外とし、リサイズ・透かし挿入を行わず原本と公開用へそのまま保存する。
 - `delete_images` は今回の保存で本文から外し、最終的に削除対象とする既存 asset UUID の一覧である。
 - `delete_images` は保存フロー内で原本と公開用画像の即時削除対象として扱う。
 - `thumbnail_request` はサムネイルの決定方式を示す。
-- `thumbnail_request.mode` は `use_uploaded`, `use_default`, `generate_from_title` の3択とする。
+- `thumbnail_request.mode` は `use_uploaded`, `use_default`, `generate_from_title`, `keep_current` の4択とする。
 - `thumbnail_request.mode=use_uploaded` の場合は `thumbnail_request.file_name` を必須とする。
 - `thumbnail_request.mode=generate_from_title` の場合は `thumbnail_request.title_text` を必須とする。
-- `thumbnail_request.mode=generate_from_title` でクライアント保持の生成画像をPOSTする場合は `thumbnail_request.file_name` も必須とする。
+- `thumbnail_request.mode=generate_from_title` はサーバー側で画像を生成する。
+- `thumbnail_request.mode=keep_current` は既存サムネイルを再アップロードせず維持する。
 - 保存APIは `lock_token` と `new_images[].file_name` から `media/tmp/{lock_token}/{file_name}` を組み立てる。
 - 保存APIは、各 `file_name` から UUID と拡張子を検証する。
-- オプション未指定時のデフォルトは `resize=true`, `exif_watermark=true`, `site_logo_watermark=false`, `custom_text_overlay=false` とする。
+- オプション未指定時のデフォルトは `resize=true`, `exif_watermark=false`, `site_logo_watermark=false` とする。
 
 ## Jodit前提のアップロード方針
 
@@ -93,18 +96,19 @@
 - サーバー側は `lock_token` を検証し、対応する一時保存先へアップロードする。
 - フロント側では、アップロード前に画像ファイル名をランダムな UUID ベースの名前へ置換する。
 - 送信ファイル名は `{asset_uuid}.{ext}` 形式に統一する。
+- Jodit 側の許可拡張子は `jpg`, `jpeg`, `gif` に限定する。
+- 通常のファイル input も `accept="image/jpeg,image/gif"` に限定する。
 - 差分JSONの `new_images` には、UUID 化済みファイル名と画像ごとの処理オプションを入れる。
 
-## Jodit画像ホバーメニュー方針
+## Jodit画像オプションメニュー方針
 
-- Jodit編集画面上の画像をホバーしたときに、画像処理オプションメニューを表示する。
-- オプション項目は次の4つを用意する。
+- Jodit編集画面上の画像をクリックまたはタップしたときに、画像処理オプションメニューを表示する。
+- オプション項目は次の3つを用意する。
 - `resize`
 - `exif_watermark`
 - `site_logo_watermark`
-- `custom_text_overlay`
-- `custom_text_overlay` が有効な場合のみ、`custom_text` 入力欄を表示する。
-- ホバー操作で変更した内容は、画像ごとの設定としてフロント側で保持する。
+- 初期値は `resize=true`, `exif_watermark=false`, `site_logo_watermark=false` とする。
+- クリックまたはタップ操作で変更した内容は、画像ごとの設定としてフロント側で保持する。
 - 記事保存時に、その設定を `new_images[].options` として送信する。
 
 ### Jodit側の軽い実装例
@@ -133,10 +137,10 @@ const editor = Jodit.make("#editor", {
 
 ```python
 from pathlib import Path
+from django.conf import settings
 from uuid import UUID
 
-
-MEDIA_ROOT = Path("media")
+MEDIA_ROOT = Path(settings.MEDIA_ROOT)
 
 
 def build_tmp_upload_path(lock_token: str, file_name: str) -> Path:
@@ -212,13 +216,13 @@ def handle_article_image_upload(uploaded_file, lock_token: str, file_name: str) 
 
 ## HTML内画像パスの置換
 
-- 記事の HTML 内では、一時的に `tmp` パスを保持する。
-- DB保存済みの本文HTML自体は書き換えない。
-- 公開画面とJodit編集画面では、表示時にJSで `tmp` パスを公開用パスへ表面的に置換する。
-- UUID 自体は変わらないため、置換はファイル名の UUID を基準に実施する。
+- 編集中の本文HTMLでは、一時的に `tmp` パスを保持してよい。
+- 画像処理成功時に、ジョブ側で本文HTML内の `tmp` パスを `media/images/...` へ書き換えて保存する。
+- 書き換え対象は、今回の保存で成功した画像だけとする。
+- 公開画面とCMS編集画面は、保存済みの `media/images/...` をそのまま参照する。
+- 表示時のJS置換を恒久仕様にしない。
 - オリジナル画像のパスは HTML に書き込まない。
 - 公開側で参照するのは常に `media/images/...` のみとする。
-- 画像処理に成功した画像だけを公開用パスへ変換対象とする。
 
 ## クリーンアップ
 
@@ -232,7 +236,9 @@ def handle_article_image_upload(uploaded_file, lock_token: str, file_name: str) 
 
 - 記事の投稿APIは、受理時点で `202 Accepted` を返す。
 - 画像処理は非同期ジョブで継続する。
-- 画像処理ジョブが完了したら、ジョブ自身が記事の公開フラグを `True` に更新する。
+- 未公開記事は、画像処理ジョブが完了したらジョブ自身が本文HTMLの画像パスを書き換えたうえで公開状態を確定する。
+- すでに公開中の記事を更新する場合は、旧公開版を出し続ける。
+- 公開中記事の新しい本文HTMLとサムネイルは、画像処理完了後にまとめて切り替える。
 - 画像処理完了前は公開状態にしない。
 - 画像処理が1件でも失敗した場合、記事は公開しない。
 - 画像処理に失敗した場合、自動で編集画面へ遷移しない。
@@ -258,7 +264,6 @@ def handle_article_image_upload(uploaded_file, lock_token: str, file_name: str) 
 - 対象記事の編集ロック状態を確認する。
 - `new_images[].file_name` が UUID 形式と拡張子ルールを満たすか確認する。
 - `new_images[].options` の値を検証する。
-- `custom_text_overlay=true` の場合に `custom_text` が空でないか確認する。
 - `tmp/{lock_token}/{new_images[].file_name}` の実体が存在するか確認する。
 - 本文HTML内の `tmp` パスと `new_images` / `delete_images` の整合を確認する。
 
@@ -271,10 +276,17 @@ def handle_article_image_upload(uploaded_file, lock_token: str, file_name: str) 
 3. 新規画像の処理
 - `tmp/{lock_token}` 配下の対象画像を1件ずつ開く。
 - 必要なメタ情報を取得する。
-- `options.resize=true` の場合のみリサイズを行う。
+- 記事本文画像と `thumbnail_request.mode=use_uploaded` のサムネイルは、同じ画像処理パイプラインへ通す。
+- `thumbnail_request.mode=use_default`, `generate_from_title`, `keep_current` はこの画像処理パイプラインへ通さない。
+- GIF の場合は加工を一切行わず、そのまま原本と公開用へ保存する。
+- GIF 以外で `options.resize=true` かつ元ファイルサイズが `500KB` を超える場合のみ、長辺 `2048px` 上限・拡大なしでリサイズする。
+- GIF 以外で元ファイルサイズが `500KB` 以下の場合は、`options.resize=true` でもリサイズのみスキップする。
 - `options.exif_watermark=true` の場合のみEXIF由来の透かしを挿入する。
 - `options.site_logo_watermark=true` の場合のみサイトロゴ透かしを挿入する。
-- `options.custom_text_overlay=true` の場合のみカスタムテキストを挿入する。
+- リサイズ・透かし処理後に公開用画像が `500,000 bytes` を超える場合、JPEG は `CMS_ARTICLE_IMAGE_QUALITY_LOW` から `CMS_ARTICLE_IMAGE_QUALITY_HIGH` の範囲で二分探索し、上限サイズ以下を満たす最大品質で保存する。
+- 上限サイズを満たす品質が見つからない場合は、`CMS_ARTICLE_IMAGE_QUALITY_LOW` で保存する。
+- EXIF透かしは左下の半透明黒帯へ描画し、GPS情報は使わない。
+- ロゴ透かしは右下へ配置し、ロゴ幅は長辺の `12%`、透明度は `60%` とする。
 - オリジナル画像を `media/original/{xx}/{yy}/{asset_uuid}.{ext}` へ保存する。
 - 公開用画像を `media/images/{xx}/{yy}/{asset_uuid}.{ext}` へ保存する。
 - `MEDIA_ASSET` に処理結果メタ情報を書き込む。
@@ -286,7 +298,9 @@ def handle_article_image_upload(uploaded_file, lock_token: str, file_name: str) 
 4. 記事状態の確定
 - `new_images` の全件成功を確認する。
 - 1件でも失敗があれば記事は公開しない。
-- 全件成功した場合のみ、ジョブ自身が記事の公開フラグを `True` に更新する。
+- 全件成功した場合のみ、ジョブ自身が本文HTML内の対象画像パスを `media/images/...` へ書き換える。
+- 未公開記事では、その後に公開フラグを更新する。
+- 公開中記事では、本文HTML・サムネイル・関連メタをまとめて新しい版へ切り替える。
 - 公開フラグ更新の成功/失敗を記事保存フローログテーブルへ記録する。
 
 5. 後始末
@@ -297,8 +311,8 @@ def handle_article_image_upload(uploaded_file, lock_token: str, file_name: str) 
 
 - 画像処理が1件でも失敗した場合、その保存処理全体を失敗として扱う。
 - 失敗時は記事の公開フラグを `True` にしない。
-- 失敗時もDB上の本文HTMLは `tmp` パスのままとする。
-- 失敗時は既存の公開済み本文や既存画像を壊さないことを優先する。
+- 未公開記事では、失敗時に本文HTMLが `tmp` パスを含んだまま残ってよい。
+- 公開中記事では、失敗時に旧公開版の本文HTML・画像・サムネイルを維持する。
 - 失敗理由は記事保存フローログテーブルへ保存し、CMS はログ参照API経由で確認する。
 - 成功した画像は最終保存先へそのまま保存してよい。
 - 失敗した画像の `tmp` もクリーンアップしてよい。
@@ -341,7 +355,7 @@ def handle_article_image_upload(uploaded_file, lock_token: str, file_name: str) 
 
 保存完了処理の問題:
 
-- 表示時の `tmp` から公開用パスへの変換に失敗する
+- 本文HTML内の `tmp` から公開用パスへの書き換えに失敗する
 - DB更新に失敗する
 - 公開フラグ更新に失敗する
 - ログ書き込みに失敗する
@@ -376,7 +390,7 @@ def handle_article_image_upload(uploaded_file, lock_token: str, file_name: str) 
 | --- | --- | --- | --- | --- | --- |
 | 2026-03-22T10:15:03+09:00 | 11111111-1111-1111-1111-111111111111 | 3d88e9d7-3a4f-4c13-8b2c-31dff2c29b6d | article | success | 記事保存ジョブの受付が完了しました。 |
 | 2026-03-22T10:15:07+09:00 | 11111111-1111-1111-1111-111111111111 | 3d88e9d7-3a4f-4c13-8b2c-31dff2c29b6d | 9f2c8a1e-1234-5678-9abc-def012345678.jpg | success | 画像処理が完了しました。 |
-| 2026-03-22T10:15:09+09:00 | 11111111-1111-1111-1111-111111111111 | 3d88e9d7-3a4f-4c13-8b2c-31dff2c29b6d | 61c84b3e-0df5-4f50-a2af-27464c5ab210.png | failed | 透かし挿入に失敗しました。 |
+| 2026-03-22T10:15:09+09:00 | 11111111-1111-1111-1111-111111111111 | 3d88e9d7-3a4f-4c13-8b2c-31dff2c29b6d | 61c84b3e-0df5-4f50-a2af-27464c5ab210.gif | failed | 透かし挿入に失敗しました。 |
 
 ## 現時点の前提メモ
 

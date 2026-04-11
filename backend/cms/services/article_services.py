@@ -14,6 +14,7 @@ from cms.models import (
     Tag,
 )
 from cms.services.article_option_services import ArticleOptionService
+from cms.services.article_pending_snapshot_services import ArticlePendingSnapshotService
 from cms.services.article_save_log_services import ArticleSaveLogService
 from cms.services.article_session_services import ArticleSessionService
 from cms.services.common import build_pagination_payload, unique_slugify
@@ -128,6 +129,7 @@ class ArticleService:
         article.thumbnail_asset = None
         article.save(update_fields=["thumbnail_asset", "updated_at"])
         article.delete()
+        ArticlePendingSnapshotService.delete_snapshot(article_id=str(article.id))
 
         transaction.on_commit(
             lambda: ArticleService._delete_article_asset_files(assets)
@@ -149,6 +151,9 @@ class ArticleService:
             tag_ids=payload.get("tag_ids", []),
             tag_names=payload.get("tag_names", []),
         )
+        selected_option_ids = ArticleOptionService.resolve_option_ids_for_upsert(
+            article_option=payload["article_option"],
+        )
         MediaService.validate_image_diff(body_html=payload["body_html"], image_diff=image_diff)
 
         if not is_create:
@@ -168,16 +173,30 @@ class ArticleService:
             "slug",
             flat=True,
         )
-        article.category = category
-        article.title = payload["title"].strip()
-        article.slug = unique_slugify(value=article.title, existing_slugs=existing_slugs)
-        article.summary = payload["summary"].strip()
-        article.body_html = payload["body_html"]
-        article.status = payload["status"]
-        article.twitter_card = payload.get("twitter_card") or article.twitter_card
-        article.image_job_status = ImageJobStatus.PENDING
-        article.published_at = None
-        article.save()
+        next_title = payload["title"].strip()
+        next_slug = unique_slugify(value=next_title, existing_slugs=existing_slugs)
+        next_summary = payload["summary"].strip()
+        next_twitter_card = payload.get("twitter_card") or article.twitter_card
+
+        staged_live_update = (
+            not is_create
+            and article.status == ArticleStatus.PUBLISH
+            and article.published_at is not None
+        )
+
+        if not staged_live_update:
+            article.category = category
+            article.title = next_title
+            article.slug = next_slug
+            article.summary = next_summary
+            article.twitter_card = next_twitter_card
+            article.body_html = payload["body_html"]
+            article.status = payload["status"]
+            article.option = selected_option_ids
+            article.image_job_status = ImageJobStatus.PENDING
+            if article.status != ArticleStatus.PUBLISH:
+                article.published_at = None
+            article.save()
 
         if is_create:
             ArticleSessionService.bind_session_to_article(
@@ -186,19 +205,14 @@ class ArticleService:
                 article=article,
             )
 
-        ArticleService._sync_tags(article=article, tags=tags)
-        ArticleService._sync_article_option_ids(
-            article=article,
-            article_option=payload["article_option"],
-        )
+        if not staged_live_update:
+            ArticleService._sync_tags(article=article, tags=tags)
 
         old_thumbnail_asset = article.thumbnail_asset
         thumbnail_asset = MediaService.create_or_replace_thumbnail_asset(
             article=article,
             thumbnail_request=payload["image_diff"]["thumbnail_request"],
         )
-        article.thumbnail_asset = thumbnail_asset
-        article.save(update_fields=["thumbnail_asset", "updated_at"])
 
         ArticleSaveLogService.create_log(
             request_user_id=user.id,
@@ -214,37 +228,55 @@ class ArticleService:
             "new_images": payload["image_diff"]["new_images"],
             "delete_images": [str(value) for value in payload["image_diff"]["delete_images"]],
             "thumbnail_request": payload["image_diff"]["thumbnail_request"],
+            "thumbnail_asset_id": None if thumbnail_asset is None else str(thumbnail_asset.id),
+            "old_thumbnail_asset_id": (
+                None
+                if old_thumbnail_asset is None
+                or (thumbnail_asset is not None and old_thumbnail_asset.id == thumbnail_asset.id)
+                else str(old_thumbnail_asset.id)
+            ),
+            "staged_live_update": staged_live_update,
         }
 
         from cms.tasks import process_article_save_flow
 
-        transaction.on_commit(
-            lambda: process_article_save_flow.delay(
-                str(article.id),
-                str(user.id),
-                image_diff_payload,
+        if staged_live_update:
+            pending_snapshot = ArticlePendingSnapshotService.build_snapshot_payload(
+                category_id=category.id,
+                title=next_title,
+                slug=next_slug,
+                summary=next_summary,
+                body_html=payload["body_html"],
+                status=payload["status"],
+                twitter_card=next_twitter_card,
+                tag_ids=[tag.id for tag in tags],
+                option_ids=selected_option_ids,
+                thumbnail_asset_id=None if thumbnail_asset is None else thumbnail_asset.id,
             )
-        )
 
-        if old_thumbnail_asset is not None and (
-            thumbnail_asset is None or old_thumbnail_asset.id != thumbnail_asset.id
-        ):
-            transaction.on_commit(lambda: ArticleService._delete_thumbnail_asset(old_thumbnail_asset))
+            transaction.on_commit(
+                lambda: ArticleService._store_snapshot_and_enqueue_job(
+                    article_id=str(article.id),
+                    request_user_id=str(user.id),
+                    image_diff_payload=image_diff_payload,
+                    pending_snapshot=pending_snapshot,
+                    process_article_save_flow=process_article_save_flow,
+                )
+            )
+        else:
+            transaction.on_commit(
+                lambda: process_article_save_flow.delay(
+                    str(article.id),
+                    str(user.id),
+                    image_diff_payload,
+                )
+            )
 
         return ArticleMutationResult(
             article=article,
             postprocess_job={"job_name": "process_article_save_flow", "status": "accepted"},
         )
 
-    @staticmethod
-    def _delete_thumbnail_asset(asset: MediaAsset) -> None:
-        """
-        旧サムネイルアセットを削除する。
-        """
-        MediaService.delete_media_asset_files(asset=asset)
-        asset.delete()
-
-    @staticmethod
     def _delete_article_asset_files(assets: list[MediaAsset]) -> None:
         """
         削除済み記事に紐づいていたメディア実体を削除する。
@@ -284,19 +316,30 @@ class ArticleService:
             raise ValidationError({"image_diff": ["削除対象画像が記事と一致しません。"]})
 
     @staticmethod
+    def _store_snapshot_and_enqueue_job(
+        *,
+        article_id: str,
+        request_user_id: str,
+        image_diff_payload: dict,
+        pending_snapshot: dict,
+        process_article_save_flow,
+    ) -> None:
+        """
+        スナップショット保存後に後処理ジョブを投入する。
+        """
+        ArticlePendingSnapshotService.store_snapshot(
+            article_id=article_id,
+            snapshot=pending_snapshot,
+        )
+        process_article_save_flow.delay(
+            article_id,
+            request_user_id,
+            image_diff_payload,
+        )
+
+    @staticmethod
     def _sync_tags(*, article: Article, tags: list[Tag]) -> None:
         """
         記事タグを同期する。
         """
         article.tags.set(tags)
-
-    @staticmethod
-    def _sync_article_option_ids(*, article: Article, article_option: dict) -> None:
-        """
-        記事オプションIDを同期する。
-        """
-        selected_option_ids = ArticleOptionService.resolve_option_ids_for_upsert(
-            article_option=article_option,
-        )
-        article.option = selected_option_ids
-        article.save(update_fields=["option", "updated_at"])

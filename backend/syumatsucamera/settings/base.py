@@ -90,6 +90,8 @@ _REQUIRED_ENV_VARS = [
     "LOG_FILE_CRITICAL",
     "CDN_BASE_URL",
     "DEFAULT_OG_IMAGE_PATH",
+    "CMS_ARTICLE_IMAGE_QUALITY_LOW",
+    "CMS_ARTICLE_IMAGE_QUALITY_HIGH",
 ]
 
 if not CI_SKIP_REQUIRED_ENV_CHECK:
@@ -101,6 +103,17 @@ if not CI_SKIP_REQUIRED_ENV_CHECK:
         )
 
 _env = _env_or_empty if CI_SKIP_REQUIRED_ENV_CHECK else required_env
+
+
+def _env_int(name: str, ci_default: int) -> int:
+    raw = _env(name)
+    if raw == "":
+        raw = str(ci_default)
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise RuntimeError(f"Environment variable must be an integer: {name}") from exc
+
 
 SECRET_KEY = _env("SECRET_KEY")
 DEBUG = _env("DEBUG").strip().lower() in {"1", "true", "yes", "on"}
@@ -222,7 +235,21 @@ CMS_THUMBNAIL_BRAND_IMAGE_PATH = BASE_DIR / "cms" / "assets" / "brand" / "syumat
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CORS_ALLOW_ALL_ORIGINS = True
 CMS_ARTICLE_SESSION_TTL_SECONDS = 300
+CMS_ARTICLE_PENDING_SNAPSHOT_TTL_SECONDS = 24 * 60 * 60
 CMS_ARTICLE_IMAGE_UPLOAD_MAX_BYTES = 50 * 1024 * 1024
+CMS_ARTICLE_IMAGE_RESIZE_SKIP_MAX_BYTES = 500_000
+CMS_ARTICLE_IMAGE_PUBLIC_MAX_BYTES = CMS_ARTICLE_IMAGE_RESIZE_SKIP_MAX_BYTES
+CMS_ARTICLE_IMAGE_MAX_LONG_EDGE = 2048
+CMS_ARTICLE_IMAGE_QUALITY_LOW = _env_int("CMS_ARTICLE_IMAGE_QUALITY_LOW", 50)
+CMS_ARTICLE_IMAGE_QUALITY_HIGH = _env_int("CMS_ARTICLE_IMAGE_QUALITY_HIGH", 90)
+if not 1 <= CMS_ARTICLE_IMAGE_QUALITY_LOW <= 100:
+    raise RuntimeError("CMS_ARTICLE_IMAGE_QUALITY_LOW must be between 1 and 100")
+if not 1 <= CMS_ARTICLE_IMAGE_QUALITY_HIGH <= 100:
+    raise RuntimeError("CMS_ARTICLE_IMAGE_QUALITY_HIGH must be between 1 and 100")
+if CMS_ARTICLE_IMAGE_QUALITY_LOW > CMS_ARTICLE_IMAGE_QUALITY_HIGH:
+    raise RuntimeError("CMS_ARTICLE_IMAGE_QUALITY_LOW must be <= CMS_ARTICLE_IMAGE_QUALITY_HIGH")
+CMS_ARTICLE_SITE_LOGO_WATERMARK_WIDTH_RATIO = 0.12
+CMS_ARTICLE_SITE_LOGO_WATERMARK_OPACITY = 0.6
 
 _renderer_classes = [
     "rest_framework.renderers.JSONRenderer",

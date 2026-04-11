@@ -4,7 +4,7 @@
 from django.conf import settings
 from rest_framework.exceptions import NotFound
 
-from cms.models import Article, ArticleStatus, Category, Tag
+from cms.models import Article, ArticleStatus, Category, ImageJobStatus, Tag
 from cms.services.common import build_pagination_payload
 from core.media_urls import build_cdn_media_url, build_public_asset_url
 from cms.services.pv_services import PvService
@@ -106,6 +106,7 @@ class PublicArticleService:
         """
         return Article.objects.filter(
             status=ArticleStatus.PUBLISH,
+            image_job_status=ImageJobStatus.COMPLETED,
         ).select_related(
             "category",
             "author",

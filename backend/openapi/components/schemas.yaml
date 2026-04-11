@@ -793,7 +793,6 @@ components:
         - resize
         - exif_watermark
         - site_logo_watermark
-        - custom_text_overlay
       properties:
         resize:
           type: boolean
@@ -801,10 +800,6 @@ components:
           type: boolean
         site_logo_watermark:
           type: boolean
-        custom_text_overlay:
-          type: boolean
-        custom_text:
-          type: string
     MediaAssetNewImage:
       type: object
       required:
@@ -826,6 +821,7 @@ components:
             - use_uploaded
             - use_default
             - generate_from_title
+            - keep_current
         file_name:
           type: string
         title_text:
@@ -842,6 +838,7 @@ components:
         file:
           type: string
           format: binary
+          description: jpg/jpeg/gif のみ許可する。png/webp は許可しない。
     CmsArticleImageUploadResponse:
       type: object
       required:

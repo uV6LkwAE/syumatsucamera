@@ -77,6 +77,28 @@ export function normalizeStoredArticleHtml(bodyHtml: string): string {
   return documentFragment.body.innerHTML
 }
 
+export function replaceImageSourceInHtml(
+  bodyHtml: string,
+  fromSource: string,
+  toSource: string,
+): string {
+  if (typeof window === 'undefined') {
+    return bodyHtml
+  }
+
+  const parser = new DOMParser()
+  const documentFragment = parser.parseFromString(bodyHtml, 'text/html')
+  for (const image of Array.from(documentFragment.querySelectorAll('img'))) {
+    const source = image.getAttribute('src')?.trim() ?? ''
+    if (source !== fromSource) {
+      continue
+    }
+    image.setAttribute('src', toSource)
+  }
+
+  return documentFragment.body.innerHTML
+}
+
 export function collectImageFileNamesFromHtml(bodyHtml: string): Set<string> {
   if (typeof window === 'undefined') {
     return new Set()

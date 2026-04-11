@@ -12,6 +12,8 @@ import {
   resolveDeleteImageIds,
   toApiMessage,
   collectTempImageFileNames,
+  extractMediaFileName,
+  replaceImageSourceInHtml,
 } from '../helpers'
 import type {
   CmsArticleDetail,
@@ -21,6 +23,7 @@ import type {
   CmsArticleOptionListResponse,
   CmsArticleSessionResponse,
   CmsCategoryTreeResponse,
+  CmsImageProcessingOptions,
   CmsImageUploadResponse,
   CmsTagSuggestion,
   CmsTagSuggestionListResponse,
@@ -39,12 +42,10 @@ type InternalThumbnailMode =
   | 'generate_from_title'
   | 'use_uploaded'
 
-type ImageProcessingOptions = {
-  resize: boolean
-  exif_watermark: boolean
-  site_logo_watermark: boolean
-  custom_text_overlay: boolean
-  custom_text: string
+type ImageProcessingOptions = CmsImageProcessingOptions
+
+type JoditEditorInstance = {
+  value: string
 }
 
 type ArticleFormState = {
@@ -77,13 +78,14 @@ const ARTICLE_TAG_MAX_LENGTH = 100
 const ARTICLE_TAG_MAX_COUNT = 5
 const ARTICLE_TAG_SUGGESTION_LIMIT = 8
 const ARTICLE_TAG_SUGGESTION_DEBOUNCE_MS = 180
+const ARTICLE_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'gif'] as const
+const ARTICLE_IMAGE_ACCEPT = 'image/jpeg,image/gif'
+const ARTICLE_IMAGE_ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/gif'])
 
 const DEFAULT_IMAGE_OPTIONS: ImageProcessingOptions = {
   resize: true,
-  exif_watermark: true,
+  exif_watermark: false,
   site_logo_watermark: false,
-  custom_text_overlay: false,
-  custom_text: '',
 }
 
 const DEFAULT_ARTICLE_FORM: ArticleFormState = {
@@ -241,23 +243,25 @@ function createUuidFileName(name: string, mimeType: string): string {
 function resolveFileExtension(name: string, mimeType: string): string {
   const parts = name.split('.')
   const fromName = parts.length > 1 ? parts[parts.length - 1]?.toLowerCase() ?? '' : ''
-  if (fromName !== '') {
-    return fromName
-  }
-
   if (mimeType === 'image/jpeg') {
     return 'jpg'
-  }
-  if (mimeType === 'image/png') {
-    return 'png'
-  }
-  if (mimeType === 'image/webp') {
-    return 'webp'
   }
   if (mimeType === 'image/gif') {
     return 'gif'
   }
-  return 'png'
+  if (ARTICLE_IMAGE_EXTENSIONS.some((extension) => extension === fromName)) {
+    return fromName
+  }
+  return 'jpg'
+}
+
+function isAllowedArticleImageFile(file: File): boolean {
+  if (file.type !== '') {
+    return ARTICLE_IMAGE_ALLOWED_MIME_TYPES.has(file.type)
+  }
+
+  const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
+  return ARTICLE_IMAGE_EXTENSIONS.some((allowedExtension) => allowedExtension === extension)
 }
 
 function renameFileWithUuid(file: File): File {
@@ -355,6 +359,9 @@ export default function CmsArticleEditorPage({
   const lockTokenRef = useRef('')
   const bootstrapCacheKeyRef = useRef('')
   const tagInputRef = useRef<HTMLInputElement | null>(null)
+  const editorShellRef = useRef<HTMLDivElement | null>(null)
+  const imageOptionPanelRef = useRef<HTMLDivElement | null>(null)
+  const editorInstanceRef = useRef<JoditEditorInstance | null>(null)
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -372,6 +379,9 @@ export default function CmsArticleEditorPage({
 
   const [form, setForm] = useState<ArticleFormState>(DEFAULT_ARTICLE_FORM)
   const [uploadedImageOptions, setUploadedImageOptions] = useState<Record<string, ImageProcessingOptions>>({})
+  const [selectedImageFileName, setSelectedImageFileName] = useState('')
+  const [selectedImageSource, setSelectedImageSource] = useState('')
+  const [updatingImageOptions, setUpdatingImageOptions] = useState(false)
 
   const [thumbnailMode, setThumbnailMode] = useState<InternalThumbnailMode>('generate_from_title')
   const [thumbnailUploadFileName, setThumbnailUploadFileName] = useState('')
@@ -409,6 +419,13 @@ export default function CmsArticleEditorPage({
 
         if (payload.article !== null) {
           const thumbnailAsset = findCurrentThumbnail(payload.article.media_assets)
+          const assetOptionMap = payload.article.media_assets.reduce<Record<string, ImageProcessingOptions>>(
+            (nextMap, asset) => {
+              nextMap[asset.file_name] = asset.processing_options
+              return nextMap
+            },
+            {},
+          )
           setArticle(payload.article)
           setInitialMediaAssets(payload.article.media_assets)
           setCurrentThumbnailAsset(thumbnailAsset)
@@ -422,6 +439,7 @@ export default function CmsArticleEditorPage({
             selectedOptionIds: payload.article.article_option.items.map((item) => item.id),
             tagNames: payload.article.tags.map((tag) => tag.name),
           })
+          setUploadedImageOptions(assetOptionMap)
           setThumbnailMode(thumbnailAsset === null ? 'use_default' : 'keep_current')
           setThumbnailUploadFileName('')
           setThumbnailPreviewPath(payload.article.thumbnail_preview_path)
@@ -429,11 +447,14 @@ export default function CmsArticleEditorPage({
           setTagSuggestions([])
           setTagSuggestionError('')
           setShowTagSuggestions(false)
+          setSelectedImageFileName('')
+          setSelectedImageSource('')
         } else {
           setArticle(null)
           setInitialMediaAssets([])
           setCurrentThumbnailAsset(null)
           setForm(DEFAULT_ARTICLE_FORM)
+          setUploadedImageOptions({})
           setThumbnailMode('generate_from_title')
           setThumbnailUploadFileName('')
           setThumbnailPreviewPath(payload.session.default_thumbnail_preview_path)
@@ -441,6 +462,8 @@ export default function CmsArticleEditorPage({
           setTagSuggestions([])
           setTagSuggestionError('')
           setShowTagSuggestions(false)
+          setSelectedImageFileName('')
+          setSelectedImageSource('')
         }
       } catch (error) {
         if (active) {
@@ -557,6 +580,9 @@ export default function CmsArticleEditorPage({
     if (lockToken === '') {
       throw new Error('編集中セッションが確立されていません。')
     }
+    if (!isAllowedArticleImageFile(file)) {
+      throw new Error('アップロードできる画像形式は jpg/jpeg/gif のみです。')
+    }
 
     const formData = new FormData()
     formData.append('lock_token', lockToken)
@@ -566,27 +592,6 @@ export default function CmsArticleEditorPage({
       method: 'POST',
       body: formData,
     })
-  }
-
-  async function uploadExistingThumbnailAsTemp(): Promise<CmsImageUploadResponse> {
-    if (currentThumbnailAsset === null) {
-      throw new Error('現在のサムネイルが存在しません。')
-    }
-
-    const response = await fetch(currentThumbnailAsset.public_path)
-    if (!response.ok) {
-      throw new Error('既存サムネイルの再アップロードに失敗しました。')
-    }
-
-    const blob = await response.blob()
-    const file = new File(
-      [blob],
-      createUuidFileName(currentThumbnailAsset.file_name, blob.type),
-      {
-        type: blob.type || 'image/png',
-      },
-    )
-    return uploadTempImage(file)
   }
 
   async function buildThumbnailRequest(): Promise<Record<string, string>> {
@@ -608,15 +613,162 @@ export default function CmsArticleEditorPage({
     }
 
     if (thumbnailMode === 'keep_current') {
-      const uploaded = await uploadExistingThumbnailAsTemp()
       return {
-        mode: 'use_uploaded',
-        file_name: uploaded.file_name,
+        mode: 'keep_current',
       }
     }
 
     return {
       mode: 'use_default',
+    }
+  }
+
+  function getCurrentEditorHtml(): string {
+    return editorInstanceRef.current?.value ?? form.bodyHtml
+  }
+
+  function selectImageBySource(source: string): void {
+    const fileName = extractMediaFileName(source)
+    if (fileName === '') {
+      setSelectedImageFileName('')
+      setSelectedImageSource('')
+      return
+    }
+
+    setSelectedImageFileName(fileName)
+    setSelectedImageSource(source)
+    setUploadedImageOptions((prev) => {
+      if (prev[fileName] !== undefined) {
+        return prev
+      }
+      return {
+        ...prev,
+        [fileName]: DEFAULT_IMAGE_OPTIONS,
+      }
+    })
+  }
+
+  useEffect(() => {
+    function handleDocumentClick(event: MouseEvent): void {
+      const shell = editorShellRef.current
+      const panel = imageOptionPanelRef.current
+      if (shell === null) {
+        return
+      }
+
+      const target = event.target
+      if (!(target instanceof HTMLElement)) {
+        return
+      }
+
+      if (panel !== null && panel.contains(target)) {
+        return
+      }
+
+      const selectedImage = target.closest('img')
+      if (selectedImage !== null && shell.contains(selectedImage)) {
+        const source = selectedImage.getAttribute('src')?.trim() ?? ''
+        selectImageBySource(source)
+        return
+      }
+
+      if (!shell.contains(target)) {
+        setSelectedImageFileName('')
+        setSelectedImageSource('')
+      }
+    }
+
+    document.addEventListener('click', handleDocumentClick, true)
+    return () => {
+      document.removeEventListener('click', handleDocumentClick, true)
+    }
+  }, [])
+
+  async function ensureEditableSelectedImage(): Promise<{
+    fileName: string
+    source: string
+  }> {
+    if (selectedImageFileName === '' || selectedImageSource === '') {
+      throw new Error('画像が選択されていません。')
+    }
+
+    const tempPrefix = `/media/tmp/${lockToken}/`
+    if (selectedImageSource.startsWith(tempPrefix)) {
+      return {
+        fileName: selectedImageFileName,
+        source: selectedImageSource,
+      }
+    }
+
+    const response = await fetch(selectedImageSource)
+    if (!response.ok) {
+      throw new Error('既存画像の再処理用コピーに失敗しました。')
+    }
+
+    const blob = await response.blob()
+    const tempFile = new File(
+      [blob],
+      createUuidFileName(selectedImageFileName, blob.type),
+      {
+        type: blob.type || 'image/jpeg',
+        lastModified: Date.now(),
+      },
+    )
+    const uploaded = await uploadTempImage(tempFile)
+    const currentBodyHtml = getCurrentEditorHtml()
+    const nextBodyHtml = replaceImageSourceInHtml(
+      currentBodyHtml,
+      selectedImageSource,
+      uploaded.path,
+    )
+
+    if (editorInstanceRef.current !== null) {
+      editorInstanceRef.current.value = nextBodyHtml
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      bodyHtml: nextBodyHtml,
+    }))
+    setUploadedImageOptions((prev) => ({
+      ...prev,
+      [uploaded.file_name]: prev[selectedImageFileName] ?? DEFAULT_IMAGE_OPTIONS,
+    }))
+    setSelectedImageFileName(uploaded.file_name)
+    setSelectedImageSource(uploaded.path)
+    return {
+      fileName: uploaded.file_name,
+      source: uploaded.path,
+    }
+  }
+
+  async function updateSelectedImageOption(
+    key: keyof ImageProcessingOptions,
+    checked: boolean,
+  ): Promise<void> {
+    if (selectedImageFileName === '' || selectedImageSource === '') {
+      return
+    }
+
+    setUpdatingImageOptions(true)
+    setErrorMessage('')
+    try {
+      const editableImage = await ensureEditableSelectedImage()
+      setUploadedImageOptions((prev) => ({
+        ...prev,
+        [editableImage.fileName]: {
+          ...(prev[editableImage.fileName] ?? DEFAULT_IMAGE_OPTIONS),
+          [key]: checked,
+        },
+      }))
+    } catch (error) {
+      if (error instanceof Error) {
+        setErrorMessage(error.message)
+      } else {
+        setErrorMessage(toApiMessage(error))
+      }
+    } finally {
+      setUpdatingImageOptions(false)
     }
   }
 
@@ -643,15 +795,16 @@ export default function CmsArticleEditorPage({
     setMessage('')
 
     try {
+      const currentBodyHtml = getCurrentEditorHtml()
       const thumbnailRequest = await buildThumbnailRequest()
-      const newImageFileNames = collectTempImageFileNames(form.bodyHtml, lockToken)
-      const deleteImageIds = resolveDeleteImageIds(initialMediaAssets, form.bodyHtml)
+      const newImageFileNames = collectTempImageFileNames(currentBodyHtml, lockToken)
+      const deleteImageIds = resolveDeleteImageIds(initialMediaAssets, currentBodyHtml)
 
       const payload = {
         category_id: form.categoryId,
         title: form.title,
         summary: form.summary,
-        body_html: form.bodyHtml,
+        body_html: currentBodyHtml,
         status: form.status,
         tag_names: form.tagNames,
         twitter_card: form.twitterCard,
@@ -682,11 +835,15 @@ export default function CmsArticleEditorPage({
         state: {
           notice: `${response.postprocess_job.job_name} を受け付けました。保存後処理はバックグラウンドで続行します。`,
           saveLogLockToken: lockToken,
-          saveLogArticleTitle: response.article.title,
+          saveLogArticleTitle: form.title.trim(),
         },
       })
     } catch (error) {
-      setErrorMessage(toApiMessage(error))
+      if (error instanceof Error) {
+        setErrorMessage(error.message)
+      } else {
+        setErrorMessage(toApiMessage(error))
+      }
     } finally {
       setSaving(false)
     }
@@ -730,6 +887,9 @@ export default function CmsArticleEditorPage({
     && sessionUser?.role === 'author'
     && article.status !== 'publish'
   )
+  const selectedImageOptions = selectedImageFileName === ''
+    ? DEFAULT_IMAGE_OPTIONS
+    : (uploadedImageOptions[selectedImageFileName] ?? DEFAULT_IMAGE_OPTIONS)
 
   function toggleExistingOption(optionId: string): void {
     setForm((prev) => {
@@ -839,7 +999,7 @@ export default function CmsArticleEditorPage({
               <input
                 className="console-input form-control"
                 type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
+                accept={ARTICLE_IMAGE_ACCEPT}
                 onChange={(event) => {
                   const file = event.target.files?.[0] ?? null
                   if (file === null) {
@@ -1179,64 +1339,117 @@ export default function CmsArticleEditorPage({
 
       <div className="console-card">
         <CmsTabGuide title="本文" helpLines={[]} compact showDivider={false} />
-        <JoditEditor
-          value={form.bodyHtml}
-          config={{
-            readonly: false,
-            language: 'ja',
-            height: 680,
-            toolbarSticky: false,
-            uploader: {
-              insertImageAsBase64URI: false,
-              imagesExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
-              headers: {
-                'Cf-Access-Jwt-Assertion': getStoredAccessJwt(),
-              },
-              processFileName(this: unknown, key: string, file: File): [string, File, string] {
-                const renamed = renameFileWithUuid(file)
-                return [key, renamed, renamed.name]
-              },
-              customUploadFunction: async (
-                requestData: FormData | Record<string, unknown> | string,
-                showProgress: (progress: number) => void,
-              ) => {
-                if (!(requestData instanceof FormData)) {
-                  throw new Error('画像アップロードデータの形式が不正です。')
-                }
-
-                const files: File[] = []
-                for (const value of requestData.values()) {
-                  if (value instanceof File) {
-                    files.push(value)
+        <div ref={editorShellRef} className="cms-article-editor-shell">
+          <JoditEditor
+            value={form.bodyHtml}
+            editorRef={(instance) => {
+              editorInstanceRef.current = instance as JoditEditorInstance | null
+            }}
+            config={{
+              readonly: false,
+              language: 'ja',
+              height: 680,
+              toolbarSticky: false,
+              uploader: {
+                insertImageAsBase64URI: false,
+                imagesExtensions: [...ARTICLE_IMAGE_EXTENSIONS],
+                headers: {
+                  'Cf-Access-Jwt-Assertion': getStoredAccessJwt(),
+                },
+                processFileName(this: unknown, key: string, file: File): [string, File, string] {
+                  const renamed = renameFileWithUuid(file)
+                  return [key, renamed, renamed.name]
+                },
+                customUploadFunction: async (
+                  requestData: FormData | Record<string, unknown> | string,
+                  showProgress: (progress: number) => void,
+                ) => {
+                  if (!(requestData instanceof FormData)) {
+                    throw new Error('画像アップロードデータの形式が不正です。')
                   }
-                }
 
-                const uploadedPaths: string[] = []
-                for (const file of files) {
-                  const uploaded = await uploadTempImage(file)
-                  uploadedPaths.push(uploaded.path)
-                  setUploadedImageOptions((prev) => ({
-                    ...prev,
-                    [uploaded.file_name]: DEFAULT_IMAGE_OPTIONS,
-                  }))
-                }
+                  const files: File[] = []
+                  for (const value of requestData.values()) {
+                    if (value instanceof File) {
+                      files.push(value)
+                    }
+                  }
 
-                showProgress(100)
-                return {
-                  success: true,
-                  time: new Date().toISOString(),
-                  data: {
-                    baseurl: '',
-                    files: uploadedPaths,
-                    isImages: uploadedPaths.map(() => true),
-                  },
-                }
+                  const uploadedPaths: string[] = []
+                  for (const file of files) {
+                    const uploaded = await uploadTempImage(file)
+                    uploadedPaths.push(uploaded.path)
+                    setUploadedImageOptions((prev) => ({
+                      ...prev,
+                      [uploaded.file_name]: DEFAULT_IMAGE_OPTIONS,
+                    }))
+                  }
+
+                  showProgress(100)
+                  return {
+                    success: true,
+                    time: new Date().toISOString(),
+                    data: {
+                      baseurl: '',
+                      files: uploadedPaths,
+                      isImages: uploadedPaths.map(() => true),
+                    },
+                  }
+                },
               },
-            },
-          }}
-          onBlur={(nextContent) => setForm((prev) => ({ ...prev, bodyHtml: nextContent }))}
-          onChange={() => undefined}
-        />
+            }}
+            onBlur={(nextContent) => setForm((prev) => ({ ...prev, bodyHtml: nextContent }))}
+            onChange={() => undefined}
+          />
+          {selectedImageFileName !== '' ? (
+            <div ref={imageOptionPanelRef} className="cms-image-option-panel">
+              <div className="cms-image-option-panel-head">
+                <strong>画像処理オプション</strong>
+                <span>{selectedImageFileName}</span>
+              </div>
+              <label className="cms-image-option-toggle">
+                <input
+                  type="checkbox"
+                  checked={selectedImageOptions.resize}
+                  onChange={(event) => {
+                    void updateSelectedImageOption('resize', event.target.checked)
+                  }}
+                  disabled={updatingImageOptions}
+                />
+                <span>リサイズ</span>
+              </label>
+              <label className="cms-image-option-toggle">
+                <input
+                  type="checkbox"
+                  checked={selectedImageOptions.exif_watermark}
+                  onChange={(event) => {
+                    void updateSelectedImageOption('exif_watermark', event.target.checked)
+                  }}
+                  disabled={updatingImageOptions}
+                />
+                <span>EXIF透かし</span>
+              </label>
+              <label className="cms-image-option-toggle">
+                <input
+                  type="checkbox"
+                  checked={selectedImageOptions.site_logo_watermark}
+                  onChange={(event) => {
+                    void updateSelectedImageOption('site_logo_watermark', event.target.checked)
+                  }}
+                  disabled={updatingImageOptions}
+                />
+                <span>サイトロゴ透かし</span>
+              </label>
+              <p className="cms-image-option-help">
+                画像をクリックまたはタップすると、この画像だけの処理設定を変更できます。
+              </p>
+            </div>
+          ) : (
+            <div className="cms-image-option-panel is-empty">
+              本文内の画像をクリックまたはタップすると、画像ごとの処理オプションを表示します。
+            </div>
+          )}
+        </div>
 
         <div className="cms-article-editor-footer d-flex justify-content-end">
           <div className="console-actions d-flex flex-wrap justify-content-end">

@@ -7,8 +7,10 @@ from django.utils import timezone
 from cms.models import (
     Article,
     ImageJobStatus,
+    MediaAsset,
     SaveLogStatus,
 )
+from cms.services.article_pending_snapshot_services import ArticlePendingSnapshotService
 from cms.services.article_save_log_services import ArticleSaveLogService
 from cms.services.article_session_services import ArticleSessionService
 from cms.services.media_services import MediaService
@@ -28,19 +30,24 @@ class ArticlePostprocessService:
         """
         article = Article.objects.select_related("thumbnail_asset", "author").get(id=article_id)
         lock_token = str(image_diff["lock_token"])
-        overall_failed = False
+        staged_live_update = bool(image_diff.get("staged_live_update"))
+        pending_snapshot = None
+        if staged_live_update:
+            pending_snapshot = ArticlePendingSnapshotService.get_snapshot(article_id=str(article.id))
+            if pending_snapshot is None:
+                raise RuntimeError("公開切替待ちスナップショットが存在しません。")
 
-        article.image_job_status = ImageJobStatus.PROCESSING
-        article.save(update_fields=["image_job_status", "updated_at"])
+        overall_failed = False
+        created_asset_ids: list[str] = []
+        public_paths_by_source_file_name: dict[str, str] = {}
+        thumbnail_asset_id = image_diff.get("thumbnail_asset_id")
+
+        if not staged_live_update:
+            article.image_job_status = ImageJobStatus.PROCESSING
+            article.save(update_fields=["image_job_status", "updated_at"])
 
         try:
-            ArticlePostprocessService._delete_requested_assets(
-                article=article,
-                request_user_id=request_user_id,
-                lock_token=lock_token,
-                delete_image_ids=image_diff["delete_images"],
-            )
-            ArticlePostprocessService._process_new_images(
+            created_asset_ids, public_paths_by_source_file_name = ArticlePostprocessService._process_new_images(
                 article=article,
                 request_user_id=request_user_id,
                 lock_token=lock_token,
@@ -51,17 +58,32 @@ class ArticlePostprocessService:
                 request_user_id=request_user_id,
                 lock_token=lock_token,
                 thumbnail_request=image_diff["thumbnail_request"],
+                thumbnail_asset_id=thumbnail_asset_id,
             )
-            OgpService.sync_article_ogp_cache(
-                article=article,
-                request_user_id=request_user_id,
-                lock_token=lock_token,
-            )
-            article.toc_json = MediaService.build_toc(body_html=article.body_html)
-            article.image_job_status = ImageJobStatus.COMPLETED
-            if article.status == "publish" and article.published_at is None:
-                article.published_at = timezone.now()
-            article.save(update_fields=["toc_json", "image_job_status", "published_at", "updated_at"])
+
+            if staged_live_update:
+                ArticlePostprocessService._apply_staged_live_update(
+                    article=article,
+                    request_user_id=request_user_id,
+                    lock_token=lock_token,
+                    pending_snapshot=pending_snapshot,
+                    delete_image_ids=image_diff["delete_images"],
+                    thumbnail_asset_id=thumbnail_asset_id,
+                    old_thumbnail_asset_id=image_diff.get("old_thumbnail_asset_id"),
+                    public_paths_by_source_file_name=public_paths_by_source_file_name,
+                )
+                ArticlePendingSnapshotService.delete_snapshot(article_id=str(article.id))
+            else:
+                ArticlePostprocessService._apply_direct_update(
+                    article=article,
+                    request_user_id=request_user_id,
+                    lock_token=lock_token,
+                    delete_image_ids=image_diff["delete_images"],
+                    thumbnail_asset_id=thumbnail_asset_id,
+                    old_thumbnail_asset_id=image_diff.get("old_thumbnail_asset_id"),
+                    public_paths_by_source_file_name=public_paths_by_source_file_name,
+                )
+
             ArticleSaveLogService.create_log(
                 request_user_id=request_user_id,
                 article_id=article.id,
@@ -72,8 +94,21 @@ class ArticlePostprocessService:
             )
         except Exception as exc:
             overall_failed = True
-            article.image_job_status = ImageJobStatus.FAILED
-            article.save(update_fields=["image_job_status", "updated_at"])
+            if staged_live_update:
+                ArticlePendingSnapshotService.delete_snapshot(article_id=str(article.id))
+                ArticlePostprocessService._cleanup_failed_assets(
+                    article=article,
+                    created_asset_ids=created_asset_ids,
+                    thumbnail_asset_id=thumbnail_asset_id,
+                )
+            else:
+                article.image_job_status = ImageJobStatus.FAILED
+                article.save(update_fields=["image_job_status", "updated_at"])
+                ArticlePostprocessService._cleanup_failed_assets(
+                    article=article,
+                    created_asset_ids=created_asset_ids,
+                    thumbnail_asset_id=thumbnail_asset_id,
+                )
             ArticleSaveLogService.create_log(
                 request_user_id=request_user_id,
                 article_id=article.id,
@@ -124,19 +159,32 @@ class ArticlePostprocessService:
             )
 
     @staticmethod
-    def _process_new_images(*, article: Article, request_user_id: str, lock_token: str, new_images: list) -> None:
+    def _process_new_images(
+        *,
+        article: Article,
+        request_user_id: str,
+        lock_token: str,
+        new_images: list,
+    ) -> tuple[list[str], dict[str, str]]:
         """
         新規画像を最終保存先へ確定する。
         """
+        created_asset_ids: list[str] = []
+        public_paths_by_source_file_name: dict[str, str] = {}
+
         for new_image in new_images:
             stored_file_name = new_image["file_name"]
             try:
-                MediaService.process_uploaded_asset(
+                asset = MediaService.process_uploaded_asset(
                     article=article,
                     source_file_name=new_image["file_name"],
                     stored_file_name=stored_file_name,
                     processing_options=new_image["options"],
                     lock_token=lock_token,
+                )
+                created_asset_ids.append(str(asset.id))
+                public_paths_by_source_file_name[new_image["file_name"]] = MediaService.build_public_media_path(
+                    file_name=stored_file_name
                 )
                 ArticleSaveLogService.create_log(
                     request_user_id=request_user_id,
@@ -157,12 +205,21 @@ class ArticlePostprocessService:
                 )
                 raise
 
+        return created_asset_ids, public_paths_by_source_file_name
+
     @staticmethod
-    def _process_thumbnail(*, article: Article, request_user_id: str, lock_token: str, thumbnail_request: dict) -> None:
+    def _process_thumbnail(
+        *,
+        article: Article,
+        request_user_id: str,
+        lock_token: str,
+        thumbnail_request: dict,
+        thumbnail_asset_id: str | None,
+    ) -> None:
         """
         サムネイルを確定する。
         """
-        if article.thumbnail_asset is None:
+        if thumbnail_asset_id is None:
             if thumbnail_request["mode"] != "use_default":
                 raise RuntimeError("サムネイルアセットが存在しません。")
             ArticleSaveLogService.create_log(
@@ -176,7 +233,18 @@ class ArticlePostprocessService:
             return
 
         mode = thumbnail_request["mode"]
-        asset = article.thumbnail_asset
+        asset = MediaAsset.objects.get(id=thumbnail_asset_id, article=article)
+        if mode == "keep_current":
+            ArticleSaveLogService.create_log(
+                request_user_id=request_user_id,
+                article_id=article.id,
+                lock_token=lock_token,
+                target=asset.file_name,
+                status=SaveLogStatus.COMPLETED,
+                message="現在のサムネイルを維持しました。",
+            )
+            return
+
         if mode == "use_uploaded":
             source_file_name = thumbnail_request.get("file_name")
             if not source_file_name:
@@ -185,7 +253,7 @@ class ArticlePostprocessService:
                 article=article,
                 source_file_name=source_file_name,
                 stored_file_name=asset.file_name,
-                processing_options={"thumbnail_request": thumbnail_request},
+                processing_options=MediaService.default_processing_options(),
                 lock_token=lock_token,
                 asset=asset,
             )
@@ -212,3 +280,138 @@ class ArticlePostprocessService:
             status=SaveLogStatus.COMPLETED,
             message="サムネイル処理が完了しました。",
         )
+
+    @staticmethod
+    def _apply_direct_update(
+        *,
+        article: Article,
+        request_user_id: str,
+        lock_token: str,
+        delete_image_ids: list[str],
+        thumbnail_asset_id: str | None,
+        old_thumbnail_asset_id: str | None,
+        public_paths_by_source_file_name: dict[str, str],
+    ) -> None:
+        """
+        直接保存系の反映を完了させる。
+        """
+        article.body_html = MediaService.rewrite_temp_paths_to_public(
+            body_html=article.body_html,
+            lock_token=lock_token,
+            public_paths_by_source_file_name=public_paths_by_source_file_name,
+        )
+        article.thumbnail_asset_id = None if thumbnail_asset_id is None else thumbnail_asset_id
+        article.toc_json = MediaService.build_toc(body_html=article.body_html)
+        article.image_job_status = ImageJobStatus.COMPLETED
+        if article.status == "publish" and article.published_at is None:
+            article.published_at = timezone.now()
+        article.save(
+            update_fields=[
+                "body_html",
+                "thumbnail_asset",
+                "toc_json",
+                "image_job_status",
+                "published_at",
+                "updated_at",
+            ]
+        )
+        OgpService.sync_article_ogp_cache(
+            article=article,
+            request_user_id=request_user_id,
+            lock_token=lock_token,
+        )
+        ArticlePostprocessService._delete_requested_assets(
+            article=article,
+            request_user_id=request_user_id,
+            lock_token=lock_token,
+            delete_image_ids=delete_image_ids,
+        )
+        ArticlePostprocessService._delete_replaced_thumbnail_asset(
+            old_thumbnail_asset_id=old_thumbnail_asset_id,
+            current_thumbnail_asset_id=thumbnail_asset_id,
+        )
+
+    @staticmethod
+    def _apply_staged_live_update(
+        *,
+        article: Article,
+        request_user_id: str,
+        lock_token: str,
+        pending_snapshot: dict,
+        delete_image_ids: list[str],
+        thumbnail_asset_id: str | None,
+        old_thumbnail_asset_id: str | None,
+        public_paths_by_source_file_name: dict[str, str],
+    ) -> None:
+        """
+        公開済み記事の差し替えを成功時にまとめて反映する。
+        """
+        body_html = MediaService.rewrite_temp_paths_to_public(
+            body_html=pending_snapshot["body_html"],
+            lock_token=lock_token,
+            public_paths_by_source_file_name=public_paths_by_source_file_name,
+        )
+
+        with transaction.atomic():
+            ArticlePendingSnapshotService.apply_snapshot(
+                article=article,
+                snapshot=pending_snapshot,
+                body_html=body_html,
+            )
+            article.toc_json = MediaService.build_toc(body_html=article.body_html)
+            article.save(update_fields=["toc_json", "updated_at"])
+        OgpService.sync_article_ogp_cache(
+            article=article,
+            request_user_id=request_user_id,
+            lock_token=lock_token,
+        )
+        ArticlePostprocessService._delete_requested_assets(
+            article=article,
+            request_user_id=request_user_id,
+            lock_token=lock_token,
+            delete_image_ids=delete_image_ids,
+        )
+        ArticlePostprocessService._delete_replaced_thumbnail_asset(
+            old_thumbnail_asset_id=old_thumbnail_asset_id,
+            current_thumbnail_asset_id=thumbnail_asset_id,
+        )
+
+    @staticmethod
+    def _delete_replaced_thumbnail_asset(
+        *,
+        old_thumbnail_asset_id: str | None,
+        current_thumbnail_asset_id: str | None,
+    ) -> None:
+        """
+        差し替え前のサムネイルを削除する。
+        """
+        if old_thumbnail_asset_id is None:
+            return
+        if current_thumbnail_asset_id is not None and old_thumbnail_asset_id == current_thumbnail_asset_id:
+            return
+
+        asset = MediaAsset.objects.filter(id=old_thumbnail_asset_id).first()
+        if asset is None:
+            return
+        MediaService.delete_media_asset_files(asset=asset)
+        asset.delete()
+
+    @staticmethod
+    def _cleanup_failed_assets(
+        *,
+        article: Article,
+        created_asset_ids: list[str],
+        thumbnail_asset_id: str | None,
+    ) -> None:
+        """
+        失敗時に作成途中のアセット実体を掃除する。
+        """
+        target_ids = set(created_asset_ids)
+        if thumbnail_asset_id is not None:
+            target_ids.add(str(thumbnail_asset_id))
+        if not target_ids:
+            return
+
+        for asset in article.media_assets.filter(id__in=target_ids):
+            MediaService.delete_media_asset_files(asset=asset)
+            asset.delete()
