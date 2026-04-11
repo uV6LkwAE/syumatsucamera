@@ -3619,6 +3619,7 @@ body {
 }
 
 .cms-article-editor-shell {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -3631,7 +3632,19 @@ body {
   padding: 14px 16px;
   border: 1px solid #d6dfeb;
   border-radius: 8px;
-  background: #f8fbfe;
+  background: rgba(248, 251, 254, 0.96);
+}
+
+.cms-image-option-panel-overlay {
+  position: absolute;
+  z-index: 4;
+  max-width: calc(100% - 24px);
+  max-height: calc(100% - 24px);
+  overflow: auto;
+  box-shadow: 0 18px 38px rgba(27, 45, 20, 0.16);
+  backdrop-filter: blur(8px);
+  touch-action: manipulation;
+  pointer-events: auto;
 }
 
 .cms-image-option-panel.is-empty {

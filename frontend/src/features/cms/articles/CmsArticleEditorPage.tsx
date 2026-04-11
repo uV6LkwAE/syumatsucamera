@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useId,
   useMemo,
   useRef,
@@ -71,6 +72,14 @@ type JoditEditorInstance = {
 type BrowserCaretPosition = {
   offsetNode: Node
   offset: number
+}
+
+type ImageSelectionMode = 'hover' | 'pinned' | null
+
+type ImageOverlayPosition = {
+  top: number
+  left: number
+  width: number
 }
 
 type ArticleFormState = {
@@ -407,6 +416,18 @@ export default function CmsArticleEditorPage({
   const imageOptionPanelRef = useRef<HTMLDivElement | null>(null)
   const editorInstanceRef = useRef<JoditEditorInstance | null>(null)
   const editorSelectionRangeRef = useRef<Range | null>(null)
+  const activeImageSelectionRef = useRef<{
+    fileName: string
+    source: string
+    mode: ImageSelectionMode
+  }>({
+    fileName: '',
+    source: '',
+    mode: null,
+  })
+  const activeImageSelectionVersionRef = useRef(0)
+  const imageOptionUpdateInFlightRef = useRef(false)
+  const imageOptionPanelHoveredRef = useRef(false)
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -429,6 +450,7 @@ export default function CmsArticleEditorPage({
   const [uploadedImageOptions, setUploadedImageOptions] = useState<Record<string, ImageProcessingOptions>>({})
   const [selectedImageFileName, setSelectedImageFileName] = useState('')
   const [selectedImageSource, setSelectedImageSource] = useState('')
+  const [imageOptionOverlayPosition, setImageOptionOverlayPosition] = useState<ImageOverlayPosition | null>(null)
   const [updatingImageOptions, setUpdatingImageOptions] = useState(false)
 
   const [thumbnailMode, setThumbnailMode] = useState<InternalThumbnailMode>('generate_from_title')
@@ -683,8 +705,20 @@ export default function CmsArticleEditorPage({
     return editorInstanceRef.current?.value ?? form.bodyHtml
   }
 
+  function isImageOptionPanelElement(target: EventTarget | null): boolean {
+    return (
+      target instanceof HTMLElement
+      && imageOptionPanelRef.current !== null
+      && imageOptionPanelRef.current.contains(target)
+    )
+  }
+
   function getEditorElement(): HTMLElement | null {
     return editorShellRef.current?.querySelector('.jodit-wysiwyg') ?? null
+  }
+
+  function getEditorWorkplaceElement(): HTMLElement | null {
+    return editorShellRef.current?.querySelector('.jodit-workplace') ?? null
   }
 
   function getRangeContainer(range: Range): Node | null {
@@ -750,6 +784,103 @@ export default function CmsArticleEditorPage({
     return editorInstanceRef.current?.s?.focus?.({ preventScroll: true }) ?? false
   }
 
+  function setActiveImageSelection(
+    nextSelection: {
+      fileName: string
+      source: string
+      mode: ImageSelectionMode
+    },
+  ): void {
+    const currentSelection = activeImageSelectionRef.current
+    if (
+      currentSelection.fileName === nextSelection.fileName
+      && currentSelection.source === nextSelection.source
+      && currentSelection.mode === nextSelection.mode
+    ) {
+      return
+    }
+
+    activeImageSelectionVersionRef.current += 1
+    activeImageSelectionRef.current = nextSelection
+    setSelectedImageFileName(nextSelection.fileName)
+    setSelectedImageSource(nextSelection.source)
+  }
+
+  function clearActiveImageSelection(): void {
+    imageOptionPanelHoveredRef.current = false
+    activeImageSelectionVersionRef.current += 1
+    activeImageSelectionRef.current = {
+      fileName: '',
+      source: '',
+      mode: null,
+    }
+    setSelectedImageFileName('')
+    setSelectedImageSource('')
+    setImageOptionOverlayPosition(null)
+  }
+
+  function findEditorImageBySource(source: string): HTMLImageElement | null {
+    const editorElement = getEditorElement()
+    if (editorElement === null) {
+      return null
+    }
+
+    const normalizedSource = source.trim()
+    if (normalizedSource === '') {
+      return null
+    }
+
+    const matchesSource = (candidate: string): boolean => {
+      const normalizedCandidate = candidate.trim()
+      if (normalizedCandidate === '') {
+        return false
+      }
+      if (normalizedCandidate === normalizedSource) {
+        return true
+      }
+      return (
+        normalizedCandidate.endsWith(normalizedSource)
+        || normalizedSource.endsWith(normalizedCandidate)
+      )
+    }
+
+    return Array.from(editorElement.querySelectorAll('img')).find((image) => {
+      const src = image.getAttribute('src') ?? ''
+      const currentSrc = image.currentSrc ?? ''
+      return matchesSource(src) || matchesSource(currentSrc)
+    }) ?? null
+  }
+
+  function syncImageOptionOverlayPosition(): void {
+    const { source } = activeImageSelectionRef.current
+    const shell = editorShellRef.current
+    const image = findEditorImageBySource(source)
+    if (shell === null || image === null) {
+      setImageOptionOverlayPosition(null)
+      return
+    }
+
+    const shellRect = shell.getBoundingClientRect()
+    const imageRect = image.getBoundingClientRect()
+    const padding = 12
+    const desiredWidth = Math.min(
+      360,
+      Math.max(220, imageRect.width - padding * 2),
+      Math.max(220, shellRect.width - padding * 2),
+    )
+    const maxLeft = Math.max(padding, shellRect.width - desiredWidth - padding)
+    const nextLeft = Math.min(
+      Math.max(padding, imageRect.left - shellRect.left + padding),
+      maxLeft,
+    )
+
+    setImageOptionOverlayPosition({
+      top: Math.max(padding, imageRect.top - shellRect.top + padding),
+      left: nextLeft,
+      width: desiredWidth,
+    })
+  }
+
   function buildRangeAtPoint(x: number, y: number): Range | null {
     const documentWithCaret = document as Document & {
       caretPositionFromPoint?: (x: number, y: number) => BrowserCaretPosition | null
@@ -779,6 +910,29 @@ export default function CmsArticleEditorPage({
       return false
     }
     return selectEditorRange(range)
+  }
+
+  function selectImageBySource(source: string, mode: ImageSelectionMode): void {
+    const fileName = extractMediaFileName(source)
+    if (fileName === '') {
+      clearActiveImageSelection()
+      return
+    }
+
+    setActiveImageSelection({
+      fileName,
+      source,
+      mode,
+    })
+    setUploadedImageOptions((prev) => {
+      if (prev[fileName] !== undefined) {
+        return prev
+      }
+      return {
+        ...prev,
+        [fileName]: DEFAULT_IMAGE_OPTIONS,
+      }
+    })
   }
 
   function insertUploadedImagePaths(
@@ -831,7 +985,7 @@ export default function CmsArticleEditorPage({
   }
 
   function getEditorImageTarget(target: EventTarget | null): HTMLImageElement | null {
-    if (!(target instanceof HTMLElement)) {
+    if (!(target instanceof HTMLElement) || isImageOptionPanelElement(target)) {
       return null
     }
 
@@ -908,6 +1062,10 @@ export default function CmsArticleEditorPage({
   }
 
   function getEditorImageFromEvent(event: Event): HTMLImageElement | null {
+    if (isImageOptionPanelElement(event.target)) {
+      return null
+    }
+
     const selectedImage = getEditorImageTarget(event.target)
     if (selectedImage !== null) {
       return selectedImage
@@ -976,43 +1134,23 @@ export default function CmsArticleEditorPage({
       })
   }
 
-  function selectImageBySource(source: string): void {
-    const fileName = extractMediaFileName(source)
-    if (fileName === '') {
-      setSelectedImageFileName('')
-      setSelectedImageSource('')
-      return
-    }
-
-    setSelectedImageFileName(fileName)
-    setSelectedImageSource(source)
-    setUploadedImageOptions((prev) => {
-      if (prev[fileName] !== undefined) {
-        return prev
-      }
-      return {
-        ...prev,
-        [fileName]: DEFAULT_IMAGE_OPTIONS,
-      }
-    })
-  }
-
   useEffect(() => {
     const captureOptions: AddEventListenerOptions = {
       capture: true,
       passive: false,
     }
     const editorImageEvents = [
+      'pointermove',
       'pointerdown',
-      'pointerup',
-      'mousedown',
-      'mouseup',
       'touchstart',
-      'touchend',
       'click',
     ]
 
     function stopEditorImageEvent(event: Event): HTMLImageElement | null {
+      if (isImageOptionPanelElement(event.target)) {
+        return null
+      }
+
       const selectedImage = getEditorImageFromEvent(event)
       if (selectedImage === null) {
         return null
@@ -1027,39 +1165,61 @@ export default function CmsArticleEditorPage({
     function handleEditorImageEvent(event: Event): void {
       const selectedImage = stopEditorImageEvent(event)
       if (selectedImage === null) {
+        if (isImageOptionPanelElement(event.target)) {
+          return
+        }
+        const currentSelection = activeImageSelectionRef.current
+        if (
+          event.type === 'pointermove'
+          && currentSelection.mode === 'hover'
+          && !imageOptionPanelHoveredRef.current
+        ) {
+          clearActiveImageSelection()
+        }
         return
       }
 
-      const shouldSelectImage = (
-        event.type === 'pointerdown'
-        || event.type === 'mousedown'
-        || event.type === 'touchstart'
-      )
-      if (shouldSelectImage) {
-        const source = selectedImage.getAttribute('src')?.trim() || selectedImage.currentSrc.trim()
-        selectImageBySource(source)
+      const pointerEvent = event as PointerEvent & { pointerType?: string }
+      const source = selectedImage.getAttribute('src')?.trim() || selectedImage.currentSrc.trim()
+
+      if (event.type === 'pointermove') {
+        if (activeImageSelectionRef.current.mode === 'pinned') {
+          return
+        }
+        if (pointerEvent.pointerType !== 'mouse') {
+          return
+        }
+        selectImageBySource(source, 'hover')
+        syncImageOptionOverlayPosition()
+        return
+      }
+
+      if (event.type === 'pointerdown' || event.type === 'touchstart') {
+        selectImageBySource(
+          source,
+          pointerEvent.pointerType === 'touch' || event.type === 'touchstart'
+            ? 'pinned'
+            : 'hover',
+        )
+        syncImageOptionOverlayPosition()
+        return
+      }
+
+      if (event.type === 'click') {
+        if (pointerEvent.pointerType === 'touch') {
+          selectImageBySource(source, 'pinned')
+          syncImageOptionOverlayPosition()
+        }
       }
     }
 
     function handleDocumentClick(event: MouseEvent): void {
-      const shell = editorShellRef.current
-      const panel = imageOptionPanelRef.current
-      if (shell === null) {
+      if (isImageOptionPanelElement(event.target)) {
         return
       }
 
-      const target = event.target
-      if (!(target instanceof HTMLElement)) {
-        return
-      }
-
-      if (panel !== null && panel.contains(target)) {
-        return
-      }
-
-      if (!shell.contains(target)) {
-        setSelectedImageFileName('')
-        setSelectedImageSource('')
+      if (getEditorImageTarget(event.target) === null) {
+        clearActiveImageSelection()
       }
     }
 
@@ -1075,23 +1235,56 @@ export default function CmsArticleEditorPage({
     }
   }, [])
 
-  async function ensureEditableSelectedImage(): Promise<{
+  useLayoutEffect(() => {
+    if (selectedImageFileName === '' || selectedImageSource === '') {
+      setImageOptionOverlayPosition(null)
+      return
+    }
+
+    let disposed = false
+    let animationFrameId = window.requestAnimationFrame(() => {
+      syncPosition()
+    })
+
+    function syncPosition(): void {
+      if (disposed) {
+        return
+      }
+      syncImageOptionOverlayPosition()
+    }
+
+    syncPosition()
+
+    const workplace = getEditorWorkplaceElement()
+    window.addEventListener('resize', syncPosition)
+    workplace?.addEventListener('scroll', syncPosition, { passive: true })
+
+    return () => {
+      disposed = true
+      window.cancelAnimationFrame(animationFrameId)
+      window.removeEventListener('resize', syncPosition)
+      workplace?.removeEventListener('scroll', syncPosition)
+    }
+  }, [selectedImageFileName, selectedImageSource])
+
+  async function ensureEditableSelectedImage(selectionVersion: number): Promise<{
     fileName: string
     source: string
   }> {
-    if (selectedImageFileName === '' || selectedImageSource === '') {
+    const currentSelection = activeImageSelectionRef.current
+    if (currentSelection.fileName === '' || currentSelection.source === '') {
       throw new Error('画像が選択されていません。')
     }
 
     const tempPrefix = `/media/tmp/${lockToken}/`
-    if (selectedImageSource.startsWith(tempPrefix)) {
+    if (currentSelection.source.startsWith(tempPrefix)) {
       return {
-        fileName: selectedImageFileName,
-        source: selectedImageSource,
+        fileName: currentSelection.fileName,
+        source: currentSelection.source,
       }
     }
 
-    const response = await fetch(selectedImageSource)
+    const response = await fetch(currentSelection.source)
     if (!response.ok) {
       throw new Error('既存画像の再処理用コピーに失敗しました。')
     }
@@ -1099,7 +1292,7 @@ export default function CmsArticleEditorPage({
     const blob = await response.blob()
     const tempFile = new File(
       [blob],
-      createUuidFileName(selectedImageFileName, blob.type),
+      createUuidFileName(currentSelection.fileName, blob.type),
       {
         type: blob.type || 'image/jpeg',
         lastModified: Date.now(),
@@ -1109,7 +1302,7 @@ export default function CmsArticleEditorPage({
     const currentBodyHtml = getCurrentEditorHtml()
     const nextBodyHtml = replaceImageSourceInHtml(
       currentBodyHtml,
-      selectedImageSource,
+      currentSelection.source,
       uploaded.path,
     )
 
@@ -1123,10 +1316,17 @@ export default function CmsArticleEditorPage({
     }))
     setUploadedImageOptions((prev) => ({
       ...prev,
-      [uploaded.file_name]: prev[selectedImageFileName] ?? DEFAULT_IMAGE_OPTIONS,
+      [uploaded.file_name]: prev[currentSelection.fileName] ?? DEFAULT_IMAGE_OPTIONS,
     }))
-    setSelectedImageFileName(uploaded.file_name)
-    setSelectedImageSource(uploaded.path)
+    if (selectionVersion === activeImageSelectionVersionRef.current) {
+      activeImageSelectionRef.current = {
+        fileName: uploaded.file_name,
+        source: uploaded.path,
+        mode: currentSelection.mode,
+      }
+      setSelectedImageFileName(uploaded.file_name)
+      setSelectedImageSource(uploaded.path)
+    }
     return {
       fileName: uploaded.file_name,
       source: uploaded.path,
@@ -1137,14 +1337,20 @@ export default function CmsArticleEditorPage({
     key: keyof ImageProcessingOptions,
     checked: boolean,
   ): Promise<void> {
-    if (selectedImageFileName === '' || selectedImageSource === '') {
+    const currentSelection = activeImageSelectionRef.current
+    if (currentSelection.fileName === '' || currentSelection.source === '') {
+      return
+    }
+    if (imageOptionUpdateInFlightRef.current) {
       return
     }
 
+    const selectionVersion = activeImageSelectionVersionRef.current
+    imageOptionUpdateInFlightRef.current = true
     setUpdatingImageOptions(true)
     setErrorMessage('')
     try {
-      const editableImage = await ensureEditableSelectedImage()
+      const editableImage = await ensureEditableSelectedImage(selectionVersion)
       setUploadedImageOptions((prev) => ({
         ...prev,
         [editableImage.fileName]: {
@@ -1159,6 +1365,7 @@ export default function CmsArticleEditorPage({
         setErrorMessage(toApiMessage(error))
       }
     } finally {
+      imageOptionUpdateInFlightRef.current = false
       setUpdatingImageOptions(false)
     }
   }
@@ -1799,15 +2006,44 @@ export default function CmsArticleEditorPage({
           onKeyUpCapture={saveEditorSelection}
           onMouseUpCapture={saveEditorSelection}
           onTouchEndCapture={saveEditorSelection}
-        >
+          >
           <JoditEditor
             value={editorBodyHtml}
             editorRef={handleEditorRef}
             config={joditConfig}
             onBlur={handleEditorBlur}
           />
-          {selectedImageFileName !== '' ? (
-            <div ref={imageOptionPanelRef} className="cms-image-option-panel">
+          {selectedImageFileName !== '' && imageOptionOverlayPosition !== null && (
+            <div
+              ref={imageOptionPanelRef}
+              className="cms-image-option-panel cms-image-option-panel-overlay"
+              style={{
+                top: `${imageOptionOverlayPosition.top}px`,
+                left: `${imageOptionOverlayPosition.left}px`,
+                width: `${imageOptionOverlayPosition.width}px`,
+              }}
+              onPointerEnter={() => {
+                imageOptionPanelHoveredRef.current = true
+              }}
+              onPointerLeave={(event) => {
+                imageOptionPanelHoveredRef.current = false
+                if (activeImageSelectionRef.current.mode !== 'hover') {
+                  return
+                }
+
+                const relatedTarget = event.relatedTarget
+                if (relatedTarget instanceof HTMLElement) {
+                  if (
+                    isImageOptionPanelElement(relatedTarget)
+                    || getEditorImageTarget(relatedTarget) !== null
+                  ) {
+                    return
+                  }
+                }
+
+                clearActiveImageSelection()
+              }}
+            >
               <div className="cms-image-option-panel-head">
                 <strong>画像処理オプション</strong>
                 <span>{selectedImageFileName}</span>
@@ -1851,10 +2087,6 @@ export default function CmsArticleEditorPage({
               <p className="cms-image-option-help">
                 画像をクリックまたはタップすると、この画像だけの処理設定を変更できます。
               </p>
-            </div>
-          ) : (
-            <div className="cms-image-option-panel is-empty">
-              本文内の画像をクリックまたはタップすると、画像ごとの処理オプションを表示します。
             </div>
           )}
         </div>
