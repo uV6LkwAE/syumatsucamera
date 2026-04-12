@@ -214,6 +214,7 @@ class Article(models.Model):
         default=TwitterCardType.SUMMARY_LARGE_IMAGE,
         verbose_name="Twitter Card種別",
     )
+    is_profit = models.BooleanField(default=True, verbose_name="収益化")
     published_at = models.DateTimeField(
         null=True,
         blank=True,

@@ -204,6 +204,7 @@
 - 新着/人気/カテゴリ/タグ/タイトル検索/著者絞り込みは `GET /api/public/articles` のクエリで表現する
 - 記事詳細で Redis PV 加算を入れる
 - 記事詳細は `path`、`category.path`、`article_option`、`toc`、`ogp_by_url` を返す
+- 記事メタ情報には `is_profit` を含め、Cloudflare Worker が AdSense 注入可否を判定できるようにする
 
 ### Phase 7: contacts
 

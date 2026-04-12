@@ -68,6 +68,10 @@ function toStatusLabel(status: CmsArticleStatus): string {
   return '非公開'
 }
 
+function toProfitLabel(isProfit: boolean): string {
+  return isProfit ? '有効' : '無効'
+}
+
 function toImageJobStatusLabel(status: string): string {
   if (status === 'pending') {
     return '待機'
@@ -553,6 +557,7 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
                 <th>カテゴリ</th>
                 <th>執筆者</th>
                 <th>状態</th>
+                <th className="text-center cms-profit-column">収益化</th>
                 <th>画像処理</th>
                 <th>PV</th>
                 <th>更新日時</th>
@@ -562,7 +567,7 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
             <tbody>
               {articles.length === 0 ? (
                 <tr>
-                  <td className="cms-article-empty-cell" colSpan={8}>
+                  <td className="cms-article-empty-cell" colSpan={9}>
                     <div className="cms-article-empty-state">
                       <strong>表示できる記事はありません。</strong>
                       <span>条件を変えて再検索するか、新しい記事を作成してください。</span>
@@ -573,14 +578,30 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
                 articles.map((article) => (
                   <tr key={article.id}>
                     <td>
-                      <div className="cms-article-title-cell">
-                        <strong>{article.title}</strong>
-                        <span>{article.path}</span>
-                      </div>
+                      <Link className="cms-article-title-link" to={article.path}>
+                        <div className="cms-article-title-cell">
+                          <strong>{article.title}</strong>
+                          <span>{article.path}</span>
+                        </div>
+                      </Link>
                     </td>
                     <td>{article.category.name}</td>
                     <td>{article.author.display_name ?? '未設定'}</td>
                     <td>{toStatusLabel(article.status)}</td>
+                    <td className="text-center cms-profit-column">
+                      <span
+                        className={`cms-profit-icon${article.is_profit ? ' is-profit' : ' is-disabled'}`}
+                        aria-label={toProfitLabel(article.is_profit)}
+                        title={toProfitLabel(article.is_profit)}
+                      >
+                        <i
+                          className={`bi ${
+                            article.is_profit ? 'bi-currency-dollar' : 'bi-ban'
+                          }`}
+                          aria-hidden="true"
+                        />
+                      </span>
+                    </td>
                     <td>
                       <span className={`cms-job-badge is-${article.image_job_status}`}>
                         {toImageJobStatusLabel(article.image_job_status)}

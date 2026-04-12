@@ -640,6 +640,10 @@ class CategorySitemap(Sitemap):
   - `ARTICLE.twitter_card` カラムで保持する。
   - DBカラムは `summary_large_image` を default とし、not null で保持する。
   - 公開時の `<meta name="twitter:card">` は記事設定の値を使用する。
+- 収益化設定:
+  - `ARTICLE.is_profit` カラムで記事ごとの収益化可否を保持する。
+  - default は `true` とし、CMS編集画面で切り替えられるようにする。
+  - Cloudflare Worker はこの値を参照して AdSense の注入可否を決める。
 - 管理者は記事の公開,非公開を選択可能
 - 管理者は公開承認フローをスキップして直接公開できる。
 - ただし、画像処理ジョブが完了していない記事は公開できない（管理者も含む）。

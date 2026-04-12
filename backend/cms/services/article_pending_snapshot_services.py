@@ -28,6 +28,7 @@ class ArticlePendingSnapshotService:
         body_html: str,
         status: str,
         twitter_card: str,
+        is_profit: bool,
         tag_ids: list,
         option_ids: list,
         thumbnail_asset_id,
@@ -43,6 +44,7 @@ class ArticlePendingSnapshotService:
             "body_html": body_html,
             "status": status,
             "twitter_card": twitter_card,
+            "is_profit": is_profit,
             "tag_ids": [str(tag_id) for tag_id in tag_ids],
             "option_ids": [str(option_id) for option_id in option_ids],
             "thumbnail_asset_id": None if thumbnail_asset_id is None else str(thumbnail_asset_id),
@@ -98,6 +100,7 @@ class ArticlePendingSnapshotService:
         article.body_html = body_html
         article.status = snapshot["status"]
         article.twitter_card = snapshot["twitter_card"]
+        article.is_profit = snapshot.get("is_profit", article.is_profit)
         article.thumbnail_asset_id = None if thumbnail_asset_id is None else uuid.UUID(thumbnail_asset_id)
         article.option = option_ids
 
@@ -116,6 +119,7 @@ class ArticlePendingSnapshotService:
                 "body_html",
                 "status",
                 "twitter_card",
+                "is_profit",
                 "thumbnail_asset",
                 "option",
                 "published_at",

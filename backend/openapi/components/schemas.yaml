@@ -268,6 +268,7 @@ components:
         - summary
         - published_at
         - views_total
+        - is_profit
         - category
         - author
         - thumbnail_url
@@ -286,6 +287,8 @@ components:
           format: date-time
         views_total:
           type: integer
+        is_profit:
+          type: boolean
         thumbnail_url:
           type: string
           format: uri
@@ -297,6 +300,27 @@ components:
           $ref: "#/components/schemas/PublicAuthorSummary"
         article_option:
           $ref: "#/components/schemas/ArticleOption"
+    PublicArticleMeta:
+      type: object
+      required:
+        - title
+        - description
+        - canonical_url
+        - og_image_url
+        - is_profit
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        canonical_url:
+          type: string
+          format: uri
+        og_image_url:
+          type: string
+          format: uri
+        is_profit:
+          type: boolean
     PublicArticleList:
       type: object
       required:
@@ -630,6 +654,7 @@ components:
         - title
         - path
         - status
+        - is_profit
         - author
         - category
         - article_option
@@ -650,6 +675,8 @@ components:
             - draft
             - publish
             - private
+        is_profit:
+          type: boolean
         author:
           $ref: "#/components/schemas/UsersAuthorSummary"
         category:
@@ -920,6 +947,9 @@ components:
             - summary
             - summary_large_image
           default: summary_large_image
+        is_profit:
+          type: boolean
+          default: true
         article_option:
           $ref: "#/components/schemas/CmsArticleOptionRequest"
         image_diff:
@@ -947,6 +977,7 @@ components:
         - summary
         - body_html
         - status
+        - is_profit
         - views_total
         - thumbnail_asset_id
         - thumbnail_preview_path
@@ -985,6 +1016,8 @@ components:
             - draft
             - publish
             - private
+        is_profit:
+          type: boolean
         published_at:
           type: string
           format: date-time

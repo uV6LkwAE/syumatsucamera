@@ -206,6 +206,7 @@ class CmsArticleSummarySerializer(serializers.Serializer):
     title = serializers.CharField(read_only=True)
     path = serializers.CharField(read_only=True)
     status = serializers.ChoiceField(choices=ArticleStatus.choices, read_only=True)
+    is_profit = serializers.BooleanField(read_only=True)
     author = CmsAuthorSummarySerializer(read_only=True)
     category = serializers.SerializerMethodField()
     article_option = serializers.SerializerMethodField()
@@ -327,6 +328,7 @@ class CmsArticleUpsertRequestSerializer(serializers.Serializer):
         required=False,
         default=TwitterCardType.SUMMARY_LARGE_IMAGE,
     )
+    is_profit = serializers.BooleanField(required=False, default=True)
     article_option = ArticleOptionRequestSerializer()
     image_diff = MediaAssetImageDiffSerializer()
 
@@ -394,6 +396,7 @@ class CmsArticleSerializer(serializers.Serializer):
     summary = serializers.CharField(read_only=True)
     body_html = serializers.CharField(read_only=True)
     status = serializers.ChoiceField(choices=ArticleStatus.choices, read_only=True)
+    is_profit = serializers.BooleanField(read_only=True)
     published_at = serializers.DateTimeField(allow_null=True, read_only=True)
     views_total = serializers.IntegerField(read_only=True)
     thumbnail_asset_id = serializers.UUIDField(allow_null=True, read_only=True)

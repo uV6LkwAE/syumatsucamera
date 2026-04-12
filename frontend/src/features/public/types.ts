@@ -63,6 +63,7 @@ export type PublicArticleSummary = {
   summary: string
   published_at: string | null
   views_total: number
+  is_profit: boolean
   thumbnail_url: string
   path: string
   category: PublicCategorySummary
@@ -89,6 +90,14 @@ export type PublicArticleBody = PublicArticleSummary & {
   tags: PublicTagSummary[]
   toc: PublicTocNode[]
   ogp_by_url: Record<string, PublicOgpRecord>
+}
+
+export type PublicArticleMetaResponse = {
+  title: string
+  description: string
+  canonical_url: string
+  og_image_url: string
+  is_profit: boolean
 }
 
 export type PublicTocNode = {

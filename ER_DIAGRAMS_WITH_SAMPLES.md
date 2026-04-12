@@ -39,6 +39,7 @@ erDiagram
         text body_html "<html><body><p>本文サンプル</p></body></html>"
         string status "[draft, publish, private]"
         string twitter_card "[summary, summary_large_image]"
+        bool is_profit "true"
         timestamptz published_at "null"
         bigint views_total "0"
         uuid thumbnail_asset_id FK "0c1ac2d4-9f50-4ed8-8e6e-4d8250d25f24"
@@ -174,6 +175,8 @@ erDiagram
 - `article_publish_request.status` は列挙制約（例: `pending/approved/rejected`）
 - `article.status` は列挙制約（例: `draft/publish/private`）+ `DEFAULT 'draft'`
 - `article.twitter_card` は列挙制約（例: `summary/summary_large_image`）+ `DEFAULT 'summary_large_image'`
+- `article.is_profit` は記事単位の収益化可否を保持し、`DEFAULT true` を推奨する。
+- Cloudflare Worker は `article.is_profit` を参照して AdSense の注入可否を決める。
 - `article.image_job_status` は列挙制約（例: `pending/processing/completed/failed`）+ `DEFAULT 'pending'`
 - `article.title` / `article.slug` / `article.summary` / `article.body_html` は空文字禁止を推奨: `CHECK (char_length(btrim(col)) > 0)`
 - `article.views_total` は負数禁止を推奨: `CHECK (views_total >= 0)`

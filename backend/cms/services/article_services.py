@@ -190,6 +190,7 @@ class ArticleService:
             article.slug = next_slug
             article.summary = next_summary
             article.twitter_card = next_twitter_card
+            article.is_profit = payload.get("is_profit", True)
             article.body_html = payload["body_html"]
             article.status = payload["status"]
             article.option = selected_option_ids
@@ -249,6 +250,7 @@ class ArticleService:
                 body_html=payload["body_html"],
                 status=payload["status"],
                 twitter_card=next_twitter_card,
+                is_profit=payload.get("is_profit", True),
                 tag_ids=[tag.id for tag in tags],
                 option_ids=selected_option_ids,
                 thumbnail_asset_id=None if thumbnail_asset is None else thumbnail_asset.id,

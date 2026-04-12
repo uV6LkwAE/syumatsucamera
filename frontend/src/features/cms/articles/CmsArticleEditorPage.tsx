@@ -95,6 +95,7 @@ type ArticleFormState = {
   bodyHtml: string
   status: 'draft' | 'publish' | 'private'
   twitterCard: CmsTwitterCard
+  isProfit: boolean
   selectedOptionIds: string[]
   tagNames: string[]
 }
@@ -137,6 +138,7 @@ const DEFAULT_ARTICLE_FORM: ArticleFormState = {
   bodyHtml: '<p></p>',
   status: 'draft',
   twitterCard: 'summary_large_image',
+  isProfit: true,
   selectedOptionIds: [],
   tagNames: [],
 }
@@ -167,6 +169,7 @@ type ArticleEditorSnapshotInput = {
   bodyHtml: string
   status: 'draft' | 'publish' | 'private'
   twitterCard: CmsTwitterCard
+  isProfit: boolean
   selectedOptionIds: string[]
   tagNames: string[]
   thumbnailMode: 'keep_current' | 'use_default' | 'generate_from_title' | 'use_uploaded'
@@ -213,6 +216,7 @@ function buildArticleEditorSnapshotSignature(input: ArticleEditorSnapshotInput):
     thumbnailUploadFileName: input.thumbnailUploadFileName,
     title: input.title,
     twitterCard: input.twitterCard,
+    isProfit: input.isProfit,
     uploadedImageOptions: normalizedImageOptions,
     uploadedImageOriginalPaths: normalizedOriginalPaths,
   })
@@ -609,6 +613,7 @@ export default function CmsArticleEditorPage({
       bodyHtml: editorLiveBodyHtml,
       status: form.status,
       twitterCard: form.twitterCard,
+      isProfit: form.isProfit,
       selectedOptionIds: form.selectedOptionIds,
       tagNames: form.tagNames,
       thumbnailMode,
@@ -627,6 +632,7 @@ export default function CmsArticleEditorPage({
     form.tagNames,
     form.title,
     form.twitterCard,
+    form.isProfit,
     thumbnailMode,
     thumbnailUploadFileName,
     uploadedImageOriginalPaths,
@@ -801,6 +807,7 @@ export default function CmsArticleEditorPage({
             bodyHtml: normalizedBodyHtml,
             status: payload.article.status,
             twitterCard: payload.article.twitter_card,
+            isProfit: payload.article.is_profit,
             selectedOptionIds: payload.article.article_option.items.map((item) => item.id),
             tagNames: payload.article.tags.map((tag) => tag.name),
           })
@@ -822,6 +829,7 @@ export default function CmsArticleEditorPage({
             bodyHtml: normalizedBodyHtml,
             status: payload.article.status,
             twitterCard: payload.article.twitter_card,
+            isProfit: payload.article.is_profit,
             selectedOptionIds: payload.article.article_option.items.map((item) => item.id),
             tagNames: payload.article.tags.map((tag) => tag.name),
             thumbnailMode: thumbnailAsset === null ? 'use_default' : 'keep_current',
@@ -858,6 +866,7 @@ export default function CmsArticleEditorPage({
             bodyHtml: DEFAULT_ARTICLE_FORM.bodyHtml,
             status: DEFAULT_ARTICLE_FORM.status,
             twitterCard: DEFAULT_ARTICLE_FORM.twitterCard,
+            isProfit: DEFAULT_ARTICLE_FORM.isProfit,
             selectedOptionIds: DEFAULT_ARTICLE_FORM.selectedOptionIds,
             tagNames: DEFAULT_ARTICLE_FORM.tagNames,
             thumbnailMode: 'generate_from_title',
@@ -1819,6 +1828,7 @@ export default function CmsArticleEditorPage({
         summary: form.summary,
         body_html: currentBodyHtml,
         status: form.status,
+        is_profit: form.isProfit,
         tag_names: form.tagNames,
         twitter_card: form.twitterCard,
         article_option: {
@@ -1857,6 +1867,7 @@ export default function CmsArticleEditorPage({
         bodyHtml: currentBodyHtml,
         status: form.status,
         twitterCard: form.twitterCard,
+        isProfit: form.isProfit,
         selectedOptionIds: form.selectedOptionIds,
         tagNames: form.tagNames,
         thumbnailMode,
@@ -2422,6 +2433,32 @@ export default function CmsArticleEditorPage({
             )
           })}
         </fieldset>
+      </div>
+
+      <div className="console-card">
+        <CmsTabGuide
+          title="収益化"
+          helpLines={[
+            'AdSense を読み込むかどうかを指定します。',
+            '営利利用できない記事では無効にしてください。'
+          ]}
+          compact
+          showDivider={false}
+        />
+        <label className="cms-image-option-toggle">
+          <input
+            type="checkbox"
+            checked={form.isProfit}
+            onChange={(event) => {
+              setForm((prev) => ({
+                ...prev,
+                isProfit: event.target.checked,
+              }))
+            }}
+          />
+          <span className="cms-image-option-switch" />
+          <span>AdSense を有効にする</span>
+        </label>
       </div>
 
       <div className="console-card">

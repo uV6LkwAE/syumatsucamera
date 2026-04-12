@@ -125,6 +125,37 @@ paths:
             application/json:
               schema:
                 $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
+  /api/articles/{slug}/meta/:
+    get:
+      tags:
+        - public
+      summary: Cloudflare Worker向けの記事メタ情報を返す
+      description: |
+        認証: なし
+        権限: なし
+      operationId: getPublicArticleMeta
+      security: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 500
+          description: 記事slug
+      responses:
+        "200":
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/PublicArticleMeta"
+        "404":
+          description: 記事が存在しない
+          content:
+            application/json:
+              schema:
+                $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
   /api/public/sidebar:
     get:
       tags:

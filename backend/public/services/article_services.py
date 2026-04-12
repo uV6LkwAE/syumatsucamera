@@ -97,6 +97,7 @@ class PublicArticleService:
                 article=article,
                 site_origin=site_origin,
             ),
+            "is_profit": article.is_profit,
         }
 
     @staticmethod

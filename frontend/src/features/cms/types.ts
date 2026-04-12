@@ -77,6 +77,7 @@ export type CmsArticleSummary = {
   title: string
   path: string
   status: CmsArticleStatus
+  is_profit: boolean
   author: CmsAuthorSummary
   category: {
     id: string
@@ -120,6 +121,7 @@ export type CmsArticleDetail = {
   summary: string
   body_html: string
   status: CmsArticleStatus
+  is_profit: boolean
   published_at: string | null
   views_total: number
   thumbnail_asset_id: string | null

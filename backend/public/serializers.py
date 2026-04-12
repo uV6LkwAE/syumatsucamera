@@ -235,6 +235,7 @@ class PublicArticleSummarySerializer(serializers.Serializer):
     summary = serializers.CharField(read_only=True)
     published_at = serializers.DateTimeField(read_only=True)
     views_total = serializers.IntegerField(read_only=True)
+    is_profit = serializers.BooleanField(read_only=True)
     thumbnail_url = serializers.SerializerMethodField()
     path = serializers.CharField(read_only=True)
     category = PublicCategorySummarySerializer(read_only=True)
@@ -331,6 +332,7 @@ class PublicArticleMetaSerializer(serializers.Serializer):
     description = serializers.CharField(read_only=True)
     canonical_url = serializers.URLField(read_only=True)
     og_image_url = serializers.URLField(read_only=True)
+    is_profit = serializers.BooleanField(read_only=True)
 
 
 class PublicSiteConfigSerializer(serializers.Serializer):

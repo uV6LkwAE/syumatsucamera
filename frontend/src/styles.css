@@ -2103,6 +2103,21 @@ body {
   white-space: nowrap;
 }
 
+.cms-article-title-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.cms-article-title-link:hover {
+  color: inherit;
+}
+
+.cms-article-title-link:hover strong {
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+}
+
 .cms-article-title-cell {
   display: flex;
   flex-direction: column;
@@ -2142,6 +2157,27 @@ body {
 .cms-job-badge.is-failed {
   background: #ffe7e7;
   color: #b42318;
+}
+
+.cms-profit-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.cms-profit-icon.is-profit {
+  color: #1c7b45;
+}
+
+.cms-profit-icon.is-disabled {
+  color: #b04c18;
 }
 
 .cms-save-log-modal-backdrop {
