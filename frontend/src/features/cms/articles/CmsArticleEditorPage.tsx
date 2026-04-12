@@ -8,7 +8,12 @@ import {
   useState,
   type DragEvent as ReactDragEvent,
 } from 'react'
-import { useNavigate, useOutletContext, useParams } from 'react-router-dom'
+import {
+  useBeforeUnload,
+  useNavigate,
+  useOutletContext,
+  useParams,
+} from 'react-router-dom'
 import JoditEditor from 'jodit-react'
 import 'jodit/es2021/jodit.min.css'
 import { apiRequest, getStoredAccessJwt } from '../../../api/client'
@@ -133,6 +138,7 @@ const DEFAULT_ARTICLE_FORM: ArticleFormState = {
 }
 
 const SESSION_REFRESH_INTERVAL_MS = 120_000
+const UNSAVED_CHANGES_CONFIRM_MESSAGE = '変更が保存されていません。移動すると編集内容は失われます。'
 
 const TWITTER_CARD_OPTIONS: Array<{
   value: CmsTwitterCard
@@ -149,6 +155,64 @@ const TWITTER_CARD_OPTIONS: Array<{
 ]
 
 const articleEditorBootstrapCache = new Map<string, ArticleEditorBootstrapCacheEntry>()
+
+type ArticleEditorSnapshotInput = {
+  categoryId: string
+  title: string
+  summary: string
+  bodyHtml: string
+  status: 'draft' | 'publish' | 'private'
+  twitterCard: CmsTwitterCard
+  selectedOptionIds: string[]
+  tagNames: string[]
+  thumbnailMode: 'keep_current' | 'use_default' | 'generate_from_title' | 'use_uploaded'
+  thumbnailUploadFileName: string
+  uploadedImageOptions: Record<
+    string,
+    {
+      exif_watermark: boolean
+      site_logo_watermark: boolean
+    }
+  >
+  uploadedImageOriginalPaths: Record<string, string>
+  currentThumbnailAssetId: string
+}
+
+function buildArticleEditorSnapshotSignature(input: ArticleEditorSnapshotInput): string {
+  // 記事編集画面の未保存判定用シグネチャを生成する。
+  const normalizedImageOptions = Object.entries(input.uploadedImageOptions)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([fileName, options]) => [
+      fileName,
+      {
+        exif_watermark: Boolean(options.exif_watermark),
+        site_logo_watermark: Boolean(options.site_logo_watermark),
+      },
+    ])
+
+  const normalizedOriginalPaths = Object.entries(input.uploadedImageOriginalPaths)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([fileName, originalFilePath]) => [
+      fileName,
+      originalFilePath.trim(),
+    ])
+
+  return JSON.stringify({
+    bodyHtml: input.bodyHtml,
+    categoryId: input.categoryId,
+    currentThumbnailAssetId: input.currentThumbnailAssetId,
+    selectedOptionIds: [...input.selectedOptionIds],
+    status: input.status,
+    summary: input.summary,
+    tagNames: [...input.tagNames],
+    thumbnailMode: input.thumbnailMode,
+    thumbnailUploadFileName: input.thumbnailUploadFileName,
+    title: input.title,
+    twitterCard: input.twitterCard,
+    uploadedImageOptions: normalizedImageOptions,
+    uploadedImageOriginalPaths: normalizedOriginalPaths,
+  })
+}
 
 function buildArticleEditorBootstrapKey(isCreate: boolean, articleId: string | undefined): string {
   if (isCreate) {
@@ -466,6 +530,7 @@ export default function CmsArticleEditorPage({
   // jodit-react は value 変更のたびに内部の jodit.value を再同期するため、
   // 編集中の本文と保存用 state を分離してスクロール位置の巻き戻りを防ぐ。
   const [editorBodyHtml, setEditorBodyHtml] = useState(DEFAULT_ARTICLE_FORM.bodyHtml)
+  const [editorLiveBodyHtml, setEditorLiveBodyHtml] = useState(DEFAULT_ARTICLE_FORM.bodyHtml)
   const [uploadedImageOptions, setUploadedImageOptions] = useState<Record<string, ImageProcessingOptions>>({})
   const [uploadedImageOriginalPaths, setUploadedImageOriginalPaths] = useState<Record<string, string>>({})
   const uploadedImageOriginalPathsRef = useRef<Record<string, string>>({})
@@ -483,6 +548,9 @@ export default function CmsArticleEditorPage({
   const [tagSuggestionLoading, setTagSuggestionLoading] = useState(false)
   const [tagSuggestionError, setTagSuggestionError] = useState('')
   const [showTagSuggestions, setShowTagSuggestions] = useState(false)
+  const initialEditorSnapshotRef = useRef('')
+  const initialEditorSnapshotInitializedRef = useRef(false)
+  const unsavedChangesRef = useRef(false)
 
   const statusOptions = toStatusOptions(sessionUser?.role, form.status)
   function resolveCurrentImageOriginalFilePath(fileName: string): string {
@@ -506,8 +574,157 @@ export default function CmsArticleEditorPage({
     editorInstanceRef.current = instance
   }, [])
   const handleEditorBlur = useCallback((nextContent: string) => {
+    setEditorLiveBodyHtml(nextContent)
     setForm((prev) => ({ ...prev, bodyHtml: nextContent }))
   }, [])
+
+  const currentEditorSnapshotSignature = useMemo(() => {
+    return buildArticleEditorSnapshotSignature({
+      categoryId: form.categoryId,
+      title: form.title,
+      summary: form.summary,
+      bodyHtml: editorLiveBodyHtml,
+      status: form.status,
+      twitterCard: form.twitterCard,
+      selectedOptionIds: form.selectedOptionIds,
+      tagNames: form.tagNames,
+      thumbnailMode,
+      thumbnailUploadFileName,
+      uploadedImageOptions,
+      uploadedImageOriginalPaths,
+      currentThumbnailAssetId: currentThumbnailAsset?.id ?? '',
+    })
+  }, [
+    currentThumbnailAsset?.id,
+    editorLiveBodyHtml,
+    form.categoryId,
+    form.selectedOptionIds,
+    form.status,
+    form.summary,
+    form.tagNames,
+    form.title,
+    form.twitterCard,
+    thumbnailMode,
+    thumbnailUploadFileName,
+    uploadedImageOriginalPaths,
+    uploadedImageOptions,
+  ])
+
+  const hasUnsavedChanges = (
+    initialEditorSnapshotInitializedRef.current
+    && currentEditorSnapshotSignature !== initialEditorSnapshotRef.current
+  )
+
+  useLayoutEffect(() => {
+    unsavedChangesRef.current = hasUnsavedChanges
+  }, [hasUnsavedChanges])
+
+  useEffect(() => {
+    const historyObject = window.history as typeof window.history & {
+      pushState: typeof window.history.pushState
+      replaceState: typeof window.history.replaceState
+    }
+    const originalPushState = historyObject.pushState.bind(historyObject)
+    const originalReplaceState = historyObject.replaceState.bind(historyObject)
+
+    const getLocationSignature = (): string => (
+      `${window.location.pathname}${window.location.search}${window.location.hash}`
+    )
+    const getHistoryIndex = (): number => {
+      const state = historyObject.state as { idx?: number } | null
+      return typeof state?.idx === 'number' ? state.idx : 0
+    }
+    const shouldBlockNavigation = (nextUrl: string | URL | null | undefined): boolean => {
+      if (!unsavedChangesRef.current) {
+        return false
+      }
+      if (nextUrl === null || nextUrl === undefined) {
+        return false
+      }
+
+      try {
+        const nextSignature = new URL(String(nextUrl), window.location.href)
+        return `${nextSignature.pathname}${nextSignature.search}${nextSignature.hash}` !== getLocationSignature()
+      } catch {
+        return true
+      }
+    }
+
+    historyObject.pushState = function pushState(
+      data: unknown,
+      unused: string,
+      url?: string | URL | null,
+    ): void {
+      if (shouldBlockNavigation(url) && !window.confirm(UNSAVED_CHANGES_CONFIRM_MESSAGE)) {
+        return
+      }
+
+      originalPushState(data, unused, url)
+    }
+
+    historyObject.replaceState = function replaceState(
+      data: unknown,
+      unused: string,
+      url?: string | URL | null,
+    ): void {
+      if (shouldBlockNavigation(url) && !window.confirm(UNSAVED_CHANGES_CONFIRM_MESSAGE)) {
+        return
+      }
+
+      originalReplaceState(data, unused, url)
+    }
+
+    const historyIndexRef = {
+      current: getHistoryIndex(),
+    }
+    const ignoreNextPopStateRef = {
+      current: false,
+    }
+
+    function handlePopState(): void {
+      const nextIndex = getHistoryIndex()
+      const previousIndex = historyIndexRef.current
+
+      if (ignoreNextPopStateRef.current) {
+        ignoreNextPopStateRef.current = false
+        historyIndexRef.current = nextIndex
+        return
+      }
+
+      if (!unsavedChangesRef.current || nextIndex === previousIndex) {
+        historyIndexRef.current = nextIndex
+        return
+      }
+
+      if (window.confirm(UNSAVED_CHANGES_CONFIRM_MESSAGE)) {
+        historyIndexRef.current = nextIndex
+        return
+      }
+
+      ignoreNextPopStateRef.current = true
+      window.history.go(previousIndex > nextIndex ? 1 : -1)
+    }
+
+    window.addEventListener('popstate', handlePopState)
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState)
+      historyObject.pushState = originalPushState
+      historyObject.replaceState = originalReplaceState
+    }
+  }, [])
+
+  useBeforeUnload(
+    (event) => {
+      if (!unsavedChangesRef.current) {
+        return
+      }
+
+      event.preventDefault()
+      event.returnValue = ''
+    },
+    { capture: true },
+  )
 
   useEffect(() => {
     let active = true
@@ -533,6 +750,7 @@ export default function CmsArticleEditorPage({
 
         if (payload.article !== null) {
           const thumbnailAsset = findCurrentThumbnail(payload.article.media_assets)
+          const normalizedBodyHtml = normalizeStoredArticleHtml(payload.article.body_html)
           const assetOptionMap = payload.article.media_assets.reduce<Record<string, ImageProcessingOptions>>(
             (nextMap, asset) => {
               nextMap[asset.file_name] = asset.processing_options
@@ -551,12 +769,13 @@ export default function CmsArticleEditorPage({
           setArticle(payload.article)
           setInitialMediaAssets(payload.article.media_assets)
           setCurrentThumbnailAsset(thumbnailAsset)
-          setEditorBodyHtml(normalizeStoredArticleHtml(payload.article.body_html))
+          setEditorBodyHtml(normalizedBodyHtml)
+          setEditorLiveBodyHtml(normalizedBodyHtml)
           setForm({
             categoryId: payload.article.category_id,
             title: payload.article.title,
             summary: payload.article.summary,
-            bodyHtml: normalizeStoredArticleHtml(payload.article.body_html),
+            bodyHtml: normalizedBodyHtml,
             status: payload.article.status,
             twitterCard: payload.article.twitter_card,
             selectedOptionIds: payload.article.article_option.items.map((item) => item.id),
@@ -573,11 +792,29 @@ export default function CmsArticleEditorPage({
           setShowTagSuggestions(false)
           setSelectedImageFileName('')
           setSelectedImageSource('')
+          initialEditorSnapshotRef.current = buildArticleEditorSnapshotSignature({
+            categoryId: payload.article.category_id,
+            title: payload.article.title,
+            summary: payload.article.summary,
+            bodyHtml: normalizedBodyHtml,
+            status: payload.article.status,
+            twitterCard: payload.article.twitter_card,
+            selectedOptionIds: payload.article.article_option.items.map((item) => item.id),
+            tagNames: payload.article.tags.map((tag) => tag.name),
+            thumbnailMode: thumbnailAsset === null ? 'use_default' : 'keep_current',
+            thumbnailUploadFileName: '',
+            uploadedImageOptions: assetOptionMap,
+            uploadedImageOriginalPaths: assetOriginalPathMap,
+            currentThumbnailAssetId: thumbnailAsset?.id ?? '',
+          })
+          initialEditorSnapshotInitializedRef.current = true
+          unsavedChangesRef.current = false
         } else {
           setArticle(null)
           setInitialMediaAssets([])
           setCurrentThumbnailAsset(null)
           setEditorBodyHtml(DEFAULT_ARTICLE_FORM.bodyHtml)
+          setEditorLiveBodyHtml(DEFAULT_ARTICLE_FORM.bodyHtml)
           setForm(DEFAULT_ARTICLE_FORM)
           setUploadedImageOptions({})
           setUploadedImageOriginalPaths({})
@@ -591,6 +828,23 @@ export default function CmsArticleEditorPage({
           setShowTagSuggestions(false)
           setSelectedImageFileName('')
           setSelectedImageSource('')
+          initialEditorSnapshotRef.current = buildArticleEditorSnapshotSignature({
+            categoryId: DEFAULT_ARTICLE_FORM.categoryId,
+            title: DEFAULT_ARTICLE_FORM.title,
+            summary: DEFAULT_ARTICLE_FORM.summary,
+            bodyHtml: DEFAULT_ARTICLE_FORM.bodyHtml,
+            status: DEFAULT_ARTICLE_FORM.status,
+            twitterCard: DEFAULT_ARTICLE_FORM.twitterCard,
+            selectedOptionIds: DEFAULT_ARTICLE_FORM.selectedOptionIds,
+            tagNames: DEFAULT_ARTICLE_FORM.tagNames,
+            thumbnailMode: 'generate_from_title',
+            thumbnailUploadFileName: '',
+            uploadedImageOptions: {},
+            uploadedImageOriginalPaths: {},
+            currentThumbnailAssetId: '',
+          })
+          initialEditorSnapshotInitializedRef.current = true
+          unsavedChangesRef.current = false
         }
       } catch (error) {
         if (active) {
@@ -751,7 +1005,7 @@ export default function CmsArticleEditorPage({
   }
 
   function getCurrentEditorHtml(): string {
-    return editorInstanceRef.current?.value ?? form.bodyHtml
+    return editorInstanceRef.current?.value ?? editorLiveBodyHtml
   }
 
   function isImageOptionPanelElement(target: EventTarget | null): boolean {
@@ -1010,6 +1264,7 @@ export default function CmsArticleEditorPage({
 
     editor?.e?.fire?.('synchro')
     const nextBodyHtml = editor?.value ?? getEditorElement()?.innerHTML ?? form.bodyHtml
+    setEditorLiveBodyHtml(nextBodyHtml)
     setForm((prev) => ({
       ...prev,
       bodyHtml: nextBodyHtml,
@@ -1374,6 +1629,7 @@ export default function CmsArticleEditorPage({
       editorInstanceRef.current.value = nextBodyHtml
     }
 
+    setEditorLiveBodyHtml(nextBodyHtml)
     setForm((prev) => ({
       ...prev,
       bodyHtml: nextBodyHtml,
@@ -1508,6 +1764,23 @@ export default function CmsArticleEditorPage({
         body: payload,
       })
 
+      initialEditorSnapshotRef.current = buildArticleEditorSnapshotSignature({
+        categoryId: form.categoryId,
+        title: form.title,
+        summary: form.summary,
+        bodyHtml: currentBodyHtml,
+        status: form.status,
+        twitterCard: form.twitterCard,
+        selectedOptionIds: form.selectedOptionIds,
+        tagNames: form.tagNames,
+        thumbnailMode,
+        thumbnailUploadFileName,
+        uploadedImageOptions,
+        uploadedImageOriginalPaths,
+        currentThumbnailAssetId: currentThumbnailAsset?.id ?? '',
+      })
+      initialEditorSnapshotInitializedRef.current = true
+      unsavedChangesRef.current = false
       releaseSessionOnLeaveRef.current = false
       navigate('/cms/console/articles', {
         replace: true,
@@ -2092,6 +2365,9 @@ export default function CmsArticleEditorPage({
             value={editorBodyHtml}
             editorRef={handleEditorRef}
             config={joditConfig}
+            onChange={(nextContent) => {
+              setEditorLiveBodyHtml(nextContent)
+            }}
             onBlur={handleEditorBlur}
           />
           {selectedImageFileName !== '' && imageOptionOverlayPosition !== null && (
