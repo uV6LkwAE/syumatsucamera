@@ -23,10 +23,12 @@ from cms.models import (
 
 logger = logging.getLogger(__name__)
 
-IMAGE_EXTENSIONS = {"jpg", "jpeg", "gif"}
+IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "gif"}
+THUMBNAIL_IMAGE_EXTENSIONS = {"jpg", "jpeg"}
 IMAGE_FORMATS_BY_EXTENSION = {
     "jpg": {"JPEG", "MPO"},
     "jpeg": {"JPEG", "MPO"},
+    "png": {"PNG"},
     "gif": {"GIF"},
 }
 
@@ -87,7 +89,7 @@ class MediaService:
         allowed_formats = IMAGE_FORMATS_BY_EXTENSION.get(extension)
         if allowed_formats is None:
             raise ValidationError(
-                {"file": ["対応していない画像形式です。jpg/jpeg/gif を使用してください。"]}
+                {"file": ["対応していない画像形式です。jpg/jpeg/png/gif を使用してください。"]}
             )
 
         try:
@@ -100,7 +102,7 @@ class MediaService:
             uploaded_file.seek(0)
         if image_format not in allowed_formats:
             raise ValidationError(
-                {"file": ["対応していない画像形式です。jpg/jpeg/gif を使用してください。"]}
+                {"file": ["対応していない画像形式です。jpg/jpeg/png/gif を使用してください。"]}
             )
 
     @staticmethod
@@ -117,8 +119,19 @@ class MediaService:
             raise ValidationError({"file_name": ["ファイル名のUUIDが不正です。"]}) from exc
         if ext.lower() not in IMAGE_EXTENSIONS:
             raise ValidationError(
-                {"file_name": ["対応していない画像拡張子です。jpg/jpeg/gif を使用してください。"]}
+                {"file_name": ["対応していない画像拡張子です。jpg/jpeg/png/gif を使用してください。"]}
             )
+
+    @staticmethod
+    def validate_thumbnail_source_file_name(*, file_name: str) -> None:
+        """
+        サムネイル用の元画像ファイル名を検証する。
+        """
+        if "." not in file_name:
+            raise ValidationError({"file_name": ["サムネイル画像は jpg/jpeg のみを使用してください。"]})
+        extension = file_name.rsplit(".", 1)[1].lower()
+        if extension not in THUMBNAIL_IMAGE_EXTENSIONS:
+            raise ValidationError({"file_name": ["サムネイル画像は jpg/jpeg のみを使用してください。"]})
 
     @staticmethod
     def save_temp_upload(*, lock_token: str, uploaded_file) -> dict:
@@ -188,6 +201,7 @@ class MediaService:
         thumbnail_file_name = thumbnail_request.get("file_name")
         if thumbnail_file_name:
             MediaService.validate_temp_file_name(file_name=thumbnail_file_name)
+            MediaService.validate_thumbnail_source_file_name(file_name=thumbnail_file_name)
             if not MediaService.temp_file_path(
                 lock_token=lock_token,
                 file_name=thumbnail_file_name,
@@ -253,6 +267,12 @@ class MediaService:
             return None
         if thumbnail_request["mode"] == "keep_current":
             return article.thumbnail_asset
+
+        if thumbnail_request["mode"] == "use_uploaded":
+            requested_file_name = thumbnail_request.get("file_name")
+            if not requested_file_name:
+                raise ValidationError({"file_name": ["サムネイル画像ファイル名が不足しています。"]})
+            MediaService.validate_thumbnail_source_file_name(file_name=requested_file_name)
 
         suffix = ".png"
         requested_file_name = thumbnail_request.get("file_name")
@@ -1247,22 +1267,37 @@ class MediaService:
         """
         width, height = working_image.size
 
-        if extension not in {"jpg", "jpeg"}:
-            raise RuntimeError(f"対応していない公開画像形式です: {extension}")
+        if extension in {"jpg", "jpeg"}:
+            public_raw = MediaService._encode_public_image(
+                working_image=working_image,
+                extension=extension,
+                quality=settings.CMS_ARTICLE_IMAGE_QUALITY_HIGH,
+            )
+            if len(public_raw) <= settings.CMS_ARTICLE_IMAGE_PUBLIC_MAX_BYTES:
+                return public_raw, width, height
 
-        public_raw = MediaService._encode_public_image(
-            working_image=working_image,
-            extension=extension,
-            quality=settings.CMS_ARTICLE_IMAGE_QUALITY_HIGH,
-        )
-        if len(public_raw) <= settings.CMS_ARTICLE_IMAGE_PUBLIC_MAX_BYTES:
+            public_raw = MediaService._encode_public_image_at_target_size(
+                working_image=working_image,
+                extension=extension,
+            )
             return public_raw, width, height
 
-        public_raw = MediaService._encode_public_image_at_target_size(
-            working_image=working_image,
-            extension=extension,
-        )
-        return public_raw, width, height
+        if extension == "png":
+            public_raw = MediaService._encode_public_image(
+                working_image=working_image,
+                extension=extension,
+                quality=None,
+            )
+            if len(public_raw) > settings.CMS_ARTICLE_IMAGE_PUBLIC_MAX_BYTES:
+                logger.log(
+                    logging.WARNING,
+                    "PNG画像は品質調整できないためそのまま保存します: bytes=%s limit=%s",
+                    len(public_raw),
+                    settings.CMS_ARTICLE_IMAGE_PUBLIC_MAX_BYTES,
+                )
+            return public_raw, width, height
+
+        raise RuntimeError(f"対応していない公開画像形式です: {extension}")
 
     @staticmethod
     def _encode_public_image(
@@ -1289,6 +1324,16 @@ class MediaService:
                 optimize=True,
                 progressive=True,
             )
+        elif extension == "png":
+            export_image = MediaService._build_metadata_free_png_image(
+                working_image=working_image,
+            )
+            export_image.save(
+                buffer,
+                format="PNG",
+                optimize=True,
+                compress_level=9,
+            )
         else:
             raise RuntimeError(f"対応していない公開画像形式です: {extension}")
 
@@ -1302,6 +1347,16 @@ class MediaService:
         rgb_image = working_image.convert("RGB")
         export_image = Image.new("RGB", rgb_image.size)
         export_image.paste(rgb_image)
+        return export_image
+
+    @staticmethod
+    def _build_metadata_free_png_image(*, working_image: Image.Image) -> Image.Image:
+        """
+        公開用PNGのためにメタデータを持たない画像へ変換する。
+        """
+        rgba_image = working_image.convert("RGBA")
+        export_image = Image.new("RGBA", rgba_image.size)
+        export_image.paste(rgba_image)
         return export_image
 
     @staticmethod

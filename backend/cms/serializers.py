@@ -276,6 +276,8 @@ class MediaAssetThumbnailRequestSerializer(serializers.Serializer):
         """
         if attrs["mode"] == "use_uploaded" and not attrs.get("file_name"):
             raise serializers.ValidationError({"file_name": ["use_uploaded では file_name が必須です。"]})
+        if attrs["mode"] == "use_uploaded":
+            MediaService.validate_thumbnail_source_file_name(file_name=str(attrs["file_name"]))
         if attrs["mode"] == "generate_from_title" and not attrs.get("title_text", "").strip():
             raise serializers.ValidationError(
                 {"title_text": ["generate_from_title では title_text が必須です。"]}

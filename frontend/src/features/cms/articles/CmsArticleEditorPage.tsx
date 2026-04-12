@@ -117,9 +117,12 @@ const ARTICLE_TAG_MAX_LENGTH = 100
 const ARTICLE_TAG_MAX_COUNT = 5
 const ARTICLE_TAG_SUGGESTION_LIMIT = 8
 const ARTICLE_TAG_SUGGESTION_DEBOUNCE_MS = 180
-const ARTICLE_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'gif'] as const
-const ARTICLE_IMAGE_ACCEPT = 'image/jpeg,image/gif'
-const ARTICLE_IMAGE_ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/gif'])
+const ARTICLE_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif'] as const
+const ARTICLE_IMAGE_ACCEPT = 'image/jpeg,image/png,image/gif'
+const ARTICLE_IMAGE_ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif'])
+const THUMBNAIL_IMAGE_EXTENSIONS = ['jpg', 'jpeg'] as const
+const THUMBNAIL_IMAGE_ACCEPT = 'image/jpeg'
+const THUMBNAIL_IMAGE_ALLOWED_MIME_TYPES = new Set(['image/jpeg'])
 
 const DEFAULT_IMAGE_OPTIONS: ImageProcessingOptions = {
   exif_watermark: false,
@@ -343,6 +346,9 @@ function resolveFileExtension(name: string, mimeType: string): string {
   if (mimeType === 'image/jpeg') {
     return 'jpg'
   }
+  if (mimeType === 'image/png') {
+    return 'png'
+  }
   if (mimeType === 'image/gif') {
     return 'gif'
   }
@@ -352,13 +358,25 @@ function resolveFileExtension(name: string, mimeType: string): string {
   return 'jpg'
 }
 
-function isAllowedArticleImageFile(file: File): boolean {
+function isAllowedImageFile(
+  file: File,
+  allowedExtensions: readonly string[],
+  allowedMimeTypes: Set<string>,
+): boolean {
   if (file.type !== '') {
-    return ARTICLE_IMAGE_ALLOWED_MIME_TYPES.has(file.type)
+    return allowedMimeTypes.has(file.type)
   }
 
   const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
-  return ARTICLE_IMAGE_EXTENSIONS.some((allowedExtension) => allowedExtension === extension)
+  return allowedExtensions.some((allowedExtension) => allowedExtension === extension)
+}
+
+function isAllowedArticleImageFile(file: File): boolean {
+  return isAllowedImageFile(file, ARTICLE_IMAGE_EXTENSIONS, ARTICLE_IMAGE_ALLOWED_MIME_TYPES)
+}
+
+function isAllowedThumbnailImageFile(file: File): boolean {
+  return isAllowedImageFile(file, THUMBNAIL_IMAGE_EXTENSIONS, THUMBNAIL_IMAGE_ALLOWED_MIME_TYPES)
 }
 
 function renameFileWithUuid(file: File): File {
@@ -487,12 +505,15 @@ export default function CmsArticleEditorPage({
   const { sessionUser } = useOutletContext<CmsOutletContext>()
   const isCreate = articleId === undefined
   const tagInputId = useId()
+  const thumbnailUploadInputId = useId()
 
   const releaseSessionOnLeaveRef = useRef(true)
   const sessionRefreshTimerRef = useRef<number | null>(null)
   const lockTokenRef = useRef('')
   const bootstrapCacheKeyRef = useRef('')
   const tagInputRef = useRef<HTMLInputElement | null>(null)
+  const thumbnailUploadInputRef = useRef<HTMLInputElement | null>(null)
+  const thumbnailUploadDragCounterRef = useRef(0)
   const editorShellRef = useRef<HTMLDivElement | null>(null)
   const imageOptionPanelRef = useRef<HTMLDivElement | null>(null)
   const editorInstanceRef = useRef<JoditEditorInstance | null>(null)
@@ -543,6 +564,7 @@ export default function CmsArticleEditorPage({
   const [thumbnailUploadFileName, setThumbnailUploadFileName] = useState('')
   const [defaultThumbnailPreviewPath, setDefaultThumbnailPreviewPath] = useState('')
   const [thumbnailPreviewPath, setThumbnailPreviewPath] = useState('')
+  const [thumbnailUploadDragActive, setThumbnailUploadDragActive] = useState(false)
   const [tagDraft, setTagDraft] = useState('')
   const [tagSuggestions, setTagSuggestions] = useState<CmsTagSuggestion[]>([])
   const [tagSuggestionLoading, setTagSuggestionLoading] = useState(false)
@@ -957,12 +979,16 @@ export default function CmsArticleEditorPage({
     }
   }, [tagDraft, form.tagNames])
 
-  async function uploadTempImage(file: File): Promise<CmsImageUploadResponse> {
+  async function uploadTempImage(
+    file: File,
+    isAllowedImage: (candidate: File) => boolean,
+    errorMessage: string,
+  ): Promise<CmsImageUploadResponse> {
     if (lockToken === '') {
       throw new Error('編集中セッションが確立されていません。')
     }
-    if (!isAllowedArticleImageFile(file)) {
-      throw new Error('アップロードできる画像形式は jpg/jpeg/gif のみです。')
+    if (!isAllowedImage(file)) {
+      throw new Error(errorMessage)
     }
 
     const formData = new FormData()
@@ -975,11 +1001,62 @@ export default function CmsArticleEditorPage({
     })
   }
 
+  async function handleThumbnailUploadFile(file: File | null): Promise<void> {
+    if (file === null) {
+      return
+    }
+    const uploaded = await uploadTempImage(
+      file,
+      isAllowedThumbnailImageFile,
+      'アップロードできる画像形式は jpg/jpeg のみです。',
+    )
+    setThumbnailUploadFileName(uploaded.file_name)
+    setThumbnailPreviewPath(uploaded.path)
+  }
+
+  function resetThumbnailUploadDragState(): void {
+    thumbnailUploadDragCounterRef.current = 0
+    setThumbnailUploadDragActive(false)
+  }
+
+  function handleThumbnailUploadDragEnter(event: ReactDragEvent<HTMLLabelElement>): void {
+    event.preventDefault()
+    event.stopPropagation()
+    thumbnailUploadDragCounterRef.current += 1
+    setThumbnailUploadDragActive(true)
+  }
+
+  function handleThumbnailUploadDragLeave(event: ReactDragEvent<HTMLLabelElement>): void {
+    event.preventDefault()
+    event.stopPropagation()
+    thumbnailUploadDragCounterRef.current = Math.max(0, thumbnailUploadDragCounterRef.current - 1)
+    if (thumbnailUploadDragCounterRef.current === 0) {
+      setThumbnailUploadDragActive(false)
+    }
+  }
+
+  function handleThumbnailUploadDragOver(event: ReactDragEvent<HTMLLabelElement>): void {
+    event.preventDefault()
+    event.stopPropagation()
+    event.dataTransfer.dropEffect = 'copy'
+  }
+
+  function handleThumbnailUploadDrop(event: ReactDragEvent<HTMLLabelElement>): void {
+    event.preventDefault()
+    event.stopPropagation()
+    resetThumbnailUploadDragState()
+
+    const file = event.dataTransfer.files?.[0] ?? null
+    void handleThumbnailUploadFile(file).catch((error) => {
+      setErrorMessage(toApiMessage(error))
+    })
+  }
+
   async function buildThumbnailRequest(): Promise<Record<string, string>> {
     if (thumbnailMode === 'use_uploaded') {
       if (thumbnailUploadFileName.trim() === '') {
-        throw new Error('サムネイル画像をアップロードしてください。')
-      }
+      throw new Error('サムネイル画像をアップロードしてください。')
+    }
       return {
         mode: 'use_uploaded',
         file_name: thumbnailUploadFileName,
@@ -1381,12 +1458,16 @@ export default function CmsArticleEditorPage({
 
   async function uploadArticleImages(files: File[]): Promise<string[]> {
     if (files.some((file) => !isAllowedArticleImageFile(file))) {
-      throw new Error('アップロードできる画像形式は jpg/jpeg/gif のみです。')
+      throw new Error('アップロードできる画像形式は jpg/jpeg/png/gif のみです。')
     }
 
     const uploadedPaths: string[] = []
     for (const file of files) {
-      const uploaded = await uploadTempImage(file)
+      const uploaded = await uploadTempImage(
+        file,
+        isAllowedArticleImageFile,
+        'アップロードできる画像形式は jpg/jpeg/png/gif のみです。',
+      )
       uploadedPaths.push(uploaded.path)
       setUploadedImageOptions((prev) => ({
         ...prev,
@@ -1617,7 +1698,11 @@ export default function CmsArticleEditorPage({
         lastModified: Date.now(),
       },
     )
-    const uploaded = await uploadTempImage(tempFile)
+    const uploaded = await uploadTempImage(
+      tempFile,
+      isAllowedArticleImageFile,
+      'アップロードできる画像形式は jpg/jpeg/png/gif のみです。',
+    )
     const currentBodyHtml = getCurrentEditorHtml()
     const nextBodyHtml = replaceImageSourceInHtml(
       currentBodyHtml,
@@ -1923,16 +2008,28 @@ export default function CmsArticleEditorPage({
     if (nextMode === 'use_default') {
       setThumbnailPreviewPath(defaultThumbnailPreviewPath)
       setThumbnailUploadFileName('')
+      resetThumbnailUploadDragState()
+      if (thumbnailUploadInputRef.current !== null) {
+        thumbnailUploadInputRef.current.value = ''
+      }
       return
     }
     if (nextMode === 'keep_current') {
       setThumbnailPreviewPath(currentThumbnailAsset?.public_path ?? article?.thumbnail_preview_path ?? '')
       setThumbnailUploadFileName('')
+      resetThumbnailUploadDragState()
+      if (thumbnailUploadInputRef.current !== null) {
+        thumbnailUploadInputRef.current.value = ''
+      }
       return
     }
     setThumbnailPreviewPath('')
+    resetThumbnailUploadDragState()
     if (nextMode !== 'use_uploaded') {
       setThumbnailUploadFileName('')
+      if (thumbnailUploadInputRef.current !== null) {
+        thumbnailUploadInputRef.current.value = ''
+      }
     }
   }
 
@@ -1990,10 +2087,11 @@ export default function CmsArticleEditorPage({
           required
         />
         <div className="console-form-grid row g-3 cms-thumbnail-grid">
-          <label className="console-label col-12 col-lg-6">
+          <label className="console-label col-12">
             モード
             <ConsoleDropdown
               value={thumbnailMode}
+              fullWidth
               options={[
                 ...(!isCreate && currentThumbnailAsset !== null
                   ? [{ value: 'keep_current' as const, label: '現在のサムネイルを維持' }]
@@ -2007,36 +2105,74 @@ export default function CmsArticleEditorPage({
           </label>
 
           {thumbnailMode === 'use_uploaded' && (
-            <label className="console-label col-12 col-lg-6">
-              サムネイル画像
-              <input
-                className="console-input form-control"
-                type="file"
-                accept={ARTICLE_IMAGE_ACCEPT}
-                onChange={(event) => {
-                  const file = event.target.files?.[0] ?? null
-                  if (file === null) {
-                    return
-                  }
-                  void uploadTempImage(file)
-                    .then((payload) => {
-                      setThumbnailUploadFileName(payload.file_name)
-                      setThumbnailPreviewPath(payload.path)
-                    })
-                    .catch((error) => {
-                      setErrorMessage(toApiMessage(error))
-                    })
-                }}
-              />
-            </label>
+            <div className="col-12">
+              <label
+                className={`cms-thumbnail-upload-dropzone${
+                  thumbnailUploadDragActive ? ' is-drag-active' : ''
+                }${thumbnailPreviewPath !== '' ? ' has-preview' : ''}`}
+                htmlFor={thumbnailUploadInputId}
+                onDragEnter={handleThumbnailUploadDragEnter}
+                onDragLeave={handleThumbnailUploadDragLeave}
+                onDragOver={handleThumbnailUploadDragOver}
+                onDrop={handleThumbnailUploadDrop}
+              >
+                <input
+                  id={thumbnailUploadInputId}
+                  ref={thumbnailUploadInputRef}
+                  className="visually-hidden"
+                  type="file"
+                  accept={THUMBNAIL_IMAGE_ACCEPT}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] ?? null
+                    void handleThumbnailUploadFile(file)
+                      .catch((error) => {
+                        setErrorMessage(toApiMessage(error))
+                      })
+                      .finally(() => {
+                        event.target.value = ''
+                      })
+                  }}
+                />
+                {thumbnailPreviewPath !== '' ? (
+                  <>
+                    <img
+                      className="cms-thumbnail-upload-preview"
+                      src={thumbnailPreviewPath}
+                      alt="thumbnail upload preview"
+                    />
+                    <span className="cms-thumbnail-upload-overlay">
+                      クリックまたはドラッグして差し替え
+                    </span>
+                  </>
+                ) : (
+                  <span className="cms-thumbnail-upload-placeholder">
+                    <i className="bi bi-cloud-arrow-up" aria-hidden="true" />
+                    <span>クリックまたはドラッグして画像を選択</span>
+                    <small>JPG / JPEG</small>
+                  </span>
+                )}
+              </label>
+            </div>
           )}
         </div>
 
-        {previewThumbnailPath !== '' && (
-          <div className="cms-thumbnail-preview-wrap">
-            <img className="cms-thumbnail-preview" src={previewThumbnailPath} alt="thumbnail preview" />
-          </div>
-        )}
+        {thumbnailMode !== 'use_uploaded' &&
+          (previewThumbnailPath !== '' || thumbnailMode === 'generate_from_title') && (
+            <div className="cms-thumbnail-preview-wrap">
+              {thumbnailMode === 'generate_from_title' ? (
+                <div className="cms-thumbnail-generated-message">
+                  <i className="bi bi-image-alt" aria-hidden="true" />
+                  <span>記事作成後にサムネイルは生成されます。</span>
+                </div>
+              ) : (
+                <img
+                  className="cms-thumbnail-preview"
+                  src={previewThumbnailPath}
+                  alt="thumbnail preview"
+                />
+              )}
+            </div>
+          )}
       </div>
 
       <div className="console-card">
