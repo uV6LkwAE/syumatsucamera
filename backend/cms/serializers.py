@@ -114,6 +114,7 @@ class CmsMediaAssetSerializer(serializers.Serializer):
 
     id = serializers.UUIDField(read_only=True)
     file_name = serializers.CharField(read_only=True)
+    original_file_path = serializers.CharField(read_only=True)
     public_path = serializers.CharField(read_only=True)
     is_thumbnail = serializers.BooleanField(read_only=True)
     processing_options = serializers.DictField(read_only=True)
@@ -239,7 +240,6 @@ class MediaAssetImageProcessingOptionsSerializer(serializers.Serializer):
     画像処理オプションを検証する。
     """
 
-    resize = serializers.BooleanField()
     exif_watermark = serializers.BooleanField()
     site_logo_watermark = serializers.BooleanField()
 
@@ -250,6 +250,7 @@ class MediaAssetNewImageSerializer(serializers.Serializer):
     """
 
     file_name = serializers.CharField()
+    original_file_path = serializers.CharField(required=False, allow_null=True, allow_blank=False)
     options = MediaAssetImageProcessingOptionsSerializer()
 
 
@@ -437,6 +438,7 @@ class CmsArticleSerializer(serializers.Serializer):
                 {
                     "id": asset.id,
                     "file_name": asset.file_name,
+                    "original_file_path": asset.original_file_path,
                     "public_path": MediaService.build_public_media_path(file_name=asset.file_name),
                     "is_thumbnail": str(asset.id) == str(obj.thumbnail_asset_id),
                     "processing_options": MediaService.normalize_processing_options(

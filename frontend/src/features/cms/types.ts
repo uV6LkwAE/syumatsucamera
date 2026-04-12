@@ -54,7 +54,6 @@ export type CmsArticleOptionListResponse = {
 }
 
 export type CmsImageProcessingOptions = {
-  resize: boolean
   exif_watermark: boolean
   site_logo_watermark: boolean
 }
@@ -104,6 +103,7 @@ export type CmsArticleListResponse = {
 export type CmsArticleMediaAsset = {
   id: string
   file_name: string
+  original_file_path: string
   public_path: string
   is_thumbnail: boolean
   processing_options: CmsImageProcessingOptions

@@ -32,15 +32,14 @@
     {
       "file_name": "9f2c8a1e-1234-5678-9abc-def012345678.jpg",
       "options": {
-        "resize": true,
         "exif_watermark": false,
         "site_logo_watermark": false
-      }
+      },
+      "original_file_path": "original/9f/2c/9f2c8a1e-1234-5678-9abc-def012345678.jpg"
     },
     {
       "file_name": "61c84b3e-0df5-4f50-a2af-27464c5ab210.gif",
       "options": {
-        "resize": true,
         "exif_watermark": false,
         "site_logo_watermark": true
       }
@@ -61,10 +60,12 @@
 - `lock_token` は今回の編集セッションを示す。
 - `new_images` は今回の保存で採用する画像ごとの設定一覧である。
 - `new_images[].file_name` は `tmp` 上の対象ファイル名である。
+- `new_images[].original_file_path` は既存画像を再処理する場合に、参照元の原本相対パスを指定するために使う。新規アップロードでは省略してよい。
 - `new_images[].options` で画像ごとの処理オンオフを指定する。
-- `options.resize` はリサイズの実行可否を示す。
-- `options.resize=true` でも、元ファイルサイズが `500KB` 以下ならリサイズのみスキップする。
-- `500KB` 以下でリサイズのみスキップした場合でも、他の処理オプションは通常通り実行する。
+- リサイズはユーザー操作オプションではなく、サーバー側の固定処理として実行する。
+- GIF 以外で元ファイルサイズが `500,000 bytes` を超える場合のみ、長辺 `2048px` 上限・拡大なしでリサイズする。
+- GIF 以外で元ファイルサイズが `500,000 bytes` 以下の場合は、リサイズのみスキップする。
+- リサイズをスキップした場合でも、他の処理オプションは通常通り実行する。
 - 記事本文画像・ユーザーアップロードサムネイルの許可形式は `jpg`, `jpeg`, `gif` のみとする。
 - `png` は品質を下げられないためアップロード許可対象から外す。
 - `webp` は運用上アップロードしないためアップロード許可対象から外す。
@@ -75,7 +76,7 @@
 - `options.site_logo_watermark` はサイトロゴ透かし挿入可否を示す。
 - GIF は加工対象外とし、リサイズ・透かし挿入を行わず原本と公開用へそのまま保存する。
 - `delete_images` は今回の保存で本文から外し、最終的に削除対象とする既存 asset UUID の一覧である。
-- `delete_images` は保存フロー内で原本と公開用画像の即時削除対象として扱う。
+- `delete_images` は保存フロー成功後に原本と公開用画像を削除し、関連 `MEDIA_ASSET` レコードも削除する。
 - `thumbnail_request` はサムネイルの決定方式を示す。
 - `thumbnail_request.mode` は `use_uploaded`, `use_default`, `generate_from_title`, `keep_current` の4択とする。
 - `thumbnail_request.mode=use_uploaded` の場合は `thumbnail_request.file_name` を必須とする。
@@ -84,7 +85,7 @@
 - `thumbnail_request.mode=keep_current` は既存サムネイルを再アップロードせず維持する。
 - 保存APIは `lock_token` と `new_images[].file_name` から `media/tmp/{lock_token}/{file_name}` を組み立てる。
 - 保存APIは、各 `file_name` から UUID と拡張子を検証する。
-- オプション未指定時のデフォルトは `resize=true`, `exif_watermark=false`, `site_logo_watermark=false` とする。
+- オプション未指定時のデフォルトは `exif_watermark=false`, `site_logo_watermark=false` とする。
 
 ## Jodit前提のアップロード方針
 
@@ -103,11 +104,11 @@
 ## Jodit画像オプションメニュー方針
 
 - Jodit編集画面上の画像をクリックまたはタップしたときに、画像処理オプションメニューを表示する。
-- オプション項目は次の3つを用意する。
-- `resize`
+- オプション項目は次の2つを用意する。
 - `exif_watermark`
 - `site_logo_watermark`
-- 初期値は `resize=true`, `exif_watermark=false`, `site_logo_watermark=false` とする。
+- 初期値は `exif_watermark=false`, `site_logo_watermark=false` とする。
+- リサイズは表示しない。サーバー側でサイズ条件を満たした場合に必ず実行する。
 - クリックまたはタップ操作で変更した内容は、画像ごとの設定としてフロント側で保持する。
 - 記事保存時に、その設定を `new_images[].options` として送信する。
 
@@ -198,7 +199,7 @@ def handle_article_image_upload(uploaded_file, lock_token: str, file_name: str) 
 - そのため、記事保存時に画像差分JSONを送る。
 - 保存APIは、画像差分JSONに含まれない `tmp` 画像を画像処理前に削除する。
 - 画像差分JSONに含まれる画像のみを、今回の保存対象として扱う。
-- `delete_images` に含まれる既存画像は、保存フロー内で原本と公開用画像を即時削除する。
+- `delete_images` に含まれる既存画像は、保存フロー成功後に原本と公開用画像を削除し、関連 `MEDIA_ASSET` レコードも削除する。
 - `new_images` に含まれる画像は、画像ごとの `options` に従って処理を分岐する。
 
 ## 画像処理後の最終保存先
@@ -252,7 +253,7 @@ def handle_article_image_upload(uploaded_file, lock_token: str, file_name: str) 
 - 記事保存APIが `202 Accepted` を返した後に起動する。
 - `new_images` をもとに `tmp/{lock_token}` 配下の画像を処理する。
 - 処理成功した画像を `media/original/{xx}/{yy}/...` と `media/images/{xx}/{yy}/...` へ保存する。
-- `delete_images` に含まれる既存画像を即時削除する。
+- `delete_images` に含まれる既存画像は、全件成功後に削除する。
 - 記事保存フローログテーブルへ成功/失敗を記録する。
 - 1件でも失敗した場合は記事を公開しない。
 - 最終的に `tmp/{lock_token}` をクリーンアップする。
@@ -267,10 +268,10 @@ def handle_article_image_upload(uploaded_file, lock_token: str, file_name: str) 
 - `tmp/{lock_token}/{new_images[].file_name}` の実体が存在するか確認する。
 - 本文HTML内の `tmp` パスと `new_images` / `delete_images` の整合を確認する。
 
-2. 削除対象画像の即時削除
+2. 削除対象画像の削除
 - `delete_images` に含まれる既存画像を取得する。
 - 対象画像の原本と公開用画像を削除する。
-- 関連する `MEDIA_ASSET` レコードを更新または削除する。
+- 関連する `MEDIA_ASSET` レコードを削除する。
 - 削除成功/失敗を記事保存フローログテーブルへ記録する。
 
 3. 新規画像の処理
@@ -278,9 +279,13 @@ def handle_article_image_upload(uploaded_file, lock_token: str, file_name: str) 
 - 必要なメタ情報を取得する。
 - 記事本文画像と `thumbnail_request.mode=use_uploaded` のサムネイルは、同じ画像処理パイプラインへ通す。
 - `thumbnail_request.mode=use_default`, `generate_from_title`, `keep_current` はこの画像処理パイプラインへ通さない。
+- `new_images[].original_file_path` が指定されている場合、保存後の `MEDIA_ASSET.original_file_path` として保持する。
+- 原本ファイル自体は上書きせず、参照専用として扱う。
+- オプションを有効化するだけの再処理では、現在の処理済み画像を入力としてよい。
+- 一つでもオプションを無効化する再処理では、`original_file_path` を参照して元画像からやり直す。
 - GIF の場合は加工を一切行わず、そのまま原本と公開用へ保存する。
-- GIF 以外で `options.resize=true` かつ元ファイルサイズが `500KB` を超える場合のみ、長辺 `2048px` 上限・拡大なしでリサイズする。
-- GIF 以外で元ファイルサイズが `500KB` 以下の場合は、`options.resize=true` でもリサイズのみスキップする。
+- GIF 以外で元ファイルサイズが `500,000 bytes` を超える場合のみ、長辺 `2048px` 上限・拡大なしでリサイズする。
+- GIF 以外で元ファイルサイズが `500,000 bytes` 以下の場合は、リサイズのみスキップする。
 - `options.exif_watermark=true` の場合のみEXIF由来の透かしを挿入する。
 - `options.site_logo_watermark=true` の場合のみサイトロゴ透かしを挿入する。
 - リサイズ・透かし処理後に公開用画像が `500,000 bytes` を超える場合、JPEG は `CMS_ARTICLE_IMAGE_QUALITY_LOW` から `CMS_ARTICLE_IMAGE_QUALITY_HIGH` の範囲で二分探索し、上限サイズ以下を満たす最大品質で保存する。
@@ -290,7 +295,7 @@ def handle_article_image_upload(uploaded_file, lock_token: str, file_name: str) 
 - オリジナル画像を `media/original/{xx}/{yy}/{asset_uuid}.{ext}` へ保存する。
 - 公開用画像を `media/images/{xx}/{yy}/{asset_uuid}.{ext}` へ保存する。
 - `MEDIA_ASSET` に処理結果メタ情報を書き込む。
-- 書き込む項目は `article_id`, `file_name`, `width`, `height`, `checksum_sha256`, `exif_json`, `processing_options_json` とする。
+- 書き込む項目は `article_id`, `file_name`, `original_file_path`, `width`, `height`, `checksum_sha256`, `exif_json`, `processing_options_json` とする。
 - `file_name` は `{asset_uuid}.{ext}` をそのまま保存する。
 - `exif_json` のキーは `ISO`, `F`, `SS`, `WB`, `機種名`, `レンズ`, `焦点距離` を使用する。
 - 画像ごとの成功/失敗を記事保存フローログテーブルへ記録する。
@@ -318,7 +323,7 @@ def handle_article_image_upload(uploaded_file, lock_token: str, file_name: str) 
 - 失敗した画像の `tmp` もクリーンアップしてよい。
 - どの画像が失敗したかはログへ残す。
 - 自動再試行は行わない。
-- `delete_images` で削除した既存画像は、失敗時もロールバックしない。
+- `delete_images` は保存成功まで削除しない。失敗時は旧画像を残す。
 
 ## 想定される失敗理由
 

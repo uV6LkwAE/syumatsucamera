@@ -358,6 +358,7 @@ class MediaAsset(models.Model):
         verbose_name="記事",
     )
     file_name = models.CharField(max_length=255, unique=True, verbose_name="ファイル名")
+    original_file_path = models.CharField(max_length=500, verbose_name="オリジナルファイルパス")
     width = models.PositiveIntegerField(default=1, verbose_name="横幅")
     height = models.PositiveIntegerField(default=1, verbose_name="高さ")
     checksum_sha256 = models.CharField(max_length=64, blank=True, verbose_name="SHA256")

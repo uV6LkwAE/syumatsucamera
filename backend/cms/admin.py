@@ -62,7 +62,7 @@ class MediaAssetAdmin(admin.ModelAdmin):
     メディアアセットの管理画面設定。
     """
 
-    list_display = ("id", "article", "file_name", "updated_at")
+    list_display = ("id", "article", "file_name", "original_file_path", "updated_at")
     search_fields = ("file_name",)
 
 

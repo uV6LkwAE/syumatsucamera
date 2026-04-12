@@ -1,16 +1,19 @@
 """
 メディア操作サービスを定義する。
 """
+import logging
 import hashlib
 import io
+import re
 import shutil
 import uuid
+from fractions import Fraction
 from pathlib import Path
 
 from bs4 import BeautifulSoup
 from django.conf import settings
 from django.utils.text import slugify
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+from PIL import ExifTags, Image, ImageDraw, ImageFont, ImageOps
 from rest_framework.exceptions import ValidationError
 
 from cms.models import (
@@ -18,12 +21,24 @@ from cms.models import (
     MediaAsset,
 )
 
+logger = logging.getLogger(__name__)
+
 IMAGE_EXTENSIONS = {"jpg", "jpeg", "gif"}
 IMAGE_FORMATS_BY_EXTENSION = {
     "jpg": {"JPEG", "MPO"},
     "jpeg": {"JPEG", "MPO"},
     "gif": {"GIF"},
 }
+
+EXIF_DISPLAY_FIELDS = (
+    ("ISO", 34855),
+    ("F", 33437),
+    ("SS", 33434),
+    ("WB", 41987),
+    ("機種名", 272),
+    ("レンズ", 42036),
+    ("焦点距離", 37386),
+)
 
 
 class MediaService:
@@ -40,7 +55,6 @@ class MediaService:
         記事画像の既定処理オプションを返す。
         """
         return {
-            "resize": True,
             "exif_watermark": False,
             "site_logo_watermark": False,
         }
@@ -153,6 +167,17 @@ class MediaService:
                 raise ValidationError(
                     {"image_diff": [f"一時画像が存在しません: {file_name}"]}
                 )
+            original_file_path = new_image.get("original_file_path")
+            if original_file_path:
+                original_file_path = str(original_file_path)
+                if not original_file_path.startswith("original/"):
+                    raise ValidationError(
+                        {"image_diff": [f"original_file_path の形式が不正です: {original_file_path}"]}
+                    )
+                if not MediaService.resolve_storage_path(storage_key=original_file_path).exists():
+                    raise ValidationError(
+                        {"image_diff": [f"オリジナル画像が存在しません: {original_file_path}"]}
+                    )
             new_image_names.add(file_name)
 
         if not html_tmp_file_names.issubset(
@@ -192,10 +217,23 @@ class MediaService:
         """
         アセット実体ファイルを削除する。
         """
-        original_path, public_path = MediaService.build_final_paths(file_name=asset.file_name)
-        for absolute_path in [original_path, public_path]:
-            if absolute_path.exists():
-                absolute_path.unlink()
+        public_path = MediaService.build_public_storage_path(file_name=asset.file_name)
+        if public_path.exists():
+            public_path.unlink()
+
+        original_file_path = getattr(asset, "original_file_path", None)
+        if not original_file_path:
+            return
+
+        still_referenced = MediaAsset.objects.exclude(id=asset.id).filter(
+            original_file_path=original_file_path,
+        ).exists()
+        if still_referenced:
+            return
+
+        original_path = MediaService.resolve_storage_path(storage_key=original_file_path)
+        if original_path.exists():
+            original_path.unlink()
 
     @staticmethod
     def cleanup_temp_dir(*, lock_token: str) -> None:
@@ -220,10 +258,12 @@ class MediaService:
         requested_file_name = thumbnail_request.get("file_name")
         if requested_file_name and "." in requested_file_name:
             suffix = "." + requested_file_name.rsplit(".", 1)[1].lower()
+        file_name = f"{uuid.uuid4()}{suffix}"
 
         asset = MediaAsset.objects.create(
             article=article,
-            file_name=f"{uuid.uuid4()}{suffix}",
+            file_name=file_name,
+            original_file_path=MediaService.build_original_storage_key(file_name=file_name),
             processing_options_json={"thumbnail_request": thumbnail_request},
         )
         return asset
@@ -237,6 +277,7 @@ class MediaService:
         processing_options: dict,
         lock_token: str,
         asset: MediaAsset | None = None,
+        original_file_path: str | None = None,
     ) -> MediaAsset:
         """
         tmp 画像を最終保存先へ移しアセットを返す。
@@ -248,8 +289,30 @@ class MediaService:
         with source_path.open("rb") as file_obj:
             raw = file_obj.read()
 
+        resolved_original_file_path = (
+            original_file_path
+            or (
+                asset.original_file_path
+                if asset is not None and getattr(asset, "original_file_path", None)
+                else None
+            )
+            or MediaService.build_original_storage_key(file_name=stored_file_name)
+        )
+        original_path = MediaService.resolve_storage_path(storage_key=resolved_original_file_path)
+        public_path = MediaService.build_public_storage_path(file_name=stored_file_name)
+        original_path.parent.mkdir(parents=True, exist_ok=True)
+        public_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if not original_path.exists():
+            with original_path.open("wb") as destination:
+                destination.write(raw)
+
+        exif_json = MediaService.load_exif_json_from_original(
+            original_path=original_path,
+            stored_file_name=stored_file_name,
+        )
+
         image = Image.open(io.BytesIO(raw))
-        exif_json = MediaService.extract_exif(image=image)
         public_raw, width, height = MediaService.build_public_image_bytes(
             image=image,
             raw=raw,
@@ -258,13 +321,6 @@ class MediaService:
             exif_json=exif_json,
         )
         checksum = hashlib.sha256(public_raw).hexdigest()
-
-        original_path, public_path = MediaService.build_final_paths(file_name=stored_file_name)
-        original_path.parent.mkdir(parents=True, exist_ok=True)
-        public_path.parent.mkdir(parents=True, exist_ok=True)
-
-        with original_path.open("wb") as destination:
-            destination.write(raw)
         with public_path.open("wb") as destination:
             destination.write(public_raw)
 
@@ -272,7 +328,10 @@ class MediaService:
             asset = MediaAsset.objects.create(
                 article=article,
                 file_name=stored_file_name,
+                original_file_path=resolved_original_file_path,
             )
+        elif asset.original_file_path != resolved_original_file_path:
+            asset.original_file_path = resolved_original_file_path
 
         asset.width = width
         asset.height = height
@@ -288,6 +347,7 @@ class MediaService:
                 "checksum_sha256",
                 "exif_json",
                 "processing_options_json",
+                "original_file_path",
                 "updated_at",
             ]
         )
@@ -306,36 +366,147 @@ class MediaService:
         公開用画像 bytes とサイズを返す。
         """
         extension = stored_file_name.rsplit(".", 1)[1].lower()
+        logger.log(
+            logging.INFO,
+            "公開画像処理を開始しました: file_name=%s extension=%s raw_bytes=%s options=%s",
+            stored_file_name,
+            extension,
+            len(raw),
+            {
+                "exif_watermark": bool(processing_options.get("exif_watermark")),
+                "site_logo_watermark": bool(processing_options.get("site_logo_watermark")),
+            },
+        )
         if extension == "gif":
+            logger.log(
+                logging.INFO,
+                "GIF画像のため加工を行わずに保存します: file_name=%s",
+                stored_file_name,
+            )
             width, height = image.size
             return raw, width, height
 
-        normalized_options = MediaService.normalize_processing_options(
-            processing_options=processing_options
-        )
+        normalized_options = MediaService.normalize_processing_options(processing_options=processing_options)
         working_image = ImageOps.exif_transpose(image).convert("RGBA")
 
-        if (
-            normalized_options["resize"]
-            and len(raw) > settings.CMS_ARTICLE_IMAGE_RESIZE_SKIP_MAX_BYTES
-        ):
+        if len(raw) > settings.CMS_ARTICLE_IMAGE_RESIZE_SKIP_MAX_BYTES:
+            logger.log(
+                logging.INFO,
+                "画像リサイズを実行します: file_name=%s raw_bytes=%s limit=%s",
+                stored_file_name,
+                len(raw),
+                settings.CMS_ARTICLE_IMAGE_RESIZE_SKIP_MAX_BYTES,
+            )
             working_image = MediaService._resize_image(working_image=working_image)
+        else:
+            logger.log(
+                logging.INFO,
+                "画像リサイズをスキップします: file_name=%s raw_bytes=%s limit=%s",
+                stored_file_name,
+                len(raw),
+                settings.CMS_ARTICLE_IMAGE_RESIZE_SKIP_MAX_BYTES,
+            )
 
         if normalized_options["exif_watermark"]:
+            if exif_json is None:
+                logger.log(
+                    logging.WARNING,
+                    "EXIF透かしが有効ですがEXIFを取得できませんでした: file_name=%s",
+                    stored_file_name,
+                )
+            else:
+                logger.log(
+                    logging.INFO,
+                    "EXIF透かしを描画します: file_name=%s exif_keys=%s",
+                    stored_file_name,
+                    ",".join(exif_json.keys()),
+                )
             working_image = MediaService._apply_exif_watermark(
                 working_image=working_image,
                 exif_json=exif_json,
+                stored_file_name=stored_file_name,
+            )
+        else:
+            logger.log(
+                logging.INFO,
+                "EXIF透かしをスキップします: file_name=%s",
+                stored_file_name,
             )
 
         if normalized_options["site_logo_watermark"]:
+            logger.log(
+                logging.INFO,
+                "サイトロゴ透かしを描画します: file_name=%s",
+                stored_file_name,
+            )
             working_image = MediaService._apply_site_logo_watermark(
                 working_image=working_image
             )
+        else:
+            logger.log(
+                logging.INFO,
+                "サイトロゴ透かしをスキップします: file_name=%s",
+                stored_file_name,
+            )
 
-        return MediaService._serialize_public_image(
+        public_raw, width, height = MediaService._serialize_public_image(
             working_image=working_image,
             extension=extension,
         )
+        logger.log(
+            logging.INFO,
+            "公開画像をシリアライズしました: file_name=%s bytes=%s",
+            stored_file_name,
+            len(public_raw),
+        )
+        return public_raw, width, height
+
+    @staticmethod
+    def load_exif_json_from_original(*, original_path: Path, stored_file_name: str) -> dict | None:
+        """
+        原本ファイルからEXIF情報を取得する。
+        """
+        if not original_path.exists():
+            logger.log(
+                logging.ERROR,
+                "原本ファイルが存在しません: file_name=%s original_path=%s",
+                stored_file_name,
+                original_path,
+            )
+            raise RuntimeError(f"原本ファイルが存在しません: {stored_file_name}")
+
+        try:
+            with original_path.open("rb") as original_file_obj:
+                with Image.open(original_file_obj) as original_image:
+                    exif_json = MediaService.extract_exif(image=original_image)
+        except Exception as exc:
+            logger.log(
+                logging.ERROR,
+                "EXIFの取得に失敗しました: file_name=%s original_path=%s error=%s",
+                stored_file_name,
+                original_path,
+                exc,
+                exc_info=True,
+            )
+            return None
+
+        if exif_json is None:
+            logger.log(
+                logging.WARNING,
+                "原本からEXIFを取得できませんでした: file_name=%s original_path=%s",
+                stored_file_name,
+                original_path,
+            )
+            return None
+
+        logger.log(
+            logging.INFO,
+            "原本からEXIFを取得しました: file_name=%s original_path=%s exif_keys=%s",
+            stored_file_name,
+            original_path,
+            ",".join(exif_json.keys()),
+        )
+        return exif_json
 
     @staticmethod
     def rewrite_temp_paths_to_public(
@@ -437,7 +608,13 @@ class MediaService:
         raw = buffer.getvalue()
         checksum = hashlib.sha256(raw).hexdigest()
 
-        original_path, public_path = MediaService.build_final_paths(file_name=asset.file_name)
+        if not getattr(asset, "original_file_path", None):
+            asset.original_file_path = MediaService.build_original_storage_key(
+                file_name=asset.file_name,
+            )
+
+        original_path = MediaService.resolve_storage_path(storage_key=asset.original_file_path)
+        public_path = MediaService.build_public_storage_path(file_name=asset.file_name)
         original_path.parent.mkdir(parents=True, exist_ok=True)
         public_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -456,6 +633,7 @@ class MediaService:
                 "height",
                 "checksum_sha256",
                 "exif_json",
+                "original_file_path",
                 "updated_at",
             ]
         )
@@ -690,23 +868,62 @@ class MediaService:
         """
         file_name から原本と公開用の保存パスを導出する。
         """
+        original_path = MediaService.build_original_storage_path(file_name=file_name)
+        public_path = MediaService.build_public_storage_path(file_name=file_name)
+        return original_path, public_path
+
+    @staticmethod
+    def build_original_storage_key(*, file_name: str) -> str:
+        """
+        原本ファイルの相対ストレージキーを返す。
+        """
         shard_a = file_name[:2]
         shard_b = file_name[2:4]
-        original_path = Path(settings.MEDIA_ROOT) / "original" / shard_a / shard_b / file_name
-        public_path = Path(settings.MEDIA_ROOT) / "images" / shard_a / shard_b / file_name
-        return original_path, public_path
+        return f"original/{shard_a}/{shard_b}/{file_name}"
+
+    @staticmethod
+    def build_public_storage_key(*, file_name: str) -> str:
+        """
+        公開ファイルの相対ストレージキーを返す。
+        """
+        shard_a = file_name[:2]
+        shard_b = file_name[2:4]
+        return f"images/{shard_a}/{shard_b}/{file_name}"
+
+    @staticmethod
+    def build_original_storage_path(*, file_name: str) -> Path:
+        """
+        原本ファイルの絶対パスを返す。
+        """
+        return MediaService.resolve_storage_path(
+            storage_key=MediaService.build_original_storage_key(file_name=file_name),
+        )
+
+    @staticmethod
+    def build_public_storage_path(*, file_name: str) -> Path:
+        """
+        公開ファイルの絶対パスを返す。
+        """
+        return MediaService.resolve_storage_path(
+            storage_key=MediaService.build_public_storage_key(file_name=file_name),
+        )
+
+    @staticmethod
+    def resolve_storage_path(*, storage_key: str) -> Path:
+        """
+        相対ストレージキーを絶対パスへ変換する。
+        """
+        return Path(settings.MEDIA_ROOT) / storage_key
 
     @staticmethod
     def build_public_media_path(*, file_name: str) -> str:
         """
         公開メディアの相対パスを返す。
         """
-        shard_a = file_name[:2]
-        shard_b = file_name[2:4]
-        return f"{settings.MEDIA_URL}images/{shard_a}/{shard_b}/{file_name}"
+        return f"{settings.MEDIA_URL}{MediaService.build_public_storage_key(file_name=file_name)}"
 
     @staticmethod
-    def extract_exif(*, image: Image.Image) -> dict | None:
+    def extract_exif(*, image: Image.Image) -> dict[str, object | None] | None:
         """
         取得可能な範囲でEXIFメタ情報を抽出する。
         """
@@ -718,21 +935,156 @@ class MediaService:
         if not exif:
             return None
 
-        payload: dict[str, str] = {}
-        mapped_keys = {
-            34855: "ISO",
-            33437: "F",
-            33434: "SS",
-            37384: "WB",
-            272: "機種名",
-            42036: "レンズ",
-            37386: "焦点距離",
-        }
-        for key, label in mapped_keys.items():
+        try:
+            exif_ifd = exif.get_ifd(ExifTags.IFD.Exif)
+        except Exception:
+            exif_ifd = {}
+
+        payload: dict[str, object | None] = {}
+        has_real_value = False
+        for label, key in EXIF_DISPLAY_FIELDS:
             value = exif.get(key)
-            if value is not None:
-                payload[label] = str(value)
+            if value is None:
+                value = exif_ifd.get(key)
+            normalized_value = MediaService.normalize_exif_storage_value(
+                label=label,
+                value=value,
+            )
+            if normalized_value is None:
+                payload[label] = None
+                continue
+
+            has_real_value = True
+            payload[label] = normalized_value
+        if not has_real_value:
+            return None
         return payload or None
+
+    @staticmethod
+    def normalize_exif_storage_value(*, label: str, value: object | None) -> object | None:
+        """
+        EXIF値を保存用に正規化する。
+        """
+        if value is None:
+            return None
+
+        if label in {"ISO", "F", "SS", "WB", "焦点距離"}:
+            numeric_value = MediaService.coerce_numeric_value(value=value)
+            if numeric_value is not None:
+                if numeric_value.is_integer():
+                    return int(numeric_value)
+                return numeric_value
+
+        normalized_text = MediaService.normalize_exif_text_value(value=value)
+        return None if normalized_text == "-" else normalized_text
+
+    @staticmethod
+    def format_exif_value(*, label: str, value: object | None) -> str:
+        """
+        EXIF値を表示用に正規化する。
+        """
+        if value is None:
+            return "-"
+
+        normalized_text = MediaService.normalize_exif_text_value(value=value)
+        if normalized_text == "-":
+            return "-"
+
+        if label == "SS":
+            if re.fullmatch(r"\d+/\d+", normalized_text):
+                return normalized_text
+            if normalized_text.endswith("秒"):
+                return normalized_text
+            numeric_value = MediaService.coerce_numeric_value(value=value)
+            if numeric_value is None:
+                return normalized_text
+            if numeric_value <= 0:
+                return "-"
+            if numeric_value < 1:
+                fraction = Fraction(str(numeric_value)).limit_denominator(1_000_000)
+                if fraction.numerator == 0:
+                    return "-"
+                if fraction.denominator == 1:
+                    return f"{fraction.numerator}秒"
+                return f"{fraction.numerator}/{fraction.denominator}"
+            return f"{MediaService.truncate_numeric_value(value=numeric_value)}秒"
+
+        if label == "F":
+            if re.fullmatch(r"\d+", normalized_text):
+                return normalized_text
+            numeric_value = MediaService.coerce_numeric_value(value=value)
+            if numeric_value is None:
+                return normalized_text
+            return str(MediaService.truncate_numeric_value(value=numeric_value))
+
+        if label == "焦点距離":
+            if normalized_text.endswith("mm") and re.fullmatch(r"\d+(?:\.\d+)?mm", normalized_text):
+                return normalized_text
+            numeric_value = MediaService.coerce_numeric_value(value=value)
+            if numeric_value is None:
+                return normalized_text
+            return f"{MediaService.truncate_numeric_value(value=numeric_value)}mm"
+
+        if label == "ISO":
+            if re.fullmatch(r"\d+", normalized_text):
+                return normalized_text
+            numeric_value = MediaService.coerce_numeric_value(value=value)
+            if numeric_value is None:
+                return normalized_text
+            return str(MediaService.truncate_numeric_value(value=numeric_value))
+
+        return normalized_text
+
+    @staticmethod
+    def normalize_exif_text_value(*, value: object) -> str:
+        """
+        EXIF値を文字列として正規化する。
+        """
+        if value is None:
+            return "-"
+
+        if isinstance(value, bytes):
+            normalized = value.decode("utf-8", errors="ignore")
+        elif isinstance(value, tuple):
+            normalized_items = [
+                MediaService.normalize_exif_text_value(value=item)
+                for item in value
+            ]
+            normalized = ", ".join(
+                item for item in normalized_items if item != "-"
+            )
+        else:
+            normalized = str(value)
+
+        normalized = normalized.replace("\x00", "").strip()
+        return normalized if normalized != "" else "-"
+
+    @staticmethod
+    def coerce_numeric_value(*, value: object) -> float | None:
+        """
+        EXIF値を数値へ変換する。
+        """
+        if value is None:
+            return None
+
+        if isinstance(value, (int, float)):
+            return float(value)
+
+        normalized_text = MediaService.normalize_exif_text_value(value=value)
+        if normalized_text in {"", "-"}:
+            return None
+
+        try:
+            return float(normalized_text)
+        except ValueError:
+            return None
+
+    @staticmethod
+    def truncate_numeric_value(*, value: float) -> int:
+        """
+        数値を小数点以下切り捨てで整数化する。
+        """
+        return int(value)
 
     @staticmethod
     def _resize_image(*, working_image: Image.Image) -> Image.Image:
@@ -757,22 +1109,36 @@ class MediaService:
         *,
         working_image: Image.Image,
         exif_json: dict | None,
+        stored_file_name: str,
     ) -> Image.Image:
         """
         EXIF透かしを左下へ描画する。
         """
         if not exif_json:
+            logger.log(
+                logging.WARNING,
+                "EXIF透かしをスキップします: file_name=%s reason=EXIF情報が空です",
+                stored_file_name,
+            )
             return working_image
 
-        lines = [
-            f"{label}: {value}"
-            for label, value in exif_json.items()
-            if str(value).strip() != ""
-        ]
+        lines = MediaService.build_visible_exif_lines(exif_json=exif_json)
         if not lines:
+            logger.log(
+                logging.WARNING,
+                "EXIF透かしをスキップします: file_name=%s reason=表示可能なEXIF項目がありません",
+                stored_file_name,
+            )
             return working_image
 
         font_size = max(16, round(max(working_image.size) * 0.018))
+        logger.log(
+            logging.INFO,
+            "EXIF透かしを描画します: file_name=%s lines=%s font_size=%s",
+            stored_file_name,
+            len(lines),
+            font_size,
+        )
         font = MediaService._load_thumbnail_font(
             font_path=settings.CMS_THUMBNAIL_FONT_REGULAR_PATH,
             size=font_size,
@@ -814,6 +1180,24 @@ class MediaService:
             current_y += text_height + line_gap
 
         return Image.alpha_composite(working_image, overlay)
+
+    @staticmethod
+    def build_visible_exif_lines(*, exif_json: dict | None) -> list[str]:
+        """
+        透かしに表示可能なEXIF行を返す。
+        """
+        if not exif_json:
+            return []
+
+        lines: list[str] = []
+        for label, _ in EXIF_DISPLAY_FIELDS:
+            value = MediaService.format_exif_value(
+                label=label,
+                value=exif_json.get(label),
+            )
+            if value != "":
+                lines.append(f"{label}: {value}")
+        return lines
 
     @staticmethod
     def _apply_site_logo_watermark(*, working_image: Image.Image) -> Image.Image:
@@ -895,7 +1279,10 @@ class MediaService:
         if extension in {"jpg", "jpeg"}:
             if quality is None:
                 raise RuntimeError("JPEG品質が指定されていません。")
-            working_image.convert("RGB").save(
+            export_image = MediaService._build_metadata_free_jpeg_image(
+                working_image=working_image,
+            )
+            export_image.save(
                 buffer,
                 format="JPEG",
                 quality=quality,
@@ -906,6 +1293,16 @@ class MediaService:
             raise RuntimeError(f"対応していない公開画像形式です: {extension}")
 
         return buffer.getvalue()
+
+    @staticmethod
+    def _build_metadata_free_jpeg_image(*, working_image: Image.Image) -> Image.Image:
+        """
+        公開用JPEGのためにメタデータを持たない画像へ変換する。
+        """
+        rgb_image = working_image.convert("RGB")
+        export_image = Image.new("RGB", rgb_image.size)
+        export_image.paste(rgb_image)
+        return export_image
 
     @staticmethod
     def _encode_public_image_at_target_size(

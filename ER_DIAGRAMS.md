@@ -103,6 +103,7 @@ erDiagram
         uuid id PK "NOT NULL, default=uuid"
         uuid article_id FK "NOT NULL"
         string file_name "NOT NULL, UNIQUE, max_length=255"
+        string original_file_path "NOT NULL, max_length=500"
         int width "NOT NULL, check=positive"
         int height "NOT NULL, check=positive"
         string checksum_sha256 "NOT NULL, fixed_length=64"
@@ -164,6 +165,7 @@ erDiagram
 - `option.label` は大文字小文字を同一視して重複禁止: `UNIQUE(LOWER(label))`
 - `article.option` は配列カラムのため通常のDB外部キー制約は張れない。Django側で参照中 `OPTION` の削除を拒否する。
 - `media_asset.file_name` は重複禁止: `UNIQUE(file_name)`
+- `media_asset.original_file_path` は原本の相対パスを保持し、`NOT NULL` を推奨する。
 - `user.cf_access_sub` は `UNIQUE`（Cloudflare Access `sub` の平文ではなく、HMACハッシュを保存する）
 - `user.email` は `UNIQUE`（大文字小文字を同一視する実装を推奨）
 - `user.role` は列挙制約: `admin/author`
@@ -205,5 +207,7 @@ erDiagram
 
 - `MEDIA_ASSET.id` は内部識別子であり、画像ファイル名そのものではない。
 - 画像参照に必要なファイル名は `file_name` に保存する。
+- 原本の相対パスは `original_file_path` に保存し、再処理時の参照元として利用する。
+- `original_file_path` は参照専用の原本キーとして扱い、再処理で上書きしない。
 - `processing_options_json` には実際に適用した画像処理オプションを保存する。
 - `exif_json` のキーは `ISO`, `F`, `SS`, `WB`, `機種名`, `レンズ`, `焦点距離` を使用する。

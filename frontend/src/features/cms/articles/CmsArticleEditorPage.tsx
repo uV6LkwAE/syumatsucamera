@@ -117,7 +117,6 @@ const ARTICLE_IMAGE_ACCEPT = 'image/jpeg,image/gif'
 const ARTICLE_IMAGE_ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/gif'])
 
 const DEFAULT_IMAGE_OPTIONS: ImageProcessingOptions = {
-  resize: true,
   exif_watermark: false,
   site_logo_watermark: false,
 }
@@ -350,6 +349,24 @@ function findCurrentThumbnail(assets: CmsArticleMediaAsset[]): CmsArticleMediaAs
   return assets.find((asset) => asset.is_thumbnail) ?? null
 }
 
+function findAssetByFileName(
+  assets: CmsArticleMediaAsset[],
+  fileName: string,
+): CmsArticleMediaAsset | null {
+  return assets.find((asset) => asset.file_name === fileName) ?? null
+}
+
+function buildOriginalMediaPath(originalFilePath: string): string {
+  const trimmed = originalFilePath.trim()
+  if (trimmed === '') {
+    return ''
+  }
+  if (trimmed.startsWith('/media/')) {
+    return trimmed
+  }
+  return `/media/${trimmed}`
+}
+
 function normalizeTagNameForCompare(value: string): string {
   return value.trim().toLocaleLowerCase()
 }
@@ -419,10 +436,12 @@ export default function CmsArticleEditorPage({
   const activeImageSelectionRef = useRef<{
     fileName: string
     source: string
+    originalFilePath: string
     mode: ImageSelectionMode
   }>({
     fileName: '',
     source: '',
+    originalFilePath: '',
     mode: null,
   })
   const activeImageSelectionVersionRef = useRef(0)
@@ -448,6 +467,8 @@ export default function CmsArticleEditorPage({
   // 編集中の本文と保存用 state を分離してスクロール位置の巻き戻りを防ぐ。
   const [editorBodyHtml, setEditorBodyHtml] = useState(DEFAULT_ARTICLE_FORM.bodyHtml)
   const [uploadedImageOptions, setUploadedImageOptions] = useState<Record<string, ImageProcessingOptions>>({})
+  const [uploadedImageOriginalPaths, setUploadedImageOriginalPaths] = useState<Record<string, string>>({})
+  const uploadedImageOriginalPathsRef = useRef<Record<string, string>>({})
   const [selectedImageFileName, setSelectedImageFileName] = useState('')
   const [selectedImageSource, setSelectedImageSource] = useState('')
   const [imageOptionOverlayPosition, setImageOptionOverlayPosition] = useState<ImageOverlayPosition | null>(null)
@@ -464,6 +485,23 @@ export default function CmsArticleEditorPage({
   const [showTagSuggestions, setShowTagSuggestions] = useState(false)
 
   const statusOptions = toStatusOptions(sessionUser?.role, form.status)
+  function resolveCurrentImageOriginalFilePath(fileName: string): string {
+    const fromState = uploadedImageOriginalPathsRef.current[fileName]
+    if (fromState !== '') {
+      if (fromState !== undefined) {
+        return fromState
+      }
+    }
+    if (activeImageSelectionRef.current.fileName === fileName) {
+      return activeImageSelectionRef.current.originalFilePath
+    }
+    const fromInitialAssets = initialMediaAssets.find((asset) => asset.file_name === fileName)
+    if (fromInitialAssets !== undefined) {
+      return fromInitialAssets.original_file_path ?? ''
+    }
+    return ''
+  }
+
   const handleEditorRef = useCallback((instance: JoditEditorInstance | null) => {
     editorInstanceRef.current = instance
   }, [])
@@ -502,6 +540,14 @@ export default function CmsArticleEditorPage({
             },
             {},
           )
+          const assetOriginalPathMap = payload.article.media_assets.reduce<Record<string, string>>(
+            (nextMap, asset) => {
+              nextMap[asset.file_name] = asset.original_file_path ?? ''
+              return nextMap
+            },
+            {},
+          )
+          uploadedImageOriginalPathsRef.current = assetOriginalPathMap
           setArticle(payload.article)
           setInitialMediaAssets(payload.article.media_assets)
           setCurrentThumbnailAsset(thumbnailAsset)
@@ -517,6 +563,7 @@ export default function CmsArticleEditorPage({
             tagNames: payload.article.tags.map((tag) => tag.name),
           })
           setUploadedImageOptions(assetOptionMap)
+          setUploadedImageOriginalPaths(assetOriginalPathMap)
           setThumbnailMode(thumbnailAsset === null ? 'use_default' : 'keep_current')
           setThumbnailUploadFileName('')
           setThumbnailPreviewPath(payload.article.thumbnail_preview_path)
@@ -533,6 +580,8 @@ export default function CmsArticleEditorPage({
           setEditorBodyHtml(DEFAULT_ARTICLE_FORM.bodyHtml)
           setForm(DEFAULT_ARTICLE_FORM)
           setUploadedImageOptions({})
+          setUploadedImageOriginalPaths({})
+          uploadedImageOriginalPathsRef.current = {}
           setThumbnailMode('generate_from_title')
           setThumbnailUploadFileName('')
           setThumbnailPreviewPath(payload.session.default_thumbnail_preview_path)
@@ -788,6 +837,7 @@ export default function CmsArticleEditorPage({
     nextSelection: {
       fileName: string
       source: string
+      originalFilePath: string
       mode: ImageSelectionMode
     },
   ): void {
@@ -795,6 +845,7 @@ export default function CmsArticleEditorPage({
     if (
       currentSelection.fileName === nextSelection.fileName
       && currentSelection.source === nextSelection.source
+      && currentSelection.originalFilePath === nextSelection.originalFilePath
       && currentSelection.mode === nextSelection.mode
     ) {
       return
@@ -812,6 +863,7 @@ export default function CmsArticleEditorPage({
     activeImageSelectionRef.current = {
       fileName: '',
       source: '',
+      originalFilePath: '',
       mode: null,
     }
     setSelectedImageFileName('')
@@ -919,19 +971,13 @@ export default function CmsArticleEditorPage({
       return
     }
 
+    const originalFilePath = resolveCurrentImageOriginalFilePath(fileName)
+
     setActiveImageSelection({
       fileName,
       source,
+      originalFilePath,
       mode,
-    })
-    setUploadedImageOptions((prev) => {
-      if (prev[fileName] !== undefined) {
-        return prev
-      }
-      return {
-        ...prev,
-        [fileName]: DEFAULT_IMAGE_OPTIONS,
-      }
     })
   }
 
@@ -1091,6 +1137,14 @@ export default function CmsArticleEditorPage({
         ...prev,
         [uploaded.file_name]: DEFAULT_IMAGE_OPTIONS,
       }))
+      setUploadedImageOriginalPaths((prev) => {
+        const next = {
+          ...prev,
+          [uploaded.file_name]: prev[uploaded.file_name] ?? '',
+        }
+        uploadedImageOriginalPathsRef.current = next
+        return next
+      })
     }
     return uploadedPaths
   }
@@ -1267,7 +1321,10 @@ export default function CmsArticleEditorPage({
     }
   }, [selectedImageFileName, selectedImageSource])
 
-  async function ensureEditableSelectedImage(selectionVersion: number): Promise<{
+  async function ensureEditableSelectedImage(
+    selectionVersion: number,
+    preferOriginal: boolean,
+  ): Promise<{
     fileName: string
     source: string
   }> {
@@ -1276,15 +1333,22 @@ export default function CmsArticleEditorPage({
       throw new Error('画像が選択されていません。')
     }
 
+    const originalSource = currentSelection.originalFilePath === ''
+      ? ''
+      : buildOriginalMediaPath(currentSelection.originalFilePath)
+    const sourceToFetch = preferOriginal && originalSource !== ''
+      ? originalSource
+      : currentSelection.source
+
     const tempPrefix = `/media/tmp/${lockToken}/`
-    if (currentSelection.source.startsWith(tempPrefix)) {
+    if (sourceToFetch.startsWith(tempPrefix)) {
       return {
         fileName: currentSelection.fileName,
-        source: currentSelection.source,
+        source: sourceToFetch,
       }
     }
 
-    const response = await fetch(currentSelection.source)
+    const response = await fetch(sourceToFetch)
     if (!response.ok) {
       throw new Error('既存画像の再処理用コピーに失敗しました。')
     }
@@ -1318,10 +1382,19 @@ export default function CmsArticleEditorPage({
       ...prev,
       [uploaded.file_name]: prev[currentSelection.fileName] ?? DEFAULT_IMAGE_OPTIONS,
     }))
+    setUploadedImageOriginalPaths((prev) => {
+      const next = {
+        ...prev,
+        [uploaded.file_name]: currentSelection.originalFilePath,
+      }
+      uploadedImageOriginalPathsRef.current = next
+      return next
+    })
     if (selectionVersion === activeImageSelectionVersionRef.current) {
       activeImageSelectionRef.current = {
         fileName: uploaded.file_name,
         source: uploaded.path,
+        originalFilePath: currentSelection.originalFilePath,
         mode: currentSelection.mode,
       }
       setSelectedImageFileName(uploaded.file_name)
@@ -1350,7 +1423,7 @@ export default function CmsArticleEditorPage({
     setUpdatingImageOptions(true)
     setErrorMessage('')
     try {
-      const editableImage = await ensureEditableSelectedImage(selectionVersion)
+      const editableImage = await ensureEditableSelectedImage(selectionVersion, !checked)
       setUploadedImageOptions((prev) => ({
         ...prev,
         [editableImage.fileName]: {
@@ -1413,6 +1486,14 @@ export default function CmsArticleEditorPage({
           lock_token: lockToken,
           new_images: newImageFileNames.map((fileName) => ({
             file_name: fileName,
+            ...(() => {
+              const originalFilePath = resolveCurrentImageOriginalFilePath(fileName)
+              return originalFilePath.trim() === ''
+                ? {}
+                : {
+                    original_file_path: originalFilePath,
+                  }
+            })(),
             options: uploadedImageOptions[fileName] ?? DEFAULT_IMAGE_OPTIONS,
           })),
           delete_images: deleteImageIds,
@@ -2051,18 +2132,6 @@ export default function CmsArticleEditorPage({
               <label className="cms-image-option-toggle">
                 <input
                   type="checkbox"
-                  checked={selectedImageOptions.resize}
-                  onChange={(event) => {
-                    void updateSelectedImageOption('resize', event.target.checked)
-                  }}
-                  disabled={updatingImageOptions}
-                />
-                <span className="cms-image-option-switch" aria-hidden="true" />
-                <span>リサイズ</span>
-              </label>
-              <label className="cms-image-option-toggle">
-                <input
-                  type="checkbox"
                   checked={selectedImageOptions.exif_watermark}
                   onChange={(event) => {
                     void updateSelectedImageOption('exif_watermark', event.target.checked)
@@ -2085,7 +2154,7 @@ export default function CmsArticleEditorPage({
                 <span>サイトロゴ透かし</span>
               </label>
               <p className="cms-image-option-help">
-                画像をクリックまたはタップすると、この画像だけの処理設定を変更できます。
+                画像をクリックまたはタップすると、この画像だけの透かし設定を変更できます。
               </p>
             </div>
           )}

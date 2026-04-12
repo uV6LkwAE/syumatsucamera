@@ -790,12 +790,9 @@ components:
     MediaAssetImageProcessingOptions:
       type: object
       required:
-        - resize
         - exif_watermark
         - site_logo_watermark
       properties:
-        resize:
-          type: boolean
         exif_watermark:
           type: boolean
         site_logo_watermark:
@@ -807,6 +804,8 @@ components:
         - options
       properties:
         file_name:
+          type: string
+        original_file_path:
           type: string
         options:
           $ref: "#/components/schemas/MediaAssetImageProcessingOptions"

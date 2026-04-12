@@ -174,18 +174,77 @@ class ArticlePostprocessService:
 
         for new_image in new_images:
             stored_file_name = new_image["file_name"]
+            processing_options = new_image["options"]
+            exif_watermark_enabled = bool(processing_options.get("exif_watermark"))
+            site_logo_watermark_enabled = bool(processing_options.get("site_logo_watermark"))
+            ArticleSaveLogService.create_log(
+                request_user_id=request_user_id,
+                article_id=article.id,
+                lock_token=lock_token,
+                target=stored_file_name,
+                status=SaveLogStatus.STARTED,
+                message=(
+                    "画像処理を開始しました。 "
+                    f"EXIF透かし={exif_watermark_enabled} "
+                    f"サイトロゴ透かし={site_logo_watermark_enabled}"
+                ),
+            )
             try:
                 asset = MediaService.process_uploaded_asset(
                     article=article,
                     source_file_name=new_image["file_name"],
                     stored_file_name=stored_file_name,
-                    processing_options=new_image["options"],
+                    processing_options=processing_options,
                     lock_token=lock_token,
+                    original_file_path=new_image.get("original_file_path"),
                 )
                 created_asset_ids.append(str(asset.id))
                 public_paths_by_source_file_name[new_image["file_name"]] = MediaService.build_public_media_path(
                     file_name=stored_file_name
                 )
+                if exif_watermark_enabled:
+                    visible_exif_lines = MediaService.build_visible_exif_lines(
+                        exif_json=asset.exif_json,
+                    )
+                    if asset.exif_json is None:
+                        ArticleSaveLogService.create_log(
+                            request_user_id=request_user_id,
+                            article_id=article.id,
+                            lock_token=lock_token,
+                            target=stored_file_name,
+                            status=SaveLogStatus.FAILED,
+                            message="原本からEXIFを取得できませんでした。EXIF透かしはスキップしました。",
+                        )
+                    elif not visible_exif_lines:
+                        ArticleSaveLogService.create_log(
+                            request_user_id=request_user_id,
+                            article_id=article.id,
+                            lock_token=lock_token,
+                            target=stored_file_name,
+                            status=SaveLogStatus.COMPLETED,
+                            message="原本からEXIFを取得しましたが、表示可能な項目がありませんでした。EXIF透かしはスキップしました。",
+                        )
+                    else:
+                        ArticleSaveLogService.create_log(
+                            request_user_id=request_user_id,
+                            article_id=article.id,
+                            lock_token=lock_token,
+                            target=stored_file_name,
+                            status=SaveLogStatus.COMPLETED,
+                            message=(
+                                "EXIF透かしを描画しました。 "
+                                f"表示項目数={len(visible_exif_lines)}"
+                            ),
+                        )
+                if site_logo_watermark_enabled:
+                    ArticleSaveLogService.create_log(
+                        request_user_id=request_user_id,
+                        article_id=article.id,
+                        lock_token=lock_token,
+                        target=stored_file_name,
+                        status=SaveLogStatus.COMPLETED,
+                        message="サイトロゴ透かしを描画しました。",
+                    )
                 ArticleSaveLogService.create_log(
                     request_user_id=request_user_id,
                     article_id=article.id,
