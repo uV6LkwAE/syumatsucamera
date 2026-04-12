@@ -87,11 +87,30 @@ data:
         return 404;
       }
 
-      location ^~ /media/ {
-        alias /media/;
+      location ^~ /media/tmp/ {
+        return 404;
+      }
+
+      location ^~ /media/original/ {
+        return 404;
+      }
+
+      location ^~ /media/images/ {
+        alias /media/images/;
         expires 30d;
         add_header Cache-Control "public, max-age=2592000";
         try_files $request_filename =404;
+      }
+
+      location ^~ /media/users/ {
+        alias /media/users/;
+        expires 30d;
+        add_header Cache-Control "public, max-age=2592000";
+        try_files $request_filename =404;
+      }
+
+      location ^~ /media/ {
+        return 404;
       }
 
       location / {
