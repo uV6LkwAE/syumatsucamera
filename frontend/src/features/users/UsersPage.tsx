@@ -46,6 +46,7 @@ type CreateForm = {
 }
 
 type UpdateForm = {
+  email: string
   display_name: string
   profile: string
   x_url: string
@@ -60,6 +61,12 @@ type UpdateForm = {
 const USER_ROLE_OPTIONS: Array<ConsoleDropdownOption<UserRole>> = [
   { value: 'author', label: '執筆者' },
   { value: 'admin', label: '管理者' },
+]
+
+const LIMIT_OPTIONS: Array<ConsoleDropdownOption<number>> = [
+  { value: 20, label: '20件' },
+  { value: 50, label: '50件' },
+  { value: 100, label: '100件' },
 ]
 
 function formatDate(value: string | null): string {
@@ -122,6 +129,7 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
     role: 'author',
   })
   const [updateForm, setUpdateForm] = useState<UpdateForm>({
+    email: '',
     display_name: '',
     profile: '',
     x_url: '',
@@ -191,6 +199,7 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
       const payload = await apiRequest<UsersUserDetail>(`/users/${userId}`)
       setSelectedUser(payload)
       setUpdateForm({
+        email: payload.email,
         display_name: payload.display_name ?? '',
         profile: payload.profile ?? '',
         x_url: payload.x_url ?? '',
@@ -213,7 +222,7 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
 
   useEffect(() => {
     void fetchUsersList()
-  }, [])
+  }, [limit])
 
   async function onSubmitCreate(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
@@ -249,6 +258,7 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
     try {
       if (updateIconFile !== null || updateHeaderFile !== null) {
         const formData = new FormData()
+        formData.append('email', updateForm.email)
         formData.append('display_name', updateForm.display_name)
         formData.append('profile', updateForm.profile)
         formData.append('x_url', updateForm.x_url.trim())
@@ -271,6 +281,7 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
         const updated = await apiRequest<UsersUserDetail>(`/users/${selectedUser.id}`, {
           method: 'PATCH',
           body: {
+            email: updateForm.email,
             display_name: updateForm.display_name,
             profile: updateForm.profile,
             x_url: updateForm.x_url.trim() === '' ? null : updateForm.x_url.trim(),
@@ -285,6 +296,18 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
           },
         })
         setSelectedUser(updated)
+        setUpdateForm({
+          email: updated.email,
+          display_name: updated.display_name ?? '',
+          profile: updated.profile ?? '',
+          x_url: updated.x_url ?? '',
+          instagram_url: updated.instagram_url ?? '',
+          website_url: updated.website_url ?? '',
+          role: updated.role,
+          is_active: updated.is_active,
+          icon: updated.icon ?? '',
+          header_image: updated.header_image ?? '',
+        })
       }
       setMessage('ユーザーを更新しました。')
       setUpdateIconFile(null)
@@ -368,30 +391,32 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
           <h2>ユーザー一覧</h2>
           <p>登録済みユーザーの状態を確認し、詳細画面へ遷移します。</p>
         </div>
-        <div className="console-actions console-actions-spread d-flex flex-column flex-lg-row align-items-stretch align-items-lg-center gap-3">
-          <div className="console-actions d-flex flex-column flex-md-row align-items-start align-items-md-center gap-3">
-            <div className="console-inline-label d-inline-flex align-items-center gap-2">
-              表示件数
-              <input
-                className="console-input form-control"
-                type="number"
-                min={1}
-                max={100}
+        <div className="cms-article-toolbar row g-3 align-items-center">
+          <div className="cms-article-toolbar-meta col-12 col-lg d-flex flex-column flex-md-row align-items-start align-items-md-center gap-3">
+            <p className="cms-article-toolbar-stat">合計 {users.length}件</p>
+            <div className="console-inline-label cms-article-limit-field d-inline-flex align-items-center gap-2">
+              <span>表示件数</span>
+              <ConsoleDropdown
                 value={limit}
-                onChange={(event) => setLimit(Number(event.target.value))}
+                options={LIMIT_OPTIONS}
+                fullWidth={false}
+                onChange={(nextValue) => {
+                  setLimit(nextValue)
+                }}
               />
             </div>
-            <div className="console-static-value">件数: {users.length}</div>
           </div>
-          <button
-            type="button"
-            className="console-secondary console-icon-button"
-            onClick={() => void fetchUsersList()}
-            disabled={loadingUsers}
-          >
-            <i className="bi bi-arrow-clockwise" aria-hidden="true" />
-            再読み込み
-          </button>
+          <div className="cms-article-toolbar-actions col-12 col-lg-auto d-flex flex-wrap justify-content-start justify-content-lg-end gap-2">
+            <button
+              type="button"
+              className="console-secondary console-icon-button"
+              onClick={() => void fetchUsersList()}
+              disabled={loadingUsers}
+            >
+              <i className="bi bi-arrow-clockwise" aria-hidden="true" />
+              再読み込み
+            </button>
+          </div>
         </div>
         <div className="table-responsive console-table-scroll">
           <table className="table table-hover align-middle mb-0 console-table-basic">
@@ -440,7 +465,9 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
       {selectedUser !== null && (
         <form className="console-card cms-profile-hero" onSubmit={(event) => void onSubmitUpdate(event)}>
           <div
-            className={`cms-profile-banner ${loadingDetail || submittingUpdate ? '' : 'is-editing'}`}
+            className={`cms-profile-banner cms-profile-banner-edit-view ${
+              loadingDetail || submittingUpdate ? '' : 'is-editing'
+            }`}
             style={
               updateHeaderPreviewUrl !== null
                 ? { backgroundImage: `url(${updateHeaderPreviewUrl})` }
@@ -558,17 +585,24 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
                     メールアドレス
                   </label>
                   <span className="cms-profile-field-counter">
-                    {selectedUser.email.length}/255
+                    {updateForm.email.length}/255
                   </span>
                 </div>
                 <input
                   type="email"
-                  className="console-input form-control cms-profile-input cms-profile-readonly-input"
+                  className="console-input form-control cms-profile-input"
                   id="user-email"
                   name="email"
                   aria-label="メールアドレス"
-                  value={selectedUser.email}
-                  disabled
+                  value={updateForm.email}
+                  maxLength={255}
+                  required
+                  onChange={(event) =>
+                    setUpdateForm((prev) => ({
+                      ...prev,
+                      email: event.target.value,
+                    }))
+                  }
                 />
               </div>
 

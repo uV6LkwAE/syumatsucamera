@@ -1139,6 +1139,10 @@ body {
   background-position: center;
 }
 
+.cms-profile-banner-edit-view {
+  aspect-ratio: 32 / 9;
+}
+
 .cms-profile-banner.is-editing {
   cursor: pointer;
 }
@@ -1875,6 +1879,10 @@ body {
   justify-content: space-between;
   gap: 1rem;
   padding-inline: 0.125rem;
+}
+
+.cms-article-toolbar + .table-responsive.console-table-scroll {
+  margin-top: 12px;
 }
 
 .cms-article-toolbar-meta {

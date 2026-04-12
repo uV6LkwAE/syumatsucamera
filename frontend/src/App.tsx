@@ -763,7 +763,9 @@ function CmsConsolePage() {
     return (
       <section className="console-card cms-profile-hero">
         <div
-          className={`cms-profile-banner ${canPickProfileImages ? 'is-editing' : ''}`}
+          className={`cms-profile-banner cms-profile-banner-edit-view ${
+            canPickProfileImages ? 'is-editing' : ''
+          }`}
           style={
             previewHeaderImage !== ''
               ? { backgroundImage: `url(${previewHeaderImage})` }
