@@ -128,7 +128,7 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
     setLoadingUsers(true)
     setErrorMessage('')
     try {
-      const payload = await apiRequest<UsersUserListResponse>(`/users?limit=${limit}`)
+      const payload = await apiRequest<UsersUserListResponse>(`/users/?limit=${limit}`)
       setUsers(payload.items)
     } catch (error) {
       setErrorMessage(toMessage(error))
@@ -175,7 +175,7 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
     setMessage('')
     setErrorMessage('')
     try {
-      await apiRequest<UsersUserDetail>('/users', {
+      await apiRequest<UsersUserDetail>('/users/', {
         method: 'POST',
         body: {
           email: createForm.email,
