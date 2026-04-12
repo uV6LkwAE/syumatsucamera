@@ -1987,6 +1987,7 @@ export default function CmsArticleEditorPage({
           ]}
           compact
           showDivider={false}
+          required
         />
         <div className="console-form-grid row g-3 cms-thumbnail-grid">
           <label className="console-label col-12 col-lg-6">
@@ -2047,6 +2048,7 @@ export default function CmsArticleEditorPage({
           ]}
           compact
           showDivider={false}
+          required
         />
         <label className="console-label cms-article-editor-title">
           <span className="cms-article-field-head">
@@ -2076,6 +2078,7 @@ export default function CmsArticleEditorPage({
           ]}
           compact
           showDivider={false}
+          required
         />
         <label className="console-label cms-article-editor-summary">
           <span className="cms-article-field-head">
@@ -2105,6 +2108,7 @@ export default function CmsArticleEditorPage({
           ]}
           compact
           showDivider={false}
+          required
         />
         <div className="cms-article-category-panel">
           {categories.length === 0 ? (
@@ -2241,6 +2245,7 @@ export default function CmsArticleEditorPage({
           ]}
           compact
           showDivider={false}
+          required
         />
         <fieldset className="cms-twitter-card-grid row g-3">
           <legend className="visually-hidden">TwitterCard</legend>
@@ -2283,7 +2288,7 @@ export default function CmsArticleEditorPage({
       </div>
 
       <div className="console-card">
-        <CmsTabGuide title="公開状態" helpLines={[]} compact showDivider={false} />
+        <CmsTabGuide title="公開状態" helpLines={[]} compact showDivider={false} required />
         <div className="console-form-grid row g-3">
           <label className="console-label col-12">
             公開状態
@@ -2350,7 +2355,7 @@ export default function CmsArticleEditorPage({
       </div>
 
       <div className="console-card">
-        <CmsTabGuide title="本文" helpLines={[]} compact showDivider={false} />
+        <CmsTabGuide title="本文" helpLines={[]} compact showDivider={false} required />
         <div
           ref={editorShellRef}
           className="cms-article-editor-shell"

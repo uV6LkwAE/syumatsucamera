@@ -4,6 +4,7 @@ type CmsTabGuideProps = {
   helpLines: string[]
   showDivider?: boolean
   compact?: boolean
+  required?: boolean
 }
 
 export default function CmsTabGuide({
@@ -12,6 +13,7 @@ export default function CmsTabGuide({
   helpLines,
   showDivider = true,
   compact = false,
+  required = false,
 }: CmsTabGuideProps) {
   const className = compact
     ? 'cms-tab-guide cms-tab-guide-compact container-fluid px-0'
@@ -19,7 +21,10 @@ export default function CmsTabGuide({
 
   return (
     <section className={className}>
-      <h2>{title}</h2>
+      <div className="cms-tab-guide-head">
+        <h2>{title}</h2>
+        {required && <span className="cms-tab-guide-required">必須*</span>}
+      </div>
       {summary && summary.trim() !== '' && (
         <p className="cms-tab-guide-summary">{summary}</p>
       )}

@@ -1605,6 +1605,15 @@ body {
   margin-bottom: 1rem;
 }
 
+.cms-tab-guide-head {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.35rem;
+  width: fit-content;
+  max-width: 100%;
+}
+
 .cms-tab-guide h2 {
   margin: 0;
   position: relative;
@@ -1623,6 +1632,16 @@ body {
   width: 0.28rem;
   border-radius: 999px;
   background: linear-gradient(180deg, #2f74b7 0%, #235e9a 100%);
+}
+
+.cms-tab-guide-required {
+  flex: 0 0 auto;
+  margin-top: 0;
+  font-size: 0.72rem;
+  line-height: 1;
+  font-weight: 700;
+  color: var(--danger-text);
+  white-space: nowrap;
 }
 
 .cms-tab-guide-summary {
