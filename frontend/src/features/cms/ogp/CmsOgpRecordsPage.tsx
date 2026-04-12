@@ -253,7 +253,7 @@ export default function CmsOgpRecordsPage({ embedded = false }: CmsOgpRecordsPag
             <p className="cms-article-toolbar-stat">
               合計 {totalCount}件 / {page}ページ目 / 全{totalPages}ページ
             </p>
-            <label className="console-inline-label cms-article-limit-field d-inline-flex align-items-center gap-2">
+            <div className="console-inline-label cms-article-limit-field d-inline-flex align-items-center gap-2">
               <span>表示件数</span>
               <ConsoleDropdown
                 id="cms-ogp-limit"
@@ -266,7 +266,7 @@ export default function CmsOgpRecordsPage({ embedded = false }: CmsOgpRecordsPag
                   setLimit(nextValue)
                 }}
               />
-            </label>
+            </div>
           </div>
 
           <div className="cms-article-toolbar-actions col-12 col-lg-auto d-flex flex-wrap justify-content-start justify-content-lg-end gap-2">

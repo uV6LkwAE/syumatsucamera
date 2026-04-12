@@ -1894,10 +1894,10 @@ body {
 .cms-article-limit-field {
   display: inline-flex;
   flex: 0 0 auto;
-  padding: 0.35rem 0.35rem 0.35rem 0.8rem;
-  border-radius: 1rem;
-  border: 1px solid #dbe4ef;
-  background: #ffffff;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: #35506e;
 }
 
@@ -4356,6 +4356,10 @@ body {
     justify-content: flex-start;
     width: auto;
     max-width: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
   }
 
   .cms-article-limit-field .console-select {

@@ -105,7 +105,7 @@ export default function ContactsPage({ embedded = false }: ContactsPageProps) {
         </div>
         <div className="console-actions console-actions-spread d-flex flex-column flex-lg-row align-items-stretch align-items-lg-center gap-3">
           <div className="console-actions d-flex flex-column flex-md-row align-items-start align-items-md-center gap-3">
-            <label className="console-inline-label d-inline-flex align-items-center gap-2">
+            <div className="console-inline-label d-inline-flex align-items-center gap-2">
               表示件数
               <ConsoleDropdown
                 value={limit}
@@ -116,7 +116,7 @@ export default function ContactsPage({ embedded = false }: ContactsPageProps) {
                   setLimit(nextValue)
                 }}
               />
-            </label>
+            </div>
             <div className="console-static-value">
               合計: {totalCount}件 / {page}ページ目（全{totalPages}ページ）
             </div>

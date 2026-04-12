@@ -42,6 +42,7 @@ import {
   PublicTagArticlesPage,
 } from './features/public/PublicPages'
 import UsersPage from './features/users/UsersPage'
+import UsersActivationPage from './features/users/UsersActivationPage'
 
 type CmsNavItem = {
   to: string
@@ -1446,6 +1447,7 @@ export default function App() {
       <GlobalApiLoadingIndicator />
       <Routes>
         <Route path="/cms" element={<Navigate to="/cms/console/profile" replace />} />
+        <Route path="/cms/users/activate/:userId" element={<UsersActivationPage />} />
         <Route path="/cms/console" element={<CmsConsoleLayout />}>
           <Route index element={<Navigate to="/cms/console/profile" replace />} />
           <Route path="me" element={<Navigate to="/cms/console/profile" replace />} />

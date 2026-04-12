@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useEffect, useRef, useState } from 'react'
 import { ApiError, apiRequest } from '../../api/client'
 import CmsTabGuide from '../../components/CmsTabGuide'
 import ConsoleDropdown, { ConsoleDropdownOption } from '../../components/ConsoleDropdown'
@@ -38,13 +38,6 @@ type UsersUserDetail = {
   is_active: boolean
   created_at: string
   updated_at: string
-}
-
-type UsersInviteResponse = {
-  user_id: string
-  email: string
-  role: UserRole
-  activate_path: string
 }
 
 type CreateForm = {
@@ -87,6 +80,34 @@ function toMessage(error: unknown): string {
   return '通信中に予期しないエラーが発生しました。'
 }
 
+function toUserRoleLabel(role: UserRole): string {
+  return role === 'admin' ? '管理者' : '執筆者'
+}
+
+function buildActivationUrl(userId: string): string {
+  return `${window.location.origin}/cms/users/activate/${userId}`
+}
+
+async function copyTextToClipboard(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText !== undefined) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', 'true')
+  textarea.style.position = 'fixed'
+  textarea.style.left = '-9999px'
+  document.body.appendChild(textarea)
+  textarea.select()
+  const successful = document.execCommand('copy')
+  document.body.removeChild(textarea)
+  if (!successful) {
+    throw new Error('クリップボードへのコピーに失敗しました。')
+  }
+}
+
 type UsersPageProps = {
   embedded?: boolean
 }
@@ -95,7 +116,6 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
   const [limit, setLimit] = useState<number>(20)
   const [users, setUsers] = useState<UsersUserSummary[]>([])
   const [selectedUser, setSelectedUser] = useState<UsersUserDetail | null>(null)
-  const [inviteResult, setInviteResult] = useState<UsersInviteResponse | null>(null)
 
   const [createForm, setCreateForm] = useState<CreateForm>({
     email: '',
@@ -115,6 +135,11 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
 
   const [updateIconFile, setUpdateIconFile] = useState<File | null>(null)
   const [updateHeaderFile, setUpdateHeaderFile] = useState<File | null>(null)
+  const [updateIconPreviewUrl, setUpdateIconPreviewUrl] = useState<string | null>(null)
+  const [updateHeaderPreviewUrl, setUpdateHeaderPreviewUrl] = useState<string | null>(null)
+
+  const updateIconInputRef = useRef<HTMLInputElement | null>(null)
+  const updateHeaderInputRef = useRef<HTMLInputElement | null>(null)
 
   const [loadingUsers, setLoadingUsers] = useState<boolean>(false)
   const [loadingDetail, setLoadingDetail] = useState<boolean>(false)
@@ -123,6 +148,28 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
 
   const [message, setMessage] = useState<string>('')
   const [errorMessage, setErrorMessage] = useState<string>('')
+
+  useEffect(() => {
+    if (updateIconFile === null) {
+      setUpdateIconPreviewUrl(null)
+      return
+    }
+
+    const objectUrl = URL.createObjectURL(updateIconFile)
+    setUpdateIconPreviewUrl(objectUrl)
+    return () => URL.revokeObjectURL(objectUrl)
+  }, [updateIconFile])
+
+  useEffect(() => {
+    if (updateHeaderFile === null) {
+      setUpdateHeaderPreviewUrl(null)
+      return
+    }
+
+    const objectUrl = URL.createObjectURL(updateHeaderFile)
+    setUpdateHeaderPreviewUrl(objectUrl)
+    return () => URL.revokeObjectURL(objectUrl)
+  }, [updateHeaderFile])
 
   async function fetchUsersList(): Promise<void> {
     setLoadingUsers(true)
@@ -139,7 +186,6 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
 
   async function fetchUserDetail(userId: string): Promise<void> {
     setLoadingDetail(true)
-    setInviteResult(null)
     setErrorMessage('')
     try {
       const payload = await apiRequest<UsersUserDetail>(`/users/${userId}`)
@@ -192,8 +238,7 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
     }
   }
 
-  async function onSubmitUpdate(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault()
+  async function saveSelectedUser(): Promise<void> {
     if (selectedUser === null) {
       setErrorMessage('更新対象ユーザーを先に選択してください。')
       return
@@ -252,18 +297,20 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
     }
   }
 
-  async function issueInvite(userId: string): Promise<void> {
-    setInviteResult(null)
+  async function onSubmitUpdate(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault()
+    await saveSelectedUser()
+  }
+
+  async function copyActivationUrl(userId: string): Promise<void> {
     setMessage('')
     setErrorMessage('')
     try {
-      const payload = await apiRequest<UsersInviteResponse>(`/users/${userId}/invite`, {
-        method: 'POST',
-      })
-      setInviteResult(payload)
-      setMessage('招待URLを発行しました。')
-    } catch (error) {
-      setErrorMessage(toMessage(error))
+      const activationUrl = buildActivationUrl(userId)
+      await copyTextToClipboard(activationUrl)
+      setMessage('招待URLをコピーしました。')
+    } catch (_error) {
+      setErrorMessage('招待URLのコピーに失敗しました。')
     }
   }
 
@@ -274,7 +321,7 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
       <CmsTabGuide
         title="ユーザーの作成と更新"
         helpLines={[
-          '仮登録ユーザーを作成して招待URLを発行できます。',
+          '仮登録ユーザーを作成し、一覧から招待URLをコピーできます。',
           '一覧から対象ユーザーを選ぶと詳細を更新できます。',
           '権限や有効状態の変更もこのタブで行います。',
         ]}
@@ -323,7 +370,7 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
         </div>
         <div className="console-actions console-actions-spread d-flex flex-column flex-lg-row align-items-stretch align-items-lg-center gap-3">
           <div className="console-actions d-flex flex-column flex-md-row align-items-start align-items-md-center gap-3">
-            <label className="console-inline-label d-inline-flex align-items-center gap-2">
+            <div className="console-inline-label d-inline-flex align-items-center gap-2">
               表示件数
               <input
                 className="console-input form-control"
@@ -333,7 +380,7 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
                 value={limit}
                 onChange={(event) => setLimit(Number(event.target.value))}
               />
-            </label>
+            </div>
             <div className="console-static-value">件数: {users.length}</div>
           </div>
           <button
@@ -363,7 +410,7 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
                 <tr key={item.id}>
                   <td>{item.email}</td>
                   <td>{item.display_name ?? '-'}</td>
-                  <td>{item.role === 'admin' ? '管理者' : '執筆者'}</td>
+                  <td>{toUserRoleLabel(item.role)}</td>
                   <td>{item.is_active ? '有効' : '無効'}</td>
                   <td>{formatDate(item.last_login_at)}</td>
                   <td className="console-actions-inline">
@@ -371,15 +418,16 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
                       type="button"
                       className="console-secondary"
                       onClick={() => void fetchUserDetail(item.id)}
-                    >
+                      >
                       詳細
-                    </button>
+                      </button>
                     <button
                       type="button"
                       className="console-secondary"
-                      onClick={() => void issueInvite(item.id)}
+                      disabled={item.is_active}
+                      onClick={() => void copyActivationUrl(item.id)}
                     >
-                      招待URL発行
+                      招待URLをコピー
                     </button>
                   </td>
                 </tr>
@@ -390,172 +438,295 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
       </div>
 
       {selectedUser !== null && (
-        <div className="console-card">
-          <div className="console-card-header">
-            <div>
-              <h2>ユーザー詳細/更新</h2>
-              <p>プロフィール情報と権限を更新します。</p>
+        <form className="console-card cms-profile-hero" onSubmit={(event) => void onSubmitUpdate(event)}>
+          <div
+            className={`cms-profile-banner ${loadingDetail || submittingUpdate ? '' : 'is-editing'}`}
+            style={
+              updateHeaderPreviewUrl !== null
+                ? { backgroundImage: `url(${updateHeaderPreviewUrl})` }
+                : selectedUser.header_image !== null
+                  ? { backgroundImage: `url(${selectedUser.header_image})` }
+                  : undefined
+            }
+            onClick={() => {
+              if (loadingDetail || submittingUpdate) {
+                return
+              }
+              updateHeaderInputRef.current?.click()
+            }}
+            onKeyDown={(event) => {
+              if (loadingDetail || submittingUpdate) {
+                return
+              }
+              if (event.key !== 'Enter' && event.key !== ' ') {
+                return
+              }
+              event.preventDefault()
+              updateHeaderInputRef.current?.click()
+            }}
+            role={loadingDetail || submittingUpdate ? undefined : 'button'}
+            tabIndex={loadingDetail || submittingUpdate ? undefined : 0}
+            aria-label={loadingDetail || submittingUpdate ? undefined : 'ヘッダー画像を選択'}
+          >
+            <button
+              type="submit"
+              className="cms-profile-edit-button cms-profile-banner-edit-button"
+              onClick={(event) => {
+                event.stopPropagation()
+              }}
+              disabled={submittingUpdate}
+              aria-label="ユーザーを保存"
+              title="保存"
+            >
+              <i className={`bi ${submittingUpdate ? 'bi-hourglass-split' : 'bi-check2-circle'}`} />
+            </button>
+            {!loadingDetail && !submittingUpdate && (
+              <div className="cms-profile-banner-upload-badge" aria-hidden="true">
+                <i className="bi bi-cloud-arrow-up" />
+              </div>
+            )}
+          </div>
+          <div className="cms-profile-body">
+            <div
+              className={`cms-profile-avatar-wrap ${loadingDetail || submittingUpdate ? '' : 'is-editing'}`}
+              onClick={() => {
+                if (loadingDetail || submittingUpdate) {
+                  return
+                }
+                updateIconInputRef.current?.click()
+              }}
+              onKeyDown={(event) => {
+                if (loadingDetail || submittingUpdate) {
+                  return
+                }
+                if (event.key !== 'Enter' && event.key !== ' ') {
+                  return
+                }
+                event.preventDefault()
+                updateIconInputRef.current?.click()
+              }}
+              role={loadingDetail || submittingUpdate ? undefined : 'button'}
+              tabIndex={loadingDetail || submittingUpdate ? undefined : 0}
+              aria-label={loadingDetail || submittingUpdate ? undefined : 'アイコン画像を選択'}
+            >
+              {updateIconPreviewUrl !== null ? (
+                <img className="cms-profile-avatar" src={updateIconPreviewUrl} alt="icon preview" />
+              ) : selectedUser.icon !== null ? (
+                <img className="cms-profile-avatar" src={selectedUser.icon} alt="icon preview" />
+              ) : (
+                <div className="cms-profile-avatar cms-profile-avatar-empty" aria-hidden="true" />
+              )}
+              {!loadingDetail && !submittingUpdate && (
+                <span className="cms-profile-avatar-upload-badge" aria-hidden="true">
+                  <i className="bi bi-camera-fill" />
+                </span>
+              )}
             </div>
-          </div>
-          <div className="console-static-value">
-            id: {selectedUser.id}
-            <br />
-            メールアドレス: {selectedUser.email}
-            <br />
-            作成日時: {formatDate(selectedUser.created_at)}
-            <br />
-            更新日時: {formatDate(selectedUser.updated_at)}
-          </div>
-          <form className="console-form-grid row g-3" onSubmit={(event) => void onSubmitUpdate(event)}>
-            <label className="console-label col-12 col-md-6">
-              メールアドレス
+
+            <div className="cms-profile-meta">
+              <div className="cms-profile-meta-top d-flex flex-column gap-2 align-items-start">
+                <div className="cms-profile-edit-section">
+                  <div className="cms-profile-field-head">
+                    <label className="cms-profile-field-label" htmlFor="user-display-name">
+                      表示名
+                    </label>
+                    <span className="cms-profile-field-counter">
+                      {updateForm.display_name.length}/100
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    className="console-input form-control cms-profile-input"
+                    id="user-display-name"
+                    name="display_name"
+                    aria-label="表示名"
+                    value={updateForm.display_name}
+                    maxLength={100}
+                    onChange={(event) =>
+                      setUpdateForm((prev) => ({
+                        ...prev,
+                        display_name: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="cms-profile-edit-section">
+                <div className="cms-profile-field-head">
+                  <label className="cms-profile-field-label" htmlFor="user-email">
+                    メールアドレス
+                  </label>
+                  <span className="cms-profile-field-counter">
+                    {selectedUser.email.length}/255
+                  </span>
+                </div>
+                <input
+                  type="email"
+                  className="console-input form-control cms-profile-input cms-profile-readonly-input"
+                  id="user-email"
+                  name="email"
+                  aria-label="メールアドレス"
+                  value={selectedUser.email}
+                  disabled
+                />
+              </div>
+
+              <div className="cms-profile-edit-section">
+                <div className="cms-profile-field-head">
+                  <label className="cms-profile-field-label" htmlFor="user-bio">
+                    自己紹介
+                  </label>
+                  <span className="cms-profile-field-counter">
+                    {updateForm.profile.length}/300
+                  </span>
+                </div>
+                <textarea
+                  className="console-textarea form-control cms-profile-textarea"
+                  id="user-bio"
+                  name="profile"
+                  aria-label="自己紹介"
+                  value={updateForm.profile}
+                  maxLength={300}
+                  rows={10}
+                  onChange={(event) =>
+                    setUpdateForm((prev) => ({
+                      ...prev,
+                      profile: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              <div className="cms-profile-social-editor">
+                <div className="cms-profile-meta-editor-title-wrap">
+                  <h2 className="cms-profile-meta-editor-title">リンク</h2>
+                  <span className="cms-profile-meta-editor-caption">
+                    プロフィールに紐づけるURLを入力します。
+                  </span>
+                </div>
+                <div className="cms-profile-social-grid row g-3">
+                  <label className="console-label col-12 col-lg-4">
+                    <span className="cms-profile-field-head">
+                      <span className="cms-profile-field-label">X URL</span>
+                      <span className="cms-profile-field-counter">{updateForm.x_url.length}/500</span>
+                    </span>
+                    <input
+                      className="console-input form-control cms-profile-input cms-profile-url-input"
+                      type="url"
+                      value={updateForm.x_url}
+                      maxLength={500}
+                      placeholder="https://x.com/..."
+                      onChange={(event) =>
+                        setUpdateForm((prev) => ({
+                          ...prev,
+                          x_url: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="console-label col-12 col-lg-4">
+                    <span className="cms-profile-field-head">
+                      <span className="cms-profile-field-label">Instagram URL</span>
+                      <span className="cms-profile-field-counter">
+                        {updateForm.instagram_url.length}/500
+                      </span>
+                    </span>
+                    <input
+                      className="console-input form-control cms-profile-input cms-profile-url-input"
+                      type="url"
+                      value={updateForm.instagram_url}
+                      maxLength={500}
+                      placeholder="https://www.instagram.com/..."
+                      onChange={(event) =>
+                        setUpdateForm((prev) => ({
+                          ...prev,
+                          instagram_url: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="console-label col-12 col-lg-4">
+                    <span className="cms-profile-field-head">
+                      <span className="cms-profile-field-label">Webサイト URL</span>
+                      <span className="cms-profile-field-counter">
+                        {updateForm.website_url.length}/500
+                      </span>
+                    </span>
+                    <input
+                      className="console-input form-control cms-profile-input cms-profile-url-input"
+                      type="url"
+                      value={updateForm.website_url}
+                      maxLength={500}
+                      placeholder="https://example.com/"
+                      onChange={(event) =>
+                        setUpdateForm((prev) => ({
+                          ...prev,
+                          website_url: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="cms-profile-meta-editor">
+                <div className="cms-profile-meta-editor-head d-flex flex-column flex-md-row align-items-start justify-content-between gap-2">
+                  <div className="cms-profile-meta-editor-title-wrap d-flex flex-wrap align-items-baseline gap-2">
+                    <h2 className="cms-profile-meta-editor-title">権限と状態</h2>
+                    <span className="cms-profile-field-counter">ユーザー属性を更新します。</span>
+                  </div>
+                </div>
+                <div className="cms-profile-social-grid row g-3">
+                  <label className="console-label col-12 col-md-6">
+                    権限
+                    <ConsoleDropdown
+                      value={updateForm.role}
+                      options={USER_ROLE_OPTIONS}
+                      onChange={(nextValue) =>
+                        setUpdateForm((prev) => ({ ...prev, role: nextValue }))
+                      }
+                    />
+                  </label>
+                  <label className="console-inline-label col-12 d-inline-flex align-items-center gap-2">
+                    ユーザーを有効化
+                    <input
+                      type="checkbox"
+                      checked={updateForm.is_active}
+                      onChange={(event) =>
+                        setUpdateForm((prev) => ({ ...prev, is_active: event.target.checked }))
+                      }
+                    />
+                  </label>
+                </div>
+              </div>
+
               <input
-                className="console-input form-control cms-profile-input cms-profile-readonly-input"
-                type="email"
-                value={selectedUser.email}
-                disabled
-              />
-            </label>
-            <label className="console-label col-12 col-md-6">
-              表示名
-              <input
-                className="console-input form-control cms-profile-input"
-                required
-                value={updateForm.display_name}
-                onChange={(event) =>
-                  setUpdateForm((prev) => ({ ...prev, display_name: event.target.value }))
-                }
-              />
-            </label>
-            <label className="console-label col-12">
-              自己紹介
-              <textarea
-                className="console-textarea form-control cms-profile-textarea"
-                required
-                value={updateForm.profile}
-                rows={10}
-                onChange={(event) =>
-                  setUpdateForm((prev) => ({ ...prev, profile: event.target.value }))
-                }
-              />
-            </label>
-            <label className="console-label col-12 col-lg-4">
-              X URL
-              <input
-                className="console-input form-control"
-                type="url"
-                value={updateForm.x_url}
-                onChange={(event) =>
-                  setUpdateForm((prev) => ({ ...prev, x_url: event.target.value }))
-                }
-              />
-            </label>
-            <label className="console-label col-12 col-lg-4">
-              Instagram URL
-              <input
-                className="console-input form-control"
-                type="url"
-                value={updateForm.instagram_url}
-                onChange={(event) =>
-                  setUpdateForm((prev) => ({ ...prev, instagram_url: event.target.value }))
-                }
-              />
-            </label>
-            <label className="console-label col-12 col-lg-4">
-              Webサイト URL
-              <input
-                className="console-input form-control"
-                type="url"
-                value={updateForm.website_url}
-                onChange={(event) =>
-                  setUpdateForm((prev) => ({ ...prev, website_url: event.target.value }))
-                }
-              />
-            </label>
-            <label className="console-label col-12 col-md-6">
-              権限
-              <ConsoleDropdown
-                value={updateForm.role}
-                options={USER_ROLE_OPTIONS}
-                onChange={(nextValue) =>
-                  setUpdateForm((prev) => ({ ...prev, role: nextValue }))
-                }
-              />
-            </label>
-            <label className="console-inline-label col-12 d-inline-flex align-items-center gap-2">
-              ユーザーを有効化
-              <input
-                type="checkbox"
-                checked={updateForm.is_active}
-                onChange={(event) =>
-                  setUpdateForm((prev) => ({ ...prev, is_active: event.target.checked }))
-                }
-              />
-            </label>
-            <label className="console-label col-12 col-md-6">
-              アイコン画像URL（任意）
-              <input
-                className="console-input form-control"
-                value={updateForm.icon}
-                onChange={(event) =>
-                  setUpdateForm((prev) => ({ ...prev, icon: event.target.value }))
-                }
-              />
-            </label>
-            <label className="console-label col-12 col-md-6">
-              ヘッダー画像URL（任意）
-              <input
-                className="console-input form-control"
-                value={updateForm.header_image}
-                onChange={(event) =>
-                  setUpdateForm((prev) => ({ ...prev, header_image: event.target.value }))
-                }
-              />
-            </label>
-            <label className="console-label col-12 col-md-6">
-              アイコン画像アップロード（任意）
-              <input
-                className="console-input form-control"
+                ref={updateIconInputRef}
                 type="file"
+                className="cms-profile-hidden-input"
                 accept="image/jpeg,image/png,image/webp"
                 onChange={(event) => setUpdateIconFile(event.target.files?.[0] ?? null)}
               />
-            </label>
-            <label className="console-label col-12 col-md-6">
-              ヘッダー画像アップロード（任意）
               <input
-                className="console-input form-control"
+                ref={updateHeaderInputRef}
                 type="file"
+                className="cms-profile-hidden-input"
                 accept="image/jpeg,image/png,image/webp"
                 onChange={(event) => setUpdateHeaderFile(event.target.files?.[0] ?? null)}
               />
-            </label>
-            <div className="console-actions col-12 d-flex">
-              <button type="submit" className="console-primary" disabled={submittingUpdate}>
-                {submittingUpdate ? '更新中...' : 'ユーザー更新'}
-              </button>
-            </div>
-          </form>
 
-          {inviteResult !== null && (
-            <div className="console-static-value">
-              招待URL: {inviteResult.activate_path}
+              {(updateIconFile !== null || updateHeaderFile !== null) && (
+                <div className="cms-profile-upload-files">
+                  {updateIconFile !== null && <div>アイコン: {updateIconFile.name}</div>}
+                  {updateHeaderFile !== null && <div>ヘッダー: {updateHeaderFile.name}</div>}
+                </div>
+              )}
+
             </div>
-          )}
-        </div>
+          </div>
+        </form>
       )}
-      <div className="console-card">
-        <div className="console-card-header">
-          <h2>本登録フロー</h2>
-          <p>本登録は、招待URLにアクセスしたユーザー本人が実行します。</p>
-        </div>
-        <div className="console-static-value">
-          管理者は仮登録と招待URL発行のみ行います。<br />
-          本登録入力（表示名・プロフィール等）は
-          <code> /api/users/activate/{'{user_id}'}</code>
-          で本人が完了します。
-        </div>
-      </div>
     </>
   )
 

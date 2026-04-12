@@ -173,7 +173,7 @@ export default function CmsPublishRequestsPage({
                 }}
               />
             </label>
-            <label className="console-inline-label cms-article-limit-field d-inline-flex align-items-center gap-2">
+            <div className="console-inline-label cms-article-limit-field d-inline-flex align-items-center gap-2">
               <span>表示件数</span>
               <ConsoleDropdown
                 id="cms-publish-request-limit"
@@ -186,7 +186,7 @@ export default function CmsPublishRequestsPage({
                   setLimit(nextValue)
                 }}
               />
-            </label>
+            </div>
           </div>
 
           <div className="cms-article-toolbar-actions col-12 col-lg-auto d-flex flex-wrap justify-content-start justify-content-lg-end gap-2">
