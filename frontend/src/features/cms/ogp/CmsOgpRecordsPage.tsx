@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiRequest } from '../../../api/client'
+import ApiErrorPopup from '../../../components/ApiErrorPopup'
 import CmsTabGuide from '../../../components/CmsTabGuide'
 import ConsoleDropdown, { ConsoleDropdownOption } from '../../../components/ConsoleDropdown'
 import ConsoleNotice from '../../../components/ConsoleNotice'
-import { formatCmsDate, toApiMessage } from '../helpers'
+import { formatCmsDate } from '../helpers'
 import type {
   CmsAcceptedJob,
   CmsOgpRecord,
@@ -61,7 +62,7 @@ export default function CmsOgpRecordsPage({ embedded = false }: CmsOgpRecordsPag
   const [refetchingRecord, setRefetchingRecord] = useState(false)
   const [deletingRecord, setDeletingRecord] = useState(false)
   const [message, setMessage] = useState('')
-  const [errorMessage, setErrorMessage] = useState('')
+  const [errorMessage, setErrorMessage] = useState<unknown>('')
   const refreshTimerRef = useRef<number | null>(null)
 
   async function fetchOgpRecords(nextSelectedId?: string | null): Promise<void> {
@@ -95,7 +96,7 @@ export default function CmsOgpRecordsPage({ embedded = false }: CmsOgpRecordsPag
       setSelectedRecordId(resolvedId)
       setMessage('')
     } catch (error) {
-      setErrorMessage(toApiMessage(error))
+      setErrorMessage(error)
     } finally {
       setLoadingList(false)
     }
@@ -116,7 +117,7 @@ export default function CmsOgpRecordsPage({ embedded = false }: CmsOgpRecordsPag
       setSelectedRecord(payload)
       setOgpForm(toOgpFormState(payload))
     } catch (error) {
-      setErrorMessage(toApiMessage(error))
+      setErrorMessage(error)
       setSelectedRecord(null)
       setOgpForm(toOgpFormState(null))
     } finally {
@@ -148,7 +149,7 @@ export default function CmsOgpRecordsPage({ embedded = false }: CmsOgpRecordsPag
       setMessage('OGPキャッシュを更新しました。')
       await fetchOgpRecords(payload.id)
     } catch (error) {
-      setErrorMessage(toApiMessage(error))
+      setErrorMessage(error)
     } finally {
       setSavingRecord(false)
     }
@@ -177,7 +178,7 @@ export default function CmsOgpRecordsPage({ embedded = false }: CmsOgpRecordsPag
         refreshTimerRef.current = null
       }, 2500)
     } catch (error) {
-      setErrorMessage(toApiMessage(error))
+      setErrorMessage(error)
     } finally {
       setRefetchingRecord(false)
     }
@@ -207,7 +208,7 @@ export default function CmsOgpRecordsPage({ embedded = false }: CmsOgpRecordsPag
       setOgpForm(toOgpFormState(null))
       await fetchOgpRecords(null)
     } catch (error) {
-      setErrorMessage(toApiMessage(error))
+      setErrorMessage(error)
     } finally {
       setDeletingRecord(false)
     }
@@ -236,7 +237,7 @@ export default function CmsOgpRecordsPage({ embedded = false }: CmsOgpRecordsPag
   const content = (
     <>
       <ConsoleNotice message={message} onClose={() => setMessage('')} />
-      {errorMessage !== '' && <div className="console-error">{errorMessage}</div>}
+      <ApiErrorPopup error={errorMessage} onClose={() => setErrorMessage('')} />
 
       <CmsTabGuide
         title="OGPキャッシュの確認と編集"

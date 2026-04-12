@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { apiRequest } from '../../../api/client'
+import ApiErrorPopup from '../../../components/ApiErrorPopup'
 import CmsTabGuide from '../../../components/CmsTabGuide'
 import ConsoleNotice from '../../../components/ConsoleNotice'
 import CmsCategoryVisualPicker from '../components/CmsCategoryVisualPicker'
-import { flattenCmsCategoryTree, toApiMessage } from '../helpers'
+import { flattenCmsCategoryTree } from '../helpers'
 import type { CmsCategoryNode, CmsCategoryTreeResponse } from '../types'
 
 type CmsCategoriesPageProps = {
@@ -14,7 +15,7 @@ export default function CmsCategoriesPage({ embedded = false }: CmsCategoriesPag
   const [tree, setTree] = useState<CmsCategoryNode[]>([])
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
-  const [errorMessage, setErrorMessage] = useState('')
+  const [errorMessage, setErrorMessage] = useState<unknown>('')
   const [selectedCategoryId, setSelectedCategoryId] = useState('')
 
   const flatCategories = useMemo(() => flattenCmsCategoryTree(tree), [tree])
@@ -44,7 +45,7 @@ export default function CmsCategoriesPage({ embedded = false }: CmsCategoriesPag
         setSelectedCategoryId(nextSelectedCategoryId)
       }
     } catch (error) {
-      setErrorMessage(toApiMessage(error))
+      setErrorMessage(error)
     } finally {
       setLoading(false)
     }
@@ -65,7 +66,7 @@ export default function CmsCategoriesPage({ embedded = false }: CmsCategoriesPag
       setMessage('カテゴリを作成しました。')
       await fetchCategories(created.id)
     } catch (error) {
-      setErrorMessage(toApiMessage(error))
+      setErrorMessage(error)
     }
   }
 
@@ -84,7 +85,7 @@ export default function CmsCategoriesPage({ embedded = false }: CmsCategoriesPag
       setMessage('子カテゴリを作成しました。')
       await fetchCategories(created.id)
     } catch (error) {
-      setErrorMessage(toApiMessage(error))
+      setErrorMessage(error)
     }
   }
 
@@ -121,7 +122,7 @@ export default function CmsCategoriesPage({ embedded = false }: CmsCategoriesPag
       setMessage('カテゴリを更新しました。')
       await fetchCategories(targetCategory.id)
     } catch (error) {
-      setErrorMessage(toApiMessage(error))
+      setErrorMessage(error)
     }
   }
 
@@ -155,14 +156,14 @@ export default function CmsCategoriesPage({ embedded = false }: CmsCategoriesPag
       setMessage('カテゴリを削除しました。')
       await fetchCategories(targetCategory.parent_id ?? undefined)
     } catch (error) {
-      setErrorMessage(toApiMessage(error))
+      setErrorMessage(error)
     }
   }
 
   const content = (
     <>
       <ConsoleNotice message={message} onClose={() => setMessage('')} />
-      {errorMessage !== '' && <div className="console-error">{errorMessage}</div>}
+      <ApiErrorPopup error={errorMessage} onClose={() => setErrorMessage('')} />
       <CmsTabGuide
         title="カテゴリーの作成と編集"
         helpLines={[

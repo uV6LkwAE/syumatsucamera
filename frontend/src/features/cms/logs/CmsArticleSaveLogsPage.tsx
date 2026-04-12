@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { apiRequest } from '../../../api/client'
+import ApiErrorPopup from '../../../components/ApiErrorPopup'
 import CmsTabGuide from '../../../components/CmsTabGuide'
 import ConsoleNotice from '../../../components/ConsoleNotice'
-import { formatCmsDate, toApiMessage } from '../helpers'
+import { formatCmsDate } from '../helpers'
 import type {
   CmsArticleDetail,
   CmsArticleListResponse,
@@ -110,7 +111,7 @@ export default function CmsArticleSaveLogsPage({
   const [loadingArticles, setLoadingArticles] = useState(false)
   const [loadingLogs, setLoadingLogs] = useState(false)
   const [message, setMessage] = useState('')
-  const [errorMessage, setErrorMessage] = useState('')
+  const [errorMessage, setErrorMessage] = useState<unknown>('')
 
   const saveLogGroups = useMemo(() => buildSaveLogSessionGroups(saveLogs), [saveLogs])
 
@@ -137,7 +138,7 @@ export default function CmsArticleSaveLogsPage({
       setArticleTotalCount(payload.pagination.total_count)
       setMessage(payload.items.length === 0 ? '対象記事がありません。' : '')
     } catch (error) {
-      setErrorMessage(toApiMessage(error))
+      setErrorMessage(error)
     } finally {
       setLoadingArticles(false)
     }
@@ -181,7 +182,7 @@ export default function CmsArticleSaveLogsPage({
       })
       setMessage(nextGroups.length === 0 ? 'この記事にはまだ保存ログがありません。' : '')
     } catch (error) {
-      setErrorMessage(toApiMessage(error))
+      setErrorMessage(error)
     } finally {
       setLoadingLogs(false)
     }
@@ -460,7 +461,7 @@ export default function CmsArticleSaveLogsPage({
   const content = (
     <>
       <ConsoleNotice message={message} onClose={() => setMessage('')} />
-      {errorMessage !== '' && <div className="console-error">{errorMessage}</div>}
+      <ApiErrorPopup error={errorMessage} onClose={() => setErrorMessage('')} />
       {showsArticleList ? renderArticleListView() : renderLogSessionView()}
     </>
   )

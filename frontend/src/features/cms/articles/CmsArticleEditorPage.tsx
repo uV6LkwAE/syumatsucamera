@@ -17,6 +17,7 @@ import {
 import JoditEditor from 'jodit-react'
 import 'jodit/es2021/jodit.min.css'
 import { apiRequest, getStoredAccessJwt } from '../../../api/client'
+import ApiErrorPopup from '../../../components/ApiErrorPopup'
 import ConsoleNotice from '../../../components/ConsoleNotice'
 import ConsoleDropdown from '../../../components/ConsoleDropdown'
 import CmsTabGuide from '../../../components/CmsTabGuide'
@@ -24,11 +25,11 @@ import CmsCategoryVisualPicker from '../components/CmsCategoryVisualPicker'
 import {
   normalizeStoredArticleHtml,
   resolveDeleteImageIds,
-  toApiMessage,
   collectTempImageFileNames,
   extractMediaFileName,
   replaceImageSourceInHtml,
 } from '../helpers'
+import { createValidationApiError } from '../../../lib/apiErrors'
 import type {
   CmsArticleDetail,
   CmsArticleMediaAsset,
@@ -537,7 +538,7 @@ export default function CmsArticleEditorPage({
   const [saving, setSaving] = useState(false)
   const [submittingPublishRequest, setSubmittingPublishRequest] = useState(false)
   const [message, setMessage] = useState('')
-  const [errorMessage, setErrorMessage] = useState('')
+  const [errorMessage, setErrorMessage] = useState<unknown>('')
 
   const [lockToken, setLockToken] = useState('')
   const [lockExpiresAt, setLockExpiresAt] = useState('')
@@ -870,7 +871,7 @@ export default function CmsArticleEditorPage({
         }
       } catch (error) {
         if (active) {
-          setErrorMessage(toApiMessage(error))
+          setErrorMessage(error)
         }
       } finally {
         if (active) {
@@ -963,7 +964,7 @@ export default function CmsArticleEditorPage({
         .catch((error) => {
           if (active) {
             setTagSuggestions([])
-            setTagSuggestionError(toApiMessage(error))
+            setTagSuggestionError(error instanceof Error ? error.message : 'タグ候補の取得に失敗しました。')
           }
         })
         .finally(() => {
@@ -1048,7 +1049,7 @@ export default function CmsArticleEditorPage({
 
     const file = event.dataTransfer.files?.[0] ?? null
     void handleThumbnailUploadFile(file).catch((error) => {
-      setErrorMessage(toApiMessage(error))
+      setErrorMessage(error)
     })
   }
 
@@ -1516,11 +1517,7 @@ export default function CmsArticleEditorPage({
         insertUploadedImagePaths(uploadedPaths)
       })
       .catch((error) => {
-        if (error instanceof Error) {
-          setErrorMessage(error.message)
-        } else {
-          setErrorMessage(toApiMessage(error))
-        }
+        setErrorMessage(error)
       })
   }
 
@@ -1773,11 +1770,7 @@ export default function CmsArticleEditorPage({
         },
       }))
     } catch (error) {
-      if (error instanceof Error) {
-        setErrorMessage(error.message)
-      } else {
-        setErrorMessage(toApiMessage(error))
-      }
+      setErrorMessage(error)
     } finally {
       imageOptionUpdateInFlightRef.current = false
       setUpdatingImageOptions(false)
@@ -1786,19 +1779,27 @@ export default function CmsArticleEditorPage({
 
   async function saveArticle(): Promise<void> {
     if (lockToken === '') {
-      setErrorMessage('編集中セッションが未取得です。ページを再読み込みしてください。')
+      setErrorMessage(createValidationApiError({
+        lock_token: ['編集中セッションが未取得です。ページを再読み込みしてください。'],
+      }))
       return
     }
     if (form.categoryId === '') {
-      setErrorMessage('カテゴリを選択してください。')
+      setErrorMessage(createValidationApiError({
+        category_id: ['カテゴリを選択してください。'],
+      }))
       return
     }
     if (form.title.trim() === '') {
-      setErrorMessage('タイトルは必須です。')
+      setErrorMessage(createValidationApiError({
+        title: ['タイトルは必須です。'],
+      }))
       return
     }
     if (form.summary.trim() === '') {
-      setErrorMessage('要約は必須です。')
+      setErrorMessage(createValidationApiError({
+        summary: ['要約は必須です。'],
+      }))
       return
     }
 
@@ -1876,11 +1877,7 @@ export default function CmsArticleEditorPage({
         },
       })
     } catch (error) {
-      if (error instanceof Error) {
-        setErrorMessage(error.message)
-      } else {
-        setErrorMessage(toApiMessage(error))
-      }
+      setErrorMessage(error)
     } finally {
       setSaving(false)
     }
@@ -1902,7 +1899,7 @@ export default function CmsArticleEditorPage({
       })
       setMessage('公開申請を送信しました。')
     } catch (error) {
-      setErrorMessage(toApiMessage(error))
+      setErrorMessage(error)
     } finally {
       setSubmittingPublishRequest(false)
     }
@@ -2039,7 +2036,9 @@ export default function CmsArticleEditorPage({
       return
     }
     if (normalizedName.length > ARTICLE_TAG_MAX_LENGTH) {
-      setErrorMessage(`タグ名は${ARTICLE_TAG_MAX_LENGTH}文字以内で入力してください。`)
+      setErrorMessage(createValidationApiError({
+        tag_names: [`タグ名は${ARTICLE_TAG_MAX_LENGTH}文字以内で入力してください。`],
+      }))
       return
     }
     const alreadyAdded = form.tagNames.some(
@@ -2053,7 +2052,9 @@ export default function CmsArticleEditorPage({
       return
     }
     if (form.tagNames.length >= ARTICLE_TAG_MAX_COUNT) {
-      setErrorMessage(`タグは${ARTICLE_TAG_MAX_COUNT}件以内で設定してください。`)
+      setErrorMessage(createValidationApiError({
+        tag_names: [`タグは${ARTICLE_TAG_MAX_COUNT}件以内で設定してください。`],
+      }))
       return
     }
 
@@ -2071,7 +2072,7 @@ export default function CmsArticleEditorPage({
   const content = (
     <>
       <ConsoleNotice message={message} onClose={() => setMessage('')} />
-      {errorMessage !== '' && <div className="console-error">{errorMessage}</div>}
+      <ApiErrorPopup error={errorMessage} onClose={() => setErrorMessage('')} />
 
       <div className="console-card">
         <CmsTabGuide
@@ -2116,22 +2117,22 @@ export default function CmsArticleEditorPage({
                 onDragOver={handleThumbnailUploadDragOver}
                 onDrop={handleThumbnailUploadDrop}
               >
-                <input
-                  id={thumbnailUploadInputId}
-                  ref={thumbnailUploadInputRef}
-                  className="visually-hidden"
-                  type="file"
-                  accept={THUMBNAIL_IMAGE_ACCEPT}
-                  onChange={(event) => {
-                    const file = event.target.files?.[0] ?? null
-                    void handleThumbnailUploadFile(file)
-                      .catch((error) => {
-                        setErrorMessage(toApiMessage(error))
-                      })
-                      .finally(() => {
-                        event.target.value = ''
-                      })
-                  }}
+                  <input
+                    id={thumbnailUploadInputId}
+                    ref={thumbnailUploadInputRef}
+                    className="visually-hidden"
+                    type="file"
+                    accept={THUMBNAIL_IMAGE_ACCEPT}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] ?? null
+                      void handleThumbnailUploadFile(file)
+                        .catch((error) => {
+                          setErrorMessage(error)
+                        })
+                        .finally(() => {
+                          event.target.value = ''
+                        })
+                    }}
                 />
                 {thumbnailPreviewPath !== '' ? (
                   <>

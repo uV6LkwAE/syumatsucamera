@@ -17,6 +17,7 @@ import {
   useSearchParams,
 } from 'react-router-dom'
 import { ApiError } from '../../api/client'
+import ApiErrorPopup from '../../components/ApiErrorPopup'
 import publicHeroPhoto from '../../assets/public/public-hero-photo.jpg'
 import {
   fetchPublicArticleDetail,
@@ -1957,7 +1958,7 @@ export function PublicContactPage() {
     body: '',
   })
   const [message, setMessage] = useState('')
-  const [errorMessage, setErrorMessage] = useState('')
+  const [errorMessage, setErrorMessage] = useState<unknown>('')
   const [turnstileSiteKey, setTurnstileSiteKey] = useState('')
   const [turnstileToken, setTurnstileToken] = useState('')
   const [turnstileConfigError, setTurnstileConfigError] = useState('')
@@ -2017,11 +2018,7 @@ export function PublicContactPage() {
         body: '',
       })
     } catch (error) {
-      if (error instanceof ApiError) {
-        setErrorMessage(error.detail)
-        return
-      }
-      setErrorMessage('送信に失敗しました。')
+      setErrorMessage(error)
     } finally {
       setIsSubmitting(false)
       setTurnstileToken('')
@@ -2115,7 +2112,6 @@ export function PublicContactPage() {
             </p>
           )}
           {message !== '' ? <p className="public-contact-success">{message}</p> : null}
-          {errorMessage !== '' ? <p className="public-contact-error">{errorMessage}</p> : null}
           <button
             type="submit"
             className="public-contact-submit"
@@ -2123,6 +2119,7 @@ export function PublicContactPage() {
           >
             {isSubmitting ? '送信中' : '送信する'}
           </button>
+          <ApiErrorPopup error={errorMessage} onClose={() => setErrorMessage('')} />
         </form>
       </section>
     </main>

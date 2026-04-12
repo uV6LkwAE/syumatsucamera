@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ApiError, apiRequest } from '../../api/client'
+import ApiErrorPopup from '../../components/ApiErrorPopup'
 import CmsTabGuide from '../../components/CmsTabGuide'
 import ConsoleNotice from '../../components/ConsoleNotice'
 
@@ -63,7 +64,7 @@ export default function UsersActivationPage() {
   const [loading, setLoading] = useState<boolean>(false)
   const [submitting, setSubmitting] = useState<boolean>(false)
   const [message, setMessage] = useState<string>('')
-  const [errorMessage, setErrorMessage] = useState<string>('')
+  const [errorMessage, setErrorMessage] = useState<unknown>('')
   const [completed, setCompleted] = useState<boolean>(false)
 
   useEffect(() => {
@@ -91,7 +92,7 @@ export default function UsersActivationPage() {
           return
         }
         setUser(null)
-        setErrorMessage(toMessage(error))
+        setErrorMessage(error)
       } finally {
         if (isMounted) {
           setLoading(false)
@@ -134,7 +135,7 @@ export default function UsersActivationPage() {
       setCompleted(true)
       setMessage('本登録が完了しました。')
     } catch (error) {
-      setErrorMessage(toMessage(error))
+      setErrorMessage(error)
     } finally {
       setSubmitting(false)
     }
@@ -157,7 +158,7 @@ export default function UsersActivationPage() {
       />
 
       <ConsoleNotice message={message} onClose={() => setMessage('')} />
-      {errorMessage !== '' && <div className="console-error">{errorMessage}</div>}
+      <ApiErrorPopup error={errorMessage} onClose={() => setErrorMessage('')} />
 
       {loading ? (
         <div className="console-card">

@@ -11,15 +11,16 @@ import {
   useOutletContext,
 } from 'react-router-dom'
 import {
-  ApiError,
   apiRequest,
   getApiLoadingSnapshot,
   subscribeApiLoading,
 } from './api/client'
+import ApiErrorPopup from './components/ApiErrorPopup'
 import ConsoleSpinner from './components/ConsoleSpinner'
 import CmsTabGuide from './components/CmsTabGuide'
 import ConsoleHeroCard from './components/ConsoleHeroCard'
 import ConsoleNotice from './components/ConsoleNotice'
+import { createValidationApiError } from './lib/apiErrors'
 import ContactsPage from './features/contacts/ContactsPage'
 import CmsArticleEditorPage from './features/cms/articles/CmsArticleEditorPage'
 import CmsArticlesPage from './features/cms/articles/CmsArticlesPage'
@@ -173,7 +174,7 @@ type ProfileFormState = {
 
 type ProfileValidationResult = {
   valid: boolean
-  message: string
+  error: ReturnType<typeof createValidationApiError> | null
   normalizedMeta: Record<string, string>
 }
 
@@ -205,7 +206,9 @@ function normalizeProfileMeta(items: ProfileMetaItem[]): ProfileValidationResult
   if (items.length > PROFILE_META_MAX_ITEMS) {
     return {
       valid: false,
-      message: `追加プロフィール項目は最大${PROFILE_META_MAX_ITEMS}件です。`,
+      error: createValidationApiError({
+        meta_items: [`追加プロフィール項目は最大${PROFILE_META_MAX_ITEMS}件です。`],
+      }),
       normalizedMeta: {},
     }
   }
@@ -221,28 +224,36 @@ function normalizeProfileMeta(items: ProfileMetaItem[]): ProfileValidationResult
     if (key === '' || value === '') {
       return {
         valid: false,
-        message: '追加プロフィール項目は「項目名」と「内容」をセットで入力してください。',
+        error: createValidationApiError({
+          meta_items: ['追加プロフィール項目は「項目名」と「内容」をセットで入力してください。'],
+        }),
         normalizedMeta: {},
       }
     }
     if (key.length > PROFILE_META_KEY_MAX_LENGTH) {
       return {
         valid: false,
-        message: `項目名は${PROFILE_META_KEY_MAX_LENGTH}文字以内で入力してください。`,
+        error: createValidationApiError({
+          meta_items: [`項目名は${PROFILE_META_KEY_MAX_LENGTH}文字以内で入力してください。`],
+        }),
         normalizedMeta: {},
       }
     }
     if (value.length > PROFILE_META_VALUE_MAX_LENGTH) {
       return {
         valid: false,
-        message: `内容は${PROFILE_META_VALUE_MAX_LENGTH}文字以内で入力してください。`,
+        error: createValidationApiError({
+          meta_items: [`内容は${PROFILE_META_VALUE_MAX_LENGTH}文字以内で入力してください。`],
+        }),
         normalizedMeta: {},
       }
     }
     if (normalizedMeta[key] !== undefined) {
       return {
         valid: false,
-        message: `追加プロフィール項目の「${key}」が重複しています。`,
+        error: createValidationApiError({
+          meta_items: [`追加プロフィール項目の「${key}」が重複しています。`],
+        }),
         normalizedMeta: {},
       }
     }
@@ -251,7 +262,7 @@ function normalizeProfileMeta(items: ProfileMetaItem[]): ProfileValidationResult
 
   return {
     valid: true,
-    message: '',
+    error: null,
     normalizedMeta,
   }
 }
@@ -306,14 +317,18 @@ function validateProfileForm(
   if (normalizedDisplayName === '') {
     return {
       valid: false,
-      message: '表示名は必須です。',
+      error: createValidationApiError({
+        display_name: ['表示名は必須です。'],
+      }),
       normalizedMeta: {},
     }
   }
   if (normalizedDisplayName.length > PROFILE_DISPLAY_NAME_MAX_LENGTH) {
     return {
       valid: false,
-      message: `表示名は${PROFILE_DISPLAY_NAME_MAX_LENGTH}文字以内で入力してください。`,
+      error: createValidationApiError({
+        display_name: [`表示名は${PROFILE_DISPLAY_NAME_MAX_LENGTH}文字以内で入力してください。`],
+      }),
       normalizedMeta: {},
     }
   }
@@ -322,7 +337,9 @@ function validateProfileForm(
   if (emailError !== '') {
     return {
       valid: false,
-      message: emailError,
+      error: createValidationApiError({
+        email: [emailError],
+      }),
       normalizedMeta: {},
     }
   }
@@ -331,27 +348,35 @@ function validateProfileForm(
   if (normalizedProfile === '') {
     return {
       valid: false,
-      message: '自己紹介は必須です。',
+      error: createValidationApiError({
+        profile: ['自己紹介は必須です。'],
+      }),
       normalizedMeta: {},
     }
   }
   if (normalizedProfile.length > PROFILE_BIO_MAX_LENGTH) {
     return {
       valid: false,
-      message: `自己紹介は${PROFILE_BIO_MAX_LENGTH}文字以内で入力してください。`,
+      error: createValidationApiError({
+        profile: [`自己紹介は${PROFILE_BIO_MAX_LENGTH}文字以内で入力してください。`],
+      }),
       normalizedMeta: {},
     }
   }
 
   const socialUrlErrors = [
-    validateOptionalProfileUrl('X URL', form.x_url),
-    validateOptionalProfileUrl('Instagram URL', form.instagram_url),
-    validateOptionalProfileUrl('WebサイトURL', form.website_url),
-  ].filter((message) => message !== '')
-  if (socialUrlErrors.length > 0) {
+    ['x_url', validateOptionalProfileUrl('X URL', form.x_url)],
+    ['instagram_url', validateOptionalProfileUrl('Instagram URL', form.instagram_url)],
+    ['website_url', validateOptionalProfileUrl('WebサイトURL', form.website_url)],
+  ] as Array<[string, string]>
+  const firstSocialUrlError = socialUrlErrors.find(([, message]) => message !== '')
+  if (firstSocialUrlError !== undefined) {
+    const [field, message] = firstSocialUrlError
     return {
       valid: false,
-      message: socialUrlErrors[0],
+      error: createValidationApiError({
+        [field]: [message],
+      }),
       normalizedMeta: {},
     }
   }
@@ -363,7 +388,9 @@ function validateProfileForm(
   ) {
     return {
       valid: false,
-      message: '有効ユーザーはアイコン画像の登録が必須です。',
+      error: createValidationApiError({
+        icon_file: ['有効ユーザーはアイコン画像の登録が必須です。'],
+      }),
       normalizedMeta: {},
     }
   }
@@ -375,7 +402,9 @@ function validateProfileForm(
   ) {
     return {
       valid: false,
-      message: '有効ユーザーはヘッダー画像の登録が必須です。',
+      error: createValidationApiError({
+        header_image_file: ['有効ユーザーはヘッダー画像の登録が必須です。'],
+      }),
       normalizedMeta: {},
     }
   }
@@ -387,16 +416,9 @@ function validateProfileForm(
 
   return {
     valid: true,
-    message: '',
+    error: null,
     normalizedMeta: metaValidation.normalizedMeta,
   }
-}
-
-function toApiMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    return `[${error.status}] ${error.code}: ${error.detail}`
-  }
-  return '通信中に予期しないエラーが発生しました。'
 }
 
 function getCmsActiveTab(pathname: string): CmsTabKey {
@@ -572,7 +594,7 @@ function CmsConsolePage() {
   const [profileEditMode, setProfileEditMode] = useState(false)
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileMessage, setProfileMessage] = useState('')
-  const [profileError, setProfileError] = useState('')
+  const [profileError, setProfileError] = useState<unknown>('')
   const [profileForm, setProfileForm] = useState<ProfileFormState>({
     email: '',
     display_name: '',
@@ -711,7 +733,11 @@ function CmsConsolePage() {
       return
     }
     if (!profileValidation.valid) {
-      setProfileError(profileValidation.message)
+      setProfileError(
+        profileValidation.error ?? createValidationApiError({
+          display_name: ['入力内容をご確認ください。'],
+        }),
+      )
       return
     }
 
@@ -753,7 +779,7 @@ function CmsConsolePage() {
       setProfileEditMode(false)
       setProfileMessage('プロフィールを更新しました。')
     } catch (error) {
-      setProfileError(toApiMessage(error))
+      setProfileError(error)
     } finally {
       setProfileSaving(false)
     }
@@ -1143,9 +1169,6 @@ function CmsConsolePage() {
                     )}
                   </div>
                 )}
-                {profileValidation.message !== '' && (
-                  <div className="console-error">{profileValidation.message}</div>
-                )}
               </>
             ) : (
               <>
@@ -1183,9 +1206,12 @@ function CmsConsolePage() {
               message={profileMessage}
               onClose={() => setProfileMessage('')}
             />
-            {profileError !== '' && <div className="console-error">{profileError}</div>}
           </div>
         </div>
+        <ApiErrorPopup
+          error={profileError}
+          onClose={() => setProfileError('')}
+        />
       </section>
     )
   }

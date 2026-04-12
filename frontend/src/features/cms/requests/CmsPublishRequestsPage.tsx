@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiRequest } from '../../../api/client'
+import ApiErrorPopup from '../../../components/ApiErrorPopup'
 import CmsTabGuide from '../../../components/CmsTabGuide'
 import ConsoleDropdown, { ConsoleDropdownOption } from '../../../components/ConsoleDropdown'
 import ConsoleNotice from '../../../components/ConsoleNotice'
-import { formatCmsDate, toApiMessage } from '../helpers'
+import { formatCmsDate } from '../helpers'
 import type {
   CmsPublishRequestItem,
   CmsPublishRequestListResponse,
@@ -60,7 +61,7 @@ export default function CmsPublishRequestsPage({
   const [loading, setLoading] = useState(false)
   const [processingRequestId, setProcessingRequestId] = useState<string | null>(null)
   const [message, setMessage] = useState('')
-  const [errorMessage, setErrorMessage] = useState('')
+  const [errorMessage, setErrorMessage] = useState<unknown>('')
 
   async function fetchRequests(): Promise<void> {
     setLoading(true)
@@ -82,7 +83,7 @@ export default function CmsPublishRequestsPage({
       setTotalCount(payload.pagination.total_count)
       setTotalPages(payload.pagination.total_pages)
     } catch (error) {
-      setErrorMessage(toApiMessage(error))
+      setErrorMessage(error)
     } finally {
       setLoading(false)
     }
@@ -108,7 +109,7 @@ export default function CmsPublishRequestsPage({
       setMessage('公開申請を承認しました。')
       await fetchRequests()
     } catch (error) {
-      setErrorMessage(toApiMessage(error))
+      setErrorMessage(error)
     } finally {
       setProcessingRequestId(null)
     }
@@ -133,7 +134,7 @@ export default function CmsPublishRequestsPage({
       setMessage('公開申請を却下しました。')
       await fetchRequests()
     } catch (error) {
-      setErrorMessage(toApiMessage(error))
+      setErrorMessage(error)
     } finally {
       setProcessingRequestId(null)
     }
@@ -142,7 +143,7 @@ export default function CmsPublishRequestsPage({
   const content = (
     <>
       <ConsoleNotice message={message} onClose={() => setMessage('')} />
-      {errorMessage !== '' && <div className="console-error">{errorMessage}</div>}
+      <ApiErrorPopup error={errorMessage} onClose={() => setErrorMessage('')} />
 
       <CmsTabGuide
         title="公開申請の確認と対応"

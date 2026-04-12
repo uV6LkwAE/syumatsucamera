@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ApiError, apiRequest } from '../../api/client'
+import ApiErrorPopup from '../../components/ApiErrorPopup'
 import CmsTabGuide from '../../components/CmsTabGuide'
 import ConsoleDropdown, { ConsoleDropdownOption } from '../../components/ConsoleDropdown'
 
@@ -64,7 +65,7 @@ export default function ContactsPage({ embedded = false }: ContactsPageProps) {
   const [totalCount, setTotalCount] = useState<number>(0)
   const [totalPages, setTotalPages] = useState<number>(0)
   const [loadingCms, setLoadingCms] = useState<boolean>(false)
-  const [errorMessage, setErrorMessage] = useState<string>('')
+  const [errorMessage, setErrorMessage] = useState<unknown>('')
 
   async function fetchCmsContacts(): Promise<void> {
     setLoadingCms(true)
@@ -77,7 +78,7 @@ export default function ContactsPage({ embedded = false }: ContactsPageProps) {
       setTotalCount(payload.pagination.total_count)
       setTotalPages(payload.pagination.total_pages)
     } catch (error) {
-      setErrorMessage(toMessage(error))
+      setErrorMessage(error)
     } finally {
       setLoadingCms(false)
     }
@@ -89,7 +90,7 @@ export default function ContactsPage({ embedded = false }: ContactsPageProps) {
 
   const content = (
     <>
-      {errorMessage !== '' && <div className="console-error">{errorMessage}</div>}
+      <ApiErrorPopup error={errorMessage} onClose={() => setErrorMessage('')} />
       <CmsTabGuide
         title="問い合わせの確認"
         helpLines={[

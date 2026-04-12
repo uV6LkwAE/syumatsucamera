@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { apiRequest } from '../../../api/client'
+import ApiErrorPopup from '../../../components/ApiErrorPopup'
 import CmsTabGuide from '../../../components/CmsTabGuide'
 import ConsoleDropdown, { ConsoleDropdownOption } from '../../../components/ConsoleDropdown'
 import ConsoleNotice from '../../../components/ConsoleNotice'
-import { formatCmsDate, toApiMessage } from '../helpers'
+import { formatCmsDate } from '../helpers'
 import type {
   CmsArticleAuthorOptionListResponse,
   CmsArticleListResponse,
@@ -114,7 +115,7 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
   const [loading, setLoading] = useState(false)
   const [loadingAuthors, setLoadingAuthors] = useState(false)
   const [message, setMessage] = useState(locationState?.notice ?? '')
-  const [errorMessage, setErrorMessage] = useState('')
+  const [errorMessage, setErrorMessage] = useState<unknown>('')
   const [authorOptions, setAuthorOptions] = useState<Array<ConsoleDropdownOption<string>>>([])
   const [filters, setFilters] = useState<CmsArticleFilters>(DEFAULT_FILTERS)
   const [draftFilters, setDraftFilters] = useState<CmsArticleFilters>(DEFAULT_FILTERS)
@@ -130,7 +131,7 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
     locationState?.saveLogArticleTitle ?? '',
   )
   const [saveLogs, setSaveLogs] = useState<CmsSaveLogItem[]>([])
-  const [saveLogErrorMessage, setSaveLogErrorMessage] = useState('')
+  const [saveLogErrorMessage, setSaveLogErrorMessage] = useState<unknown>('')
 
   useEffect(() => {
     if (
@@ -170,7 +171,7 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
         })),
       )
     } catch (error) {
-      setErrorMessage(toApiMessage(error))
+      setErrorMessage(error)
     } finally {
       setLoadingAuthors(false)
     }
@@ -232,7 +233,7 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
       setTotalPages(payload.pagination.total_pages)
       setTotalCount(payload.pagination.total_count)
     } catch (error) {
-      setErrorMessage(toApiMessage(error))
+      setErrorMessage(error)
     } finally {
       setLoading(false)
     }
@@ -256,7 +257,7 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
       setSaveLogs(payload.items)
       setSaveLogErrorMessage('')
     } catch (error) {
-      setSaveLogErrorMessage(toApiMessage(error))
+      setSaveLogErrorMessage(error)
     }
   }
 
@@ -319,7 +320,7 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
       setMessage('記事を削除しました。')
       await fetchArticles()
     } catch (error) {
-      setErrorMessage(toApiMessage(error))
+      setErrorMessage(error)
     }
   }
 
@@ -349,7 +350,7 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
   const content = (
     <>
       <ConsoleNotice message={message} onClose={() => setMessage('')} />
-      {errorMessage !== '' && <div className="console-error">{errorMessage}</div>}
+      <ApiErrorPopup error={errorMessage} onClose={() => setErrorMessage('')} />
       <CmsTabGuide
         title="記事の確認と操作"
         helpLines={[
@@ -644,9 +645,10 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
               </div>
             </div>
 
-            {saveLogErrorMessage !== '' && (
-              <div className="console-error">{saveLogErrorMessage}</div>
-            )}
+            <ApiErrorPopup
+              error={saveLogErrorMessage}
+              onClose={() => setSaveLogErrorMessage('')}
+            />
 
             <div
               className={`console-expandable-region cms-save-log-modal-region${

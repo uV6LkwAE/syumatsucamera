@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import { ApiError, apiRequest } from '../../api/client'
+import ApiErrorPopup from '../../components/ApiErrorPopup'
 import CmsTabGuide from '../../components/CmsTabGuide'
 import ConsoleDropdown, { ConsoleDropdownOption } from '../../components/ConsoleDropdown'
 import ConsoleNotice from '../../components/ConsoleNotice'
@@ -155,7 +156,7 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
   const [submittingUpdate, setSubmittingUpdate] = useState<boolean>(false)
 
   const [message, setMessage] = useState<string>('')
-  const [errorMessage, setErrorMessage] = useState<string>('')
+  const [errorMessage, setErrorMessage] = useState<unknown>('')
 
   useEffect(() => {
     if (updateIconFile === null) {
@@ -186,7 +187,7 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
       const payload = await apiRequest<UsersUserListResponse>(`/users/?limit=${limit}`)
       setUsers(payload.items)
     } catch (error) {
-      setErrorMessage(toMessage(error))
+      setErrorMessage(error)
     } finally {
       setLoadingUsers(false)
     }
@@ -214,7 +215,7 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
       setUpdateHeaderFile(null)
     } catch (error) {
       setSelectedUser(null)
-      setErrorMessage(toMessage(error))
+      setErrorMessage(error)
     } finally {
       setLoadingDetail(false)
     }
@@ -241,7 +242,7 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
       setMessage('仮登録ユーザーを作成しました。')
       await fetchUsersList()
     } catch (error) {
-      setErrorMessage(toMessage(error))
+      setErrorMessage(error)
     } finally {
       setSubmittingCreate(false)
     }
@@ -314,7 +315,7 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
       setUpdateHeaderFile(null)
       await fetchUsersList()
     } catch (error) {
-      setErrorMessage(toMessage(error))
+      setErrorMessage(error)
     } finally {
       setSubmittingUpdate(false)
     }
@@ -340,7 +341,7 @@ export default function UsersPage({ embedded = false }: UsersPageProps) {
   const content = (
     <>
       <ConsoleNotice message={message} onClose={() => setMessage('')} />
-      {errorMessage !== '' && <div className="console-error">{errorMessage}</div>}
+      <ApiErrorPopup error={errorMessage} onClose={() => setErrorMessage('')} />
       <CmsTabGuide
         title="ユーザーの作成と更新"
         helpLines={[

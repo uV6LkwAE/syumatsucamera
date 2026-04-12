@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { apiRequest } from '../../../api/client'
+import ApiErrorPopup from '../../../components/ApiErrorPopup'
 import CmsTabGuide from '../../../components/CmsTabGuide'
 import ConsoleNotice from '../../../components/ConsoleNotice'
-import { toApiMessage } from '../helpers'
+import { createValidationApiError } from '../../../lib/apiErrors'
 import type { CmsArticleOptionItem, CmsArticleOptionListResponse } from '../types'
 
 type CmsOptionsPageProps = {
@@ -38,7 +39,7 @@ export default function CmsOptionsPage({ embedded = false }: CmsOptionsPageProps
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [message, setMessage] = useState('')
-  const [errorMessage, setErrorMessage] = useState('')
+  const [errorMessage, setErrorMessage] = useState<unknown>('')
 
   const selectedOption = options.find((option) => option.id === selectedOptionId) ?? null
 
@@ -67,30 +68,35 @@ export default function CmsOptionsPage({ embedded = false }: CmsOptionsPageProps
         setSelectedOptionId(null)
       }
     } catch (error) {
-      setErrorMessage(toApiMessage(error))
+      setErrorMessage(error)
     } finally {
       setLoading(false)
     }
   }
 
-  function validateForm(): boolean {
+  function validateForm(): unknown | null {
     if (form.label.trim() === '') {
-      setErrorMessage('表示名は必須です。')
-      return false
+      return createValidationApiError({
+        label: ['表示名は必須です。'],
+      })
     }
     if (form.label.trim().length > OPTION_LABEL_MAX_LENGTH) {
-      setErrorMessage(`表示名は${OPTION_LABEL_MAX_LENGTH}文字以内で入力してください。`)
-      return false
+      return createValidationApiError({
+        label: [`表示名は${OPTION_LABEL_MAX_LENGTH}文字以内で入力してください。`],
+      })
     }
     if (form.description.trim() === '') {
-      setErrorMessage('説明文は必須です。')
-      return false
+      return createValidationApiError({
+        description: ['説明文は必須です。'],
+      })
     }
-    return true
+    return null
   }
 
   async function saveOption(): Promise<void> {
-    if (!validateForm()) {
+    const validationError = validateForm()
+    if (validationError !== null) {
+      setErrorMessage(validationError)
       return
     }
 
@@ -113,7 +119,7 @@ export default function CmsOptionsPage({ embedded = false }: CmsOptionsPageProps
       setMessage(selectedOption === null ? 'オプションを作成しました。' : 'オプションを更新しました。')
       await fetchOptions(savedOption.id)
     } catch (error) {
-      setErrorMessage(toApiMessage(error))
+      setErrorMessage(error)
     } finally {
       setSaving(false)
     }
@@ -140,7 +146,7 @@ export default function CmsOptionsPage({ embedded = false }: CmsOptionsPageProps
       setForm(toOptionForm(null))
       await fetchOptions(null)
     } catch (error) {
-      setErrorMessage(toApiMessage(error))
+      setErrorMessage(error)
     } finally {
       setDeleting(false)
     }
@@ -149,7 +155,7 @@ export default function CmsOptionsPage({ embedded = false }: CmsOptionsPageProps
   const content = (
     <>
       <ConsoleNotice message={message} onClose={() => setMessage('')} />
-      {errorMessage !== '' && <div className="console-error">{errorMessage}</div>}
+      <ApiErrorPopup error={errorMessage} onClose={() => setErrorMessage('')} />
       <CmsTabGuide
         title="オプションの作成と編集"
         helpLines={[
