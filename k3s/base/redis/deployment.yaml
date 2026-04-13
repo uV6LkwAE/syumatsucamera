@@ -4,7 +4,7 @@ metadata:
   name: redis
 spec:
   replicas: 1
-  revisionHistoryLimit: 5
+  revisionHistoryLimit: 3
   strategy:
     type: RollingUpdate
     rollingUpdate:
