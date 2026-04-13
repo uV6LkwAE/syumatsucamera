@@ -98,6 +98,7 @@ export type PublicArticleMetaResponse = {
   canonical_url: string
   og_image_url: string
   is_profit: boolean
+  twitter_card: 'summary' | 'summary_large_image'
 }
 
 export type PublicTocNode = {

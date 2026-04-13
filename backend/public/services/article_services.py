@@ -98,6 +98,7 @@ class PublicArticleService:
                 site_origin=site_origin,
             ),
             "is_profit": article.is_profit,
+            "twitter_card": article.twitter_card,
         }
 
     @staticmethod

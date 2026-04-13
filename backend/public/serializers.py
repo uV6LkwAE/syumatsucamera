@@ -333,6 +333,10 @@ class PublicArticleMetaSerializer(serializers.Serializer):
     canonical_url = serializers.URLField(read_only=True)
     og_image_url = serializers.URLField(read_only=True)
     is_profit = serializers.BooleanField(read_only=True)
+    twitter_card = serializers.ChoiceField(
+        choices=TwitterCardType.choices,
+        read_only=True,
+    )
 
 
 class PublicSiteConfigSerializer(serializers.Serializer):

@@ -308,6 +308,7 @@ components:
         - canonical_url
         - og_image_url
         - is_profit
+        - twitter_card
       properties:
         title:
           type: string
@@ -321,6 +322,11 @@ components:
           format: uri
         is_profit:
           type: boolean
+        twitter_card:
+          type: string
+          enum:
+            - summary
+            - summary_large_image
     PublicArticleList:
       type: object
       required:
