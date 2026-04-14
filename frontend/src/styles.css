@@ -6450,7 +6450,7 @@ body {
 }
 
 .public-detail-thumb-wrap {
-  width: 90%;
+  width: 100%;
   margin-top: 1.25rem;
   margin-right: auto;
   margin-left: auto;
@@ -6728,7 +6728,7 @@ body {
   max-width: 100%;
   height: auto;
   margin: 0 0 1.6rem;
-  border-radius: 1rem;
+  border-radius: 0.5rem;
   box-shadow: 0 10px 28px rgba(27, 45, 20, 0.08);
 }
 
