@@ -23,7 +23,6 @@ import ConsoleDropdown from '../../../components/ConsoleDropdown'
 import CmsTabGuide from '../../../components/CmsTabGuide'
 import CmsCategoryVisualPicker from '../components/CmsCategoryVisualPicker'
 import {
-  normalizeStoredArticleHtml,
   resolveDeleteImageIds,
   collectTempImageFileNames,
   extractMediaFileName,
@@ -443,17 +442,6 @@ function findAssetByFileName(
   return assets.find((asset) => asset.file_name === fileName) ?? null
 }
 
-function buildOriginalMediaPath(originalFilePath: string): string {
-  const trimmed = originalFilePath.trim()
-  if (trimmed === '') {
-    return ''
-  }
-  if (trimmed.startsWith('/media/')) {
-    return trimmed
-  }
-  return `/media/${trimmed}`
-}
-
 function normalizeTagNameForCompare(value: string): string {
   return value.trim().toLocaleLowerCase()
 }
@@ -535,7 +523,6 @@ export default function CmsArticleEditorPage({
     mode: null,
   })
   const activeImageSelectionVersionRef = useRef(0)
-  const imageOptionUpdateInFlightRef = useRef(false)
   const imageOptionPanelHoveredRef = useRef(false)
 
   const [loading, setLoading] = useState(true)
@@ -563,7 +550,6 @@ export default function CmsArticleEditorPage({
   const [selectedImageFileName, setSelectedImageFileName] = useState('')
   const [selectedImageSource, setSelectedImageSource] = useState('')
   const [imageOptionOverlayPosition, setImageOptionOverlayPosition] = useState<ImageOverlayPosition | null>(null)
-  const [updatingImageOptions, setUpdatingImageOptions] = useState(false)
 
   const [thumbnailMode, setThumbnailMode] = useState<InternalThumbnailMode>('generate_from_title')
   const [thumbnailUploadFileName, setThumbnailUploadFileName] = useState('')
@@ -779,7 +765,7 @@ export default function CmsArticleEditorPage({
 
         if (payload.article !== null) {
           const thumbnailAsset = findCurrentThumbnail(payload.article.media_assets)
-          const normalizedBodyHtml = normalizeStoredArticleHtml(payload.article.body_html)
+          const bodyHtml = payload.article.body_html
           const assetOptionMap = payload.article.media_assets.reduce<Record<string, ImageProcessingOptions>>(
             (nextMap, asset) => {
               nextMap[asset.file_name] = asset.processing_options
@@ -798,13 +784,13 @@ export default function CmsArticleEditorPage({
           setArticle(payload.article)
           setInitialMediaAssets(payload.article.media_assets)
           setCurrentThumbnailAsset(thumbnailAsset)
-          setEditorBodyHtml(normalizedBodyHtml)
-          setEditorLiveBodyHtml(normalizedBodyHtml)
+          setEditorBodyHtml(bodyHtml)
+          setEditorLiveBodyHtml(bodyHtml)
           setForm({
             categoryId: payload.article.category_id,
             title: payload.article.title,
             summary: payload.article.summary,
-            bodyHtml: normalizedBodyHtml,
+            bodyHtml,
             status: payload.article.status,
             twitterCard: payload.article.twitter_card,
             isProfit: payload.article.is_profit,
@@ -826,7 +812,7 @@ export default function CmsArticleEditorPage({
             categoryId: payload.article.category_id,
             title: payload.article.title,
             summary: payload.article.summary,
-            bodyHtml: normalizedBodyHtml,
+            bodyHtml,
             status: payload.article.status,
             twitterCard: payload.article.twitter_card,
             isProfit: payload.article.is_profit,
@@ -1663,96 +1649,6 @@ export default function CmsArticleEditorPage({
     }
   }, [selectedImageFileName, selectedImageSource])
 
-  async function ensureEditableSelectedImage(
-    selectionVersion: number,
-    preferOriginal: boolean,
-  ): Promise<{
-    fileName: string
-    source: string
-  }> {
-    const currentSelection = activeImageSelectionRef.current
-    if (currentSelection.fileName === '' || currentSelection.source === '') {
-      throw new Error('画像が選択されていません。')
-    }
-
-    const originalSource = currentSelection.originalFilePath === ''
-      ? ''
-      : buildOriginalMediaPath(currentSelection.originalFilePath)
-    const sourceToFetch = preferOriginal && originalSource !== ''
-      ? originalSource
-      : currentSelection.source
-
-    const tempPrefix = `/media/tmp/${lockToken}/`
-    if (sourceToFetch.startsWith(tempPrefix)) {
-      return {
-        fileName: currentSelection.fileName,
-        source: sourceToFetch,
-      }
-    }
-
-    const response = await fetch(sourceToFetch)
-    if (!response.ok) {
-      throw new Error('既存画像の再処理用コピーに失敗しました。')
-    }
-
-    const blob = await response.blob()
-    const tempFile = new File(
-      [blob],
-      createUuidFileName(currentSelection.fileName, blob.type),
-      {
-        type: blob.type || 'image/jpeg',
-        lastModified: Date.now(),
-      },
-    )
-    const uploaded = await uploadTempImage(
-      tempFile,
-      isAllowedArticleImageFile,
-      'アップロードできる画像形式は jpg/jpeg/png/gif のみです。',
-    )
-    const currentBodyHtml = getCurrentEditorHtml()
-    const nextBodyHtml = replaceImageSourceInHtml(
-      currentBodyHtml,
-      currentSelection.source,
-      uploaded.path,
-    )
-
-    if (editorInstanceRef.current !== null) {
-      editorInstanceRef.current.value = nextBodyHtml
-    }
-
-    setEditorLiveBodyHtml(nextBodyHtml)
-    setForm((prev) => ({
-      ...prev,
-      bodyHtml: nextBodyHtml,
-    }))
-    setUploadedImageOptions((prev) => ({
-      ...prev,
-      [uploaded.file_name]: prev[currentSelection.fileName] ?? DEFAULT_IMAGE_OPTIONS,
-    }))
-    setUploadedImageOriginalPaths((prev) => {
-      const next = {
-        ...prev,
-        [uploaded.file_name]: currentSelection.originalFilePath,
-      }
-      uploadedImageOriginalPathsRef.current = next
-      return next
-    })
-    if (selectionVersion === activeImageSelectionVersionRef.current) {
-      activeImageSelectionRef.current = {
-        fileName: uploaded.file_name,
-        source: uploaded.path,
-        originalFilePath: currentSelection.originalFilePath,
-        mode: currentSelection.mode,
-      }
-      setSelectedImageFileName(uploaded.file_name)
-      setSelectedImageSource(uploaded.path)
-    }
-    return {
-      fileName: uploaded.file_name,
-      source: uploaded.path,
-    }
-  }
-
   async function updateSelectedImageOption(
     key: keyof ImageProcessingOptions,
     checked: boolean,
@@ -1761,29 +1657,13 @@ export default function CmsArticleEditorPage({
     if (currentSelection.fileName === '' || currentSelection.source === '') {
       return
     }
-    if (imageOptionUpdateInFlightRef.current) {
-      return
-    }
-
-    const selectionVersion = activeImageSelectionVersionRef.current
-    imageOptionUpdateInFlightRef.current = true
-    setUpdatingImageOptions(true)
-    setErrorMessage('')
-    try {
-      const editableImage = await ensureEditableSelectedImage(selectionVersion, !checked)
-      setUploadedImageOptions((prev) => ({
-        ...prev,
-        [editableImage.fileName]: {
-          ...(prev[editableImage.fileName] ?? DEFAULT_IMAGE_OPTIONS),
-          [key]: checked,
-        },
-      }))
-    } catch (error) {
-      setErrorMessage(error)
-    } finally {
-      imageOptionUpdateInFlightRef.current = false
-      setUpdatingImageOptions(false)
-    }
+    setUploadedImageOptions((prev) => ({
+      ...prev,
+      [currentSelection.fileName]: {
+        ...(prev[currentSelection.fileName] ?? DEFAULT_IMAGE_OPTIONS),
+        [key]: checked,
+      },
+    }))
   }
 
   async function saveArticle(): Promise<void> {
@@ -2591,7 +2471,6 @@ export default function CmsArticleEditorPage({
                   onChange={(event) => {
                     void updateSelectedImageOption('exif_watermark', event.target.checked)
                   }}
-                  disabled={updatingImageOptions}
                 />
                 <span className="cms-image-option-switch" aria-hidden="true" />
                 <span>EXIF透かし</span>
@@ -2603,7 +2482,6 @@ export default function CmsArticleEditorPage({
                   onChange={(event) => {
                     void updateSelectedImageOption('site_logo_watermark', event.target.checked)
                   }}
-                  disabled={updatingImageOptions}
                 />
                 <span className="cms-image-option-switch" aria-hidden="true" />
                 <span>サイトロゴ透かし</span>

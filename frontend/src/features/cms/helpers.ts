@@ -49,32 +49,22 @@ export function flattenCmsCategoryTree(
   return flattened
 }
 
-export function buildPublicMediaPath(fileName: string): string {
-  const shardA = fileName.slice(0, 2)
-  const shardB = fileName.slice(2, 4)
-  return `/media/images/${shardA}/${shardB}/${fileName}`
-}
-
-export function normalizeStoredArticleHtml(bodyHtml: string): string {
-  if (typeof window === 'undefined') {
-    return bodyHtml
+export function normalizeMediaSourcePath(source: string): string {
+  const trimmed = source.trim()
+  if (trimmed === '') {
+    return ''
   }
-
-  const parser = new DOMParser()
-  const documentFragment = parser.parseFromString(bodyHtml, 'text/html')
-  for (const image of Array.from(documentFragment.querySelectorAll('img'))) {
-    const source = image.getAttribute('src')?.trim() ?? ''
-    const fileName = extractMediaFileName(source)
-    if (fileName === '') {
-      continue
-    }
-    if (!source.startsWith('/media/tmp/')) {
-      continue
-    }
-    image.setAttribute('src', buildPublicMediaPath(fileName))
+  if (/^(data:|blob:)/i.test(trimmed)) {
+    return trimmed
   }
-
-  return documentFragment.body.innerHTML
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      return new URL(trimmed).pathname
+    } catch {
+      return trimmed.split('?')[0]?.split('#')[0] ?? trimmed
+    }
+  }
+  return trimmed.split('?')[0]?.split('#')[0] ?? trimmed
 }
 
 export function replaceImageSourceInHtml(
@@ -128,7 +118,7 @@ export function collectTempImageFileNames(bodyHtml: string, lockToken: string): 
   const prefix = `/media/tmp/${lockToken}/`
 
   for (const image of Array.from(documentFragment.querySelectorAll('img'))) {
-    const source = image.getAttribute('src')?.trim() ?? ''
+    const source = normalizeMediaSourcePath(image.getAttribute('src')?.trim() ?? '')
     if (!source.startsWith(prefix)) {
       continue
     }

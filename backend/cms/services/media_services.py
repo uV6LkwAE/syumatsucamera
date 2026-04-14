@@ -9,6 +9,7 @@ import shutil
 import uuid
 from fractions import Fraction
 from pathlib import Path
+from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 from django.conf import settings
@@ -20,6 +21,7 @@ from cms.models import (
     Article,
     MediaAsset,
 )
+from core.media_urls import build_cdn_media_url
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +155,7 @@ class MediaService:
 
         return {
             "file_name": file_name,
-            "path": f"{settings.MEDIA_URL}tmp/{lock_token}/{file_name}",
+            "path": MediaService.build_temp_media_path(lock_token=lock_token, file_name=file_name),
         }
 
     @staticmethod
@@ -167,7 +169,7 @@ class MediaService:
         soup = BeautifulSoup(body_html, "lxml")
         html_tmp_file_names: set[str] = set()
         for image in soup.find_all("img"):
-            source = str(image.get("src", "")).strip()
+            source = MediaService.normalize_media_source_path(source=str(image.get("src", "")).strip())
             prefix = f"{settings.MEDIA_URL}tmp/{lock_token}/"
             if source.startswith(prefix):
                 html_tmp_file_names.add(source.removeprefix(prefix))
@@ -542,7 +544,7 @@ class MediaService:
         prefix = f"{settings.MEDIA_URL}tmp/{lock_token}/"
 
         for image in soup.find_all("img"):
-            source = str(image.get("src", "")).strip()
+            source = MediaService.normalize_media_source_path(source=str(image.get("src", "")).strip())
             if not source.startswith(prefix):
                 continue
             file_name = source.removeprefix(prefix)
@@ -938,9 +940,55 @@ class MediaService:
     @staticmethod
     def build_public_media_path(*, file_name: str) -> str:
         """
-        公開メディアの相対パスを返す。
+        公開メディアの絶対URLを返す。
         """
-        return f"{settings.MEDIA_URL}{MediaService.build_public_storage_key(file_name=file_name)}"
+        public_path = f"{settings.MEDIA_URL}{MediaService.build_public_storage_key(file_name=file_name)}"
+        cdn_url = build_cdn_media_url(public_path)
+        if cdn_url is None:
+            raise RuntimeError("公開メディアURLを生成できません。")
+        return cdn_url
+
+    @staticmethod
+    def build_temp_media_path(*, lock_token: str, file_name: str) -> str:
+        """
+        一時保存メディアの絶対URLを返す。
+        """
+        temp_path = f"{settings.MEDIA_URL}tmp/{lock_token}/{file_name}"
+        cdn_url = build_cdn_media_url(temp_path)
+        if cdn_url is None:
+            raise RuntimeError("一時保存メディアURLを生成できません。")
+        return cdn_url
+
+    @staticmethod
+    def normalize_media_source_path(*, source: str) -> str:
+        """
+        メディアソースURLをパスへ正規化する。
+        """
+        normalized = source.strip()
+        if normalized == "":
+            return ""
+        parsed = urlparse(normalized)
+        if parsed.scheme in {"http", "https"}:
+            return parsed.path
+        return normalized.split("?")[0].split("#")[0]
+
+    @staticmethod
+    def rewrite_media_sources_to_cdn(*, body_html: str) -> str:
+        """
+        本文内のメディアURLをCDN URLへ置換する。
+        """
+        soup = BeautifulSoup(body_html, "lxml")
+        for image in soup.find_all("img"):
+            source = MediaService.normalize_media_source_path(
+                source=str(image.get("src", "")).strip(),
+            )
+            if not source.startswith(f"{settings.MEDIA_URL}"):
+                continue
+            cdn_url = build_cdn_media_url(source)
+            if cdn_url is None:
+                continue
+            image["src"] = cdn_url
+        return MediaService._serialize_html_fragment(soup=soup)
 
     @staticmethod
     def extract_exif(*, image: Image.Image) -> dict[str, object | None] | None:

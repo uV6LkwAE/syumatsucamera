@@ -394,7 +394,7 @@ class CmsArticleSerializer(serializers.Serializer):
     path = serializers.CharField(read_only=True)
     slug = serializers.CharField(read_only=True)
     summary = serializers.CharField(read_only=True)
-    body_html = serializers.CharField(read_only=True)
+    body_html = serializers.SerializerMethodField()
     status = serializers.ChoiceField(choices=ArticleStatus.choices, read_only=True)
     is_profit = serializers.BooleanField(read_only=True)
     published_at = serializers.DateTimeField(allow_null=True, read_only=True)
@@ -424,6 +424,12 @@ class CmsArticleSerializer(serializers.Serializer):
         if obj.body_html.strip() == "":
             return []
         return CmsTocNodeSerializer(MediaService.build_toc(body_html=obj.body_html), many=True).data
+
+    def get_body_html(self, obj) -> str:
+        """
+        編集画面向けに本文中のメディアURLをCDN URLへ正規化する。
+        """
+        return MediaService.rewrite_media_sources_to_cdn(body_html=obj.body_html)
 
     def get_thumbnail_preview_path(self, obj) -> str:
         """
