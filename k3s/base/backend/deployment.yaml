@@ -22,7 +22,7 @@ spec:
         - name: registry-credentials
       containers:
         - name: backend
-          image: registry.syumatsucamera.com/syumatsucamera/backend:latest
+          image: registry.syumatsucamera.com/syumatsucamera/backend
           imagePullPolicy: Always
           resources:
             requests:

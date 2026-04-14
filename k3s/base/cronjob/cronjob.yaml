@@ -16,7 +16,7 @@ spec:
             - name: registry-credentials
           initContainers:
             - name: migrate
-              image: registry.syumatsucamera.com/syumatsucamera/backend:latest
+              image: registry.syumatsucamera.com/syumatsucamera/backend
               imagePullPolicy: Always
               command:
                 - python
@@ -31,7 +31,7 @@ spec:
                     name: app-secret
           containers:
             - name: app-cronjob
-              image: registry.syumatsucamera.com/syumatsucamera/backend:latest
+              image: registry.syumatsucamera.com/syumatsucamera/backend
               imagePullPolicy: Always
               command:
                 - python

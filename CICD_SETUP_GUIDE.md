@@ -5,9 +5,9 @@
 - CI/CD 実行基盤: GitHub-hosted runner
 - トリガー: `main` ブランチへの `push`
 - レジストリ: NAS（self-hosted registry）
-- デプロイ方式: GitHub Actions -> SSH -> Ubuntu Server -> `kubectl apply`
+- デプロイ方式: GitHub Actions -> mTLS -> Ubuntu Server apply API -> `kubectl apply`
 - イメージタグ: `latest` + `sha`
-- 本番適用タグ: `latest`
+- 本番適用タグ: `github.sha`
 - 監査用に `sha` / digest を記録
 - 同時デプロイ禁止: GitHub Actions `concurrency`
 - 通知: 成功/失敗ともメール通知
@@ -75,7 +75,7 @@
   - `maxUnavailable: 0`
   - `maxSurge: 1`
 - `replicas: 1` 以上を維持
-- `revisionHistoryLimit: 10`
+- `revisionHistoryLimit: 3`
 - `readinessProbe` / `livenessProbe` / `startupProbe` を定義
 - `imagePullSecrets` を設定
 
@@ -128,8 +128,8 @@
 3. CI 実行（check/build）
 4. イメージ build
 5. NAS へ `latest` + `sha` push
-6. Ubuntu Server へ SSH 接続
-7. `kubectl apply` 実行
+6. Ubuntu Server へ mTLS 経由で `image_tag` 付き POST
+7. apply 側が immutable tag を k3s に反映
 8. `kubectl rollout status` で完了判定
 9. 成功/失敗を監査ログへ保存
 10. 成功/失敗に関わらずメール通知
@@ -151,7 +151,7 @@
 ### 3.1 タグ運用
 
 - push: `latest` + `sha`
-- 適用: `latest`
+- 適用: `sha`
 - 監査: 実際に適用した `sha` / digest を記録
 
 ### 3.2 同時デプロイ禁止

@@ -22,7 +22,7 @@ spec:
         - name: registry-credentials
       containers:
         - name: nginx
-          image: registry.syumatsucamera.com/syumatsucamera/nginx:latest
+          image: registry.syumatsucamera.com/syumatsucamera/nginx
           imagePullPolicy: Always
           ports:
             - containerPort: 80

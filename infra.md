@@ -107,7 +107,7 @@ gateway nginx の振り分け:
   - `maxSurge: 1`
 - 最低 1 Pod は常時稼働。
 - backend/worker は HPA で自動スケール。
-- `revisionHistoryLimit: 5` を基本値とする。
+- `revisionHistoryLimit: 3` を基本値とする。
 
 ## 9. 大まかなセットアップ手順
 1. NAS registry を起動する（basic auth 有効）。
@@ -138,19 +138,19 @@ gateway nginx の振り分け:
      - `sudo chmod 600 /etc/syumatsucamera/secrets/*.env`
    - 注記:
      - `app.secret.env` は `kubectl --from-env-file` 専用。
-     - `apply.secrets.env` / `registry.secret.env` は `deploy_apply.sh` から `source` する。
+     - `apply.secrets.env` / `registry.secret.env` は `apply_server.py` が参照する。
 7. Ubuntu Server に deploy 用作業ディレクトリを作成し、`k3s` のみ同期する前提を作る。
    - `sudo mkdir -p /opt/apply && sudo chown -R yamazaki:yamazaki /opt/apply`
-   - 初回実行時に `deploy_apply.sh` が `DEPLOY_REPO_TOKEN` を使って `git clone --depth=1 --no-checkout` + `sparse-checkout set k3s` を行う。
+   - 初回実行時に `apply_server.py` が `DEPLOY_REPO_TOKEN` を使って `git clone --depth=1 --no-checkout` + `sparse-checkout set k3s` を行う。
 8. Ubuntu Server に apply エンドポイント（`127.0.0.1:19081`）を常駐させる。
    - `apply_server.py` を `systemd` で常駐
-   - `deploy_apply.sh` は `yamazaki` 実行
+   - `apply_server.py` は `yamazaki` 実行
 9. gateway nginx で `apply` は POST 以外を拒否し、`127.0.0.1:19081` へ転送する。
 10. k3s に `cloudflared` Deployment を作成する（Token Secret 参照）。
-11. `deploy_apply.sh` 実行で以下を反映する。
+11. `apply_server.py` 実行で以下を反映する。
    - secret 再投入
    - `k3s` ディレクトリを毎回同期（`/opt/apply/repo/k3s`）
-   - `kubectl apply -k /opt/apply/repo/k3s/base`
+   - immutable tag を注入した kustomize overlay を `kubectl apply -k` する
    - Postgres 初期化（存在時 skip）
    - `python manage.py migrate --noinput`（毎回）
    - 初回superuser作成（存在時 skip）
@@ -160,7 +160,7 @@ gateway nginx の振り分け:
 前提チェック:
 - `which kubectl` が通ること
 - `kubectl get nodes` が成功すること
-- `/opt/apply/bin/deploy_apply.sh` が実行権限を持つこと
+- `/opt/apply/apply_server.py` が systemd で起動していること
 
 ## 10. TODO
 - `apply` 経路に第2関門（HMAC or 共有トークン）を追加する。

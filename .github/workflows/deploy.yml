@@ -281,7 +281,7 @@ jobs:
       - name: Deploy phase plan
         run: |
           echo "Target endpoint: https://apply.syumatsucamera.com/"
-          echo "Mode: mTLS request (POST)"
+          echo "Mode: mTLS request (POST) with immutable image tag"
 
       - name: Configure mTLS cert for deploy request
         env:
@@ -299,13 +299,14 @@ jobs:
       - name: Deploy request over mTLS
         id: deploy_request
         run: |
+          printf '{"image_tag":"%s"}' "${{ github.sha }}" > /tmp/apply_payload.json
           status_code="$(
             curl -sS -o /tmp/apply_response_body.txt -w '%{http_code}' \
               --request POST \
               --cert /tmp/apply-client.crt \
               --key /tmp/apply-client.key \
               --header 'Content-Type: application/json' \
-              --data '{}' \
+              --data @/tmp/apply_payload.json \
               https://apply.syumatsucamera.com/
           )"
           echo "apply endpoint status=${status_code}"

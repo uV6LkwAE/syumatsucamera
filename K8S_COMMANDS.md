@@ -2,7 +2,7 @@
 
 このプロジェクトの前提:
 - namespace なし運用（default）
-- マニフェスト適用ルート: `k3s/base`
+- マニフェスト管理ルート: `k3s/base`（本番反映は apply サーバー経由の overlay）
 - 主要リソース: `nginx`, `backend`, `worker`, `cronjob`, `postgres`, `redis`, `cloudflared`
 
 ## 1. 現在状態の確認
@@ -18,7 +18,7 @@ kubectl get hpa
 
 ## 2. マニフェスト適用
 ```bash
-kubectl apply -k k3s/base
+kubectl kustomize k3s/base
 ```
 
 差分確認のみ（plan相当）:
@@ -30,6 +30,8 @@ kubectl diff -k k3s/base
 ```bash
 kubectl kustomize k3s/base
 ```
+
+本番反映は `apply.syumatsucamera.com` 経由の overlay 適用を使う。
 
 削除:
 ```bash
@@ -61,7 +63,7 @@ kubectl create secret generic cloudflared-token \
 ```
 
 ## 4. ロールアウト操作
-再起動（`latest` タグ運用時に使用）:
+再起動（設定変更や手動反映時に使用）:
 ```bash
 kubectl rollout restart deployment/nginx deployment/backend deployment/worker
 ```
