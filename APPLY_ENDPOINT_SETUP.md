@@ -71,7 +71,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-BIND_HOST = "127.0.0.1"
+BIND_HOST = "0.0.0.0"
 BIND_PORT = 19081
 REPO_DIR = Path("/opt/apply/repo")
 APP_SECRET_ENV = Path("/etc/syumatsucamera/secrets/app.secret.env")
