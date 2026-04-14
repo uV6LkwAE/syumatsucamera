@@ -46,6 +46,9 @@ const HOME_MOBILE_SEARCH_PAGE_SIZE = 6
 const HOME_SEARCH_DEBOUNCE_MS = 320
 const PUBLIC_SITE_NAME = '週末カメラ'
 const PUBLIC_SITE_DESCRIPTION = '気ままに、機材と写真を楽しむブログ'
+const PUBLIC_PRIVACY_POLICY_PATH = '/articles/miscellaneous-notes/privacy-policy/'
+const PUBLIC_ADMINISTRATOR_SELF_INTRODUCTION_PATH =
+  '/articles/miscellaneous-notes/administrator-self-introduction/'
 const MINI_CAROUSEL_INTERVAL_MS = 3600
 const SLIDE_DRAG_THRESHOLD_PX = 48
 const PUBLIC_MOBILE_VIEWPORT_QUERY = '(max-width: 991.98px)'
@@ -1206,7 +1209,10 @@ function PublicHomeDesktopLower({
                 </div>
                 <div className="public-home-more-wrap public-profile-more-wrap">
                   <PublicProfileSocialLinks profile={sidebar.profile} />
-                  <Link className="public-home-more-link" to="#">
+                  <Link
+                    className="public-home-more-link"
+                    to={PUBLIC_ADMINISTRATOR_SELF_INTRODUCTION_PATH}
+                  >
                     もっと見る
                     <i className="bi bi-arrow-right-short" aria-hidden="true" />
                   </Link>
@@ -2253,9 +2259,20 @@ export function PublicLayout() {
         >
           <span>お問い合わせ</span>
         </Link>
-        <a className="public-mobile-nav-link" href="#" onClick={() => setMobileNavOpen(false)}>
+        <Link
+          className="public-mobile-nav-link"
+          to={PUBLIC_PRIVACY_POLICY_PATH}
+          onClick={() => setMobileNavOpen(false)}
+        >
           <span>プライバシーポリシー</span>
-        </a>
+        </Link>
+        <Link
+          className="public-mobile-nav-link"
+          to={PUBLIC_ADMINISTRATOR_SELF_INTRODUCTION_PATH}
+          onClick={() => setMobileNavOpen(false)}
+        >
+          <span>自己紹介</span>
+        </Link>
       </aside>
 
       <Outlet />
@@ -2272,7 +2289,9 @@ export function PublicLayout() {
           <span aria-hidden="true">|</span>
           <Link to="/contact">お問い合わせ</Link>
           <span aria-hidden="true">|</span>
-          <a href="#">プライバシーポリシー</a>
+          <Link to={PUBLIC_PRIVACY_POLICY_PATH}>プライバシーポリシー</Link>
+          <span aria-hidden="true">|</span>
+          <Link to={PUBLIC_ADMINISTRATOR_SELF_INTRODUCTION_PATH}>自己紹介</Link>
         </nav>
       </footer>
     </div>
