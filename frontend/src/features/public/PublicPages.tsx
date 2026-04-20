@@ -450,16 +450,14 @@ function applyPublicPageMeta({
     name: 'twitter:site',
     content: '@syumatsucamera',
   })
-  if (imageUrl !== undefined) {
-    upsertMetaTag('meta[property="og:image"]', {
-      property: 'og:image',
-      content: imageUrl,
-    })
-    upsertMetaTag('meta[name="twitter:image"]', {
-      name: 'twitter:image',
-      content: imageUrl,
-    })
-  }
+  upsertMetaTag('meta[property="og:image"]', {
+    property: 'og:image',
+    content: imageUrl ?? '',
+  })
+  upsertMetaTag('meta[name="twitter:image"]', {
+    name: 'twitter:image',
+    content: imageUrl ?? '',
+  })
 }
 
 function PublicTurnstileWidget({

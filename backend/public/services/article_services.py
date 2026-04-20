@@ -76,18 +76,38 @@ class PublicArticleService:
         }
 
     @staticmethod
-    def get_article_meta(*, slug: str, site_origin: str) -> dict:
+    def get_article_meta(
+        *,
+        site_origin: str,
+        category_slug: str | None = None,
+        article_slug: str | None = None,
+        slug: str | None = None,
+    ) -> dict:
         """
         Cloudflare Worker向けの記事メタ情報を返す。
         """
+        if article_slug is None and slug is None:
+            raise NotFound("記事が存在しません。")
+
+        lookup = {}
+        if category_slug is not None and article_slug is not None:
+            lookup = {
+                "category__slug": category_slug,
+                "slug": article_slug,
+            }
+        elif article_slug is not None:
+            lookup = {"slug": article_slug}
+        elif slug is not None:
+            lookup = {"slug": slug}
+
         try:
-            article = PublicArticleService._base_article_queryset().get(slug=slug)
+            article = PublicArticleService._base_article_queryset().get(**lookup)
         except (Article.DoesNotExist, Article.MultipleObjectsReturned) as exc:
             raise NotFound("記事が存在しません。") from exc
 
         canonical_url = build_public_asset_url(
             site_origin=site_origin,
-            asset_path=f"/articles/{article.slug}",
+            asset_path=article.path,
         )
         return {
             "title": article.title,

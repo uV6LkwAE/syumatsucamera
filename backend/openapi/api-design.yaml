@@ -125,7 +125,7 @@ paths:
             application/json:
               schema:
                 $ref: "./components/schemas.yaml#/components/schemas/CommonDetailError"
-  /api/articles/{slug}/meta/:
+  /api/articles/{category_slug}/{article_slug}/meta/:
     get:
       tags:
         - public
@@ -136,13 +136,8 @@ paths:
       operationId: getPublicArticleMeta
       security: []
       parameters:
-        - name: slug
-          in: path
-          required: true
-          schema:
-            type: string
-            maxLength: 500
-          description: 記事slug
+        - $ref: "#/components/parameters/CategorySlug"
+        - $ref: "#/components/parameters/ArticleSlug"
       responses:
         "200":
           description: 正常

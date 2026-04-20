@@ -13,6 +13,21 @@ from public.views import (
 
 urlpatterns = [
     path(
+        "articles/<str:category_slug>/<str:article_slug>/meta",
+        PublicArticleMetaView.as_view(),
+        name="public-article-meta-by-path-no-slash",
+    ),
+    path(
+        "articles/<str:category_slug>/<str:article_slug>/meta/",
+        PublicArticleMetaView.as_view(),
+        name="public-article-meta-by-path",
+    ),
+    path(
+        "articles/<str:slug>/meta",
+        PublicArticleMetaView.as_view(),
+        name="public-article-meta-no-slash",
+    ),
+    path(
         "articles/<str:slug>/meta/",
         PublicArticleMetaView.as_view(),
         name="public-article-meta",

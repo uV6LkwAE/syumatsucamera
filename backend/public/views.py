@@ -79,11 +79,19 @@ class PublicArticleMetaView(APIView):
 
     permission_classes = []
 
-    def get(self, request, slug: str):
+    def get(
+        self,
+        request,
+        slug: str | None = None,
+        category_slug: str | None = None,
+        article_slug: str | None = None,
+    ):
         """
-        記事slugからメタ情報を返す。
+        記事slugまたはカテゴリslugと記事slugからメタ情報を返す。
         """
         payload = PublicArticleService.get_article_meta(
+            category_slug=category_slug,
+            article_slug=article_slug,
             slug=slug,
             site_origin=build_public_site_origin(request),
         )
