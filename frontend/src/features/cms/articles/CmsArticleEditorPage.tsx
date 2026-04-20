@@ -118,6 +118,9 @@ const ARTICLE_TAG_MAX_LENGTH = 100
 const ARTICLE_TAG_MAX_COUNT = 5
 const ARTICLE_TAG_SUGGESTION_LIMIT = 8
 const ARTICLE_TAG_SUGGESTION_DEBOUNCE_MS = 180
+const ARTICLE_IMAGE_UPLOAD_MAX_FILE_SIZE_MB = 60
+const ARTICLE_IMAGE_UPLOAD_MAX_FILE_SIZE_BYTES =
+  ARTICLE_IMAGE_UPLOAD_MAX_FILE_SIZE_MB * 1024 * 1024
 const ARTICLE_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif'] as const
 const ARTICLE_IMAGE_ACCEPT = 'image/jpeg,image/png,image/gif'
 const ARTICLE_IMAGE_ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif'])
@@ -388,6 +391,25 @@ function renameFileWithUuid(file: File): File {
     type: file.type,
     lastModified: file.lastModified,
   })
+}
+
+function buildImageUploadSizeValidationError(
+  field: 'new_images' | 'thumbnail_upload_file_name',
+) {
+  return createValidationApiError({
+    [field]: [
+      `画像サイズは${ARTICLE_IMAGE_UPLOAD_MAX_FILE_SIZE_MB}MB以下である必要があります。`,
+    ],
+  })
+}
+
+function assertImageUploadFileSize(
+  file: File,
+  field: 'new_images' | 'thumbnail_upload_file_name',
+): void {
+  if (file.size > ARTICLE_IMAGE_UPLOAD_MAX_FILE_SIZE_BYTES) {
+    throw buildImageUploadSizeValidationError(field)
+  }
 }
 
 function getDroppedFiles(dataTransfer: DataTransfer): File[] {
@@ -979,10 +1001,12 @@ export default function CmsArticleEditorPage({
     file: File,
     isAllowedImage: (candidate: File) => boolean,
     errorMessage: string,
+    sizeValidationField: 'new_images' | 'thumbnail_upload_file_name',
   ): Promise<CmsImageUploadResponse> {
     if (lockToken === '') {
       throw new Error('編集中セッションが確立されていません。')
     }
+    assertImageUploadFileSize(file, sizeValidationField)
     if (!isAllowedImage(file)) {
       throw new Error(errorMessage)
     }
@@ -1005,6 +1029,7 @@ export default function CmsArticleEditorPage({
       file,
       isAllowedThumbnailImageFile,
       'アップロードできる画像形式は jpg/jpeg のみです。',
+      'thumbnail_upload_file_name',
     )
     setThumbnailUploadFileName(uploaded.file_name)
     setThumbnailPreviewPath(uploaded.path)
@@ -1051,8 +1076,8 @@ export default function CmsArticleEditorPage({
   async function buildThumbnailRequest(): Promise<Record<string, string>> {
     if (thumbnailMode === 'use_uploaded') {
       if (thumbnailUploadFileName.trim() === '') {
-      throw new Error('サムネイル画像をアップロードしてください。')
-    }
+        throw new Error('サムネイル画像をアップロードしてください。')
+      }
       return {
         mode: 'use_uploaded',
         file_name: thumbnailUploadFileName,
@@ -1453,6 +1478,9 @@ export default function CmsArticleEditorPage({
   }
 
   async function uploadArticleImages(files: File[]): Promise<string[]> {
+    if (files.some((file) => file.size > ARTICLE_IMAGE_UPLOAD_MAX_FILE_SIZE_BYTES)) {
+      throw buildImageUploadSizeValidationError('new_images')
+    }
     if (files.some((file) => !isAllowedArticleImageFile(file))) {
       throw new Error('アップロードできる画像形式は jpg/jpeg/png/gif のみです。')
     }
@@ -1463,6 +1491,7 @@ export default function CmsArticleEditorPage({
         file,
         isAllowedArticleImageFile,
         'アップロードできる画像形式は jpg/jpeg/png/gif のみです。',
+        'new_images',
       )
       uploadedPaths.push(uploaded.path)
       setUploadedImageOptions((prev) => ({
@@ -1821,27 +1850,32 @@ export default function CmsArticleEditorPage({
         requestData: FormData | Record<string, unknown> | string,
         showProgress: (progress: number) => void,
       ) => {
-        if (!(requestData instanceof FormData)) {
-          throw new Error('画像アップロードデータの形式が不正です。')
-        }
-
-        const files: File[] = []
-        for (const value of requestData.values()) {
-          if (value instanceof File) {
-            files.push(value)
+        try {
+          if (!(requestData instanceof FormData)) {
+            throw new Error('画像アップロードデータの形式が不正です。')
           }
-        }
 
-        const uploadedPaths = await uploadArticleImages(files)
-        showProgress(100)
-        return {
-          success: true,
-          time: new Date().toISOString(),
-          data: {
-            baseurl: '',
-            files: uploadedPaths,
-            isImages: uploadedPaths.map(() => true),
+          const files: File[] = []
+          for (const value of requestData.values()) {
+            if (value instanceof File) {
+              files.push(value)
+            }
+          }
+
+          const uploadedPaths = await uploadArticleImages(files)
+          showProgress(100)
+          return {
+            success: true,
+            time: new Date().toISOString(),
+            data: {
+              baseurl: '',
+              files: uploadedPaths,
+              isImages: uploadedPaths.map(() => true),
+            },
           },
+        } catch (error) {
+          setErrorMessage(error)
+          throw error
         }
       },
       defaultHandlerSuccess(data: { baseurl?: string; files?: unknown[] }) {
@@ -1970,6 +2004,7 @@ export default function CmsArticleEditorPage({
           title="サムネイル"
           helpLines={[
             '以下からサムネイルを設定できます。',
+            `画像サイズの上限は ${ARTICLE_IMAGE_UPLOAD_MAX_FILE_SIZE_MB}MB です。`,
             '1. 固定デフォルト画像',
             '2. タイトルから生成',
             '3. オリジナル画像をアップロード',
@@ -2040,7 +2075,7 @@ export default function CmsArticleEditorPage({
                   <span className="cms-thumbnail-upload-placeholder">
                     <i className="bi bi-cloud-arrow-up" aria-hidden="true" />
                     <span>クリックまたはドラッグして画像を選択</span>
-                    <small>JPG / JPEG</small>
+                    <small>JPG / JPEG / {ARTICLE_IMAGE_UPLOAD_MAX_FILE_SIZE_MB}MB以下</small>
                   </span>
                 )}
               </label>
@@ -2409,7 +2444,16 @@ export default function CmsArticleEditorPage({
       </div>
 
       <div className="console-card">
-        <CmsTabGuide title="本文" helpLines={[]} compact showDivider={false} required />
+        <CmsTabGuide
+          title="本文"
+          helpLines={[
+            `画像アップロードの上限は ${ARTICLE_IMAGE_UPLOAD_MAX_FILE_SIZE_MB}MB です。`,
+            '対応形式は JPG / JPEG / PNG / GIF です。',
+          ]}
+          compact
+          showDivider={false}
+          required
+        />
         <div
           ref={editorShellRef}
           className="cms-article-editor-shell"

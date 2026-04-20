@@ -84,7 +84,7 @@ class MediaService:
         """
         if uploaded_file.size > settings.CMS_ARTICLE_IMAGE_UPLOAD_MAX_BYTES:
             raise ValidationError(
-                {"file": ["画像サイズは50MB以下である必要があります。"]}
+                {"file": ["画像サイズは60MB以下である必要があります。"]}
             )
 
         extension = file_name.rsplit(".", 1)[1].lower()
@@ -307,9 +307,7 @@ class MediaService:
         source_path = MediaService.temp_file_path(lock_token=lock_token, file_name=source_file_name)
         if not source_path.exists():
             raise ValidationError(f"一時画像が存在しません。: {source_file_name}")
-
-        with source_path.open("rb") as file_obj:
-            raw = file_obj.read()
+        extension = stored_file_name.rsplit(".", 1)[1].lower()
 
         resolved_original_file_path = (
             original_file_path
@@ -326,33 +324,45 @@ class MediaService:
         public_path.parent.mkdir(parents=True, exist_ok=True)
 
         if not original_path.exists():
-            with original_path.open("wb") as destination:
-                destination.write(raw)
+            shutil.copyfile(source_path, original_path)
+        source_size = original_path.stat().st_size
 
         exif_json = MediaService.load_exif_json_from_original(
             original_path=original_path,
             stored_file_name=stored_file_name,
         )
 
-        image = Image.open(io.BytesIO(raw))
-        public_raw, width, height = MediaService.build_public_image_bytes(
-            image=image,
-            raw=raw,
-            stored_file_name=stored_file_name,
-            processing_options=processing_options,
-            exif_json=exif_json,
-        )
-        checksum = hashlib.sha256(public_raw).hexdigest()
-        with public_path.open("wb") as destination:
-            destination.write(public_raw)
+        if extension == "gif":
+            with Image.open(original_path) as original_image:
+                width, height = original_image.size
+            shutil.copyfile(original_path, public_path)
+            checksum = MediaService.calculate_sha256_from_path(file_path=public_path)
+        else:
+            public_raw, width, height = MediaService.build_public_image_bytes(
+                source_path=original_path,
+                source_size=source_size,
+                stored_file_name=stored_file_name,
+                processing_options=processing_options,
+                exif_json=exif_json,
+            )
+            checksum = hashlib.sha256(public_raw).hexdigest()
+            with public_path.open("wb") as destination:
+                destination.write(public_raw)
 
         if asset is None:
-            asset = MediaAsset.objects.create(
-                article=article,
+            asset, created = MediaAsset.objects.get_or_create(
                 file_name=stored_file_name,
-                original_file_path=resolved_original_file_path,
+                defaults={
+                    "article": article,
+                    "original_file_path": resolved_original_file_path,
+                },
             )
-        elif asset.original_file_path != resolved_original_file_path:
+            if not created and asset.article_id != article.id:
+                raise RuntimeError("画像アセットの所有記事が一致しません。")
+        elif asset.article_id != article.id:
+            raise RuntimeError("画像アセットの所有記事が一致しません。")
+
+        if asset.original_file_path != resolved_original_file_path:
             asset.original_file_path = resolved_original_file_path
 
         asset.width = width
@@ -376,10 +386,21 @@ class MediaService:
         return asset
 
     @staticmethod
+    def calculate_sha256_from_path(*, file_path: Path) -> str:
+        """
+        ファイルパスから SHA-256 を返す。
+        """
+        hasher = hashlib.sha256()
+        with file_path.open("rb") as file_obj:
+            for chunk in iter(lambda: file_obj.read(1024 * 1024), b""):
+                hasher.update(chunk)
+        return hasher.hexdigest()
+
+    @staticmethod
     def build_public_image_bytes(
         *,
-        image: Image.Image,
-        raw: bytes,
+        source_path: Path,
+        source_size: int,
         stored_file_name: str,
         processing_options: dict,
         exif_json: dict | None,
@@ -393,40 +414,43 @@ class MediaService:
             "公開画像処理を開始しました: file_name=%s extension=%s raw_bytes=%s options=%s",
             stored_file_name,
             extension,
-            len(raw),
+            source_size,
             {
                 "exif_watermark": bool(processing_options.get("exif_watermark")),
                 "site_logo_watermark": bool(processing_options.get("site_logo_watermark")),
             },
         )
-        if extension == "gif":
-            logger.log(
-                logging.INFO,
-                "GIF画像のため加工を行わずに保存します: file_name=%s",
-                stored_file_name,
-            )
-            width, height = image.size
-            return raw, width, height
-
         normalized_options = MediaService.normalize_processing_options(processing_options=processing_options)
-        working_image = ImageOps.exif_transpose(image).convert("RGBA")
 
-        if len(raw) > settings.CMS_ARTICLE_IMAGE_RESIZE_SKIP_MAX_BYTES:
+        with Image.open(source_path) as source_image:
+            if extension in {"jpg", "jpeg"}:
+                source_image.draft(
+                    "RGB",
+                    (settings.CMS_ARTICLE_IMAGE_MAX_LONG_EDGE, settings.CMS_ARTICLE_IMAGE_MAX_LONG_EDGE),
+                )
+            working_image = ImageOps.exif_transpose(source_image)
+            working_image.load()
+
+        width, height = working_image.size
+        long_edge = max(width, height)
+        if long_edge > settings.CMS_ARTICLE_IMAGE_MAX_LONG_EDGE:
             logger.log(
                 logging.INFO,
-                "画像リサイズを実行します: file_name=%s raw_bytes=%s limit=%s",
+                "画像リサイズを実行します: file_name=%s size=%sx%s limit=%s",
                 stored_file_name,
-                len(raw),
-                settings.CMS_ARTICLE_IMAGE_RESIZE_SKIP_MAX_BYTES,
+                width,
+                height,
+                settings.CMS_ARTICLE_IMAGE_MAX_LONG_EDGE,
             )
             working_image = MediaService._resize_image(working_image=working_image)
         else:
             logger.log(
                 logging.INFO,
-                "画像リサイズをスキップします: file_name=%s raw_bytes=%s limit=%s",
+                "画像リサイズをスキップします: file_name=%s size=%sx%s limit=%s",
                 stored_file_name,
-                len(raw),
-                settings.CMS_ARTICLE_IMAGE_RESIZE_SKIP_MAX_BYTES,
+                width,
+                height,
+                settings.CMS_ARTICLE_IMAGE_MAX_LONG_EDGE,
             )
 
         if normalized_options["exif_watermark"]:
@@ -1164,13 +1188,11 @@ class MediaService:
         if long_edge <= settings.CMS_ARTICLE_IMAGE_MAX_LONG_EDGE:
             return working_image
 
-        resize_ratio = settings.CMS_ARTICLE_IMAGE_MAX_LONG_EDGE / long_edge
-        resized_width = max(1, round(width * resize_ratio))
-        resized_height = max(1, round(height * resize_ratio))
-        return working_image.resize(
-            (resized_width, resized_height),
+        working_image.thumbnail(
+            (settings.CMS_ARTICLE_IMAGE_MAX_LONG_EDGE, settings.CMS_ARTICLE_IMAGE_MAX_LONG_EDGE),
             Image.Resampling.LANCZOS,
         )
+        return working_image
 
     @staticmethod
     def _apply_exif_watermark(
@@ -1198,6 +1220,9 @@ class MediaService:
                 stored_file_name,
             )
             return working_image
+
+        if working_image.mode != "RGBA":
+            working_image = working_image.convert("RGBA")
 
         font_size = max(16, round(max(working_image.size) * 0.018))
         logger.log(
@@ -1272,6 +1297,9 @@ class MediaService:
         """
         サイトロゴ透かしを右下へ描画する。
         """
+        if working_image.mode != "RGBA":
+            working_image = working_image.convert("RGBA")
+
         brand_logo_path = settings.CMS_THUMBNAIL_BRAND_IMAGE_PATH
         if not brand_logo_path.exists():
             raise RuntimeError(f"ブランドロゴPNGが存在しません: {brand_logo_path}")
@@ -1362,10 +1390,9 @@ class MediaService:
         if extension in {"jpg", "jpeg"}:
             if quality is None:
                 raise RuntimeError("JPEG品質が指定されていません。")
-            export_image = MediaService._build_metadata_free_jpeg_image(
+            MediaService._build_metadata_free_jpeg_image(
                 working_image=working_image,
-            )
-            export_image.save(
+            ).save(
                 buffer,
                 format="JPEG",
                 quality=quality,
@@ -1373,10 +1400,9 @@ class MediaService:
                 progressive=True,
             )
         elif extension == "png":
-            export_image = MediaService._build_metadata_free_png_image(
+            MediaService._build_metadata_free_png_image(
                 working_image=working_image,
-            )
-            export_image.save(
+            ).save(
                 buffer,
                 format="PNG",
                 optimize=True,
@@ -1392,20 +1418,18 @@ class MediaService:
         """
         公開用JPEGのためにメタデータを持たない画像へ変換する。
         """
-        rgb_image = working_image.convert("RGB")
-        export_image = Image.new("RGB", rgb_image.size)
-        export_image.paste(rgb_image)
-        return export_image
+        if working_image.mode == "RGB":
+            return working_image
+        return working_image.convert("RGB")
 
     @staticmethod
     def _build_metadata_free_png_image(*, working_image: Image.Image) -> Image.Image:
         """
         公開用PNGのためにメタデータを持たない画像へ変換する。
         """
-        rgba_image = working_image.convert("RGBA")
-        export_image = Image.new("RGBA", rgba_image.size)
-        export_image.paste(rgba_image)
-        return export_image
+        if working_image.mode == "RGBA":
+            return working_image
+        return working_image.convert("RGBA")
 
     @staticmethod
     def _encode_public_image_at_target_size(
