@@ -27,6 +27,7 @@ import {
   submitPublicContact,
 } from './api'
 import { PublicArticleBodyRenderer } from './articleBody'
+import { buildPublicSiteUrl } from '../../lib/siteUrls'
 import type {
   ContactSubjectType,
   PublicArticleBody,
@@ -394,7 +395,7 @@ function applyPublicPageMeta({
   type?: 'website' | 'article'
   twitterCard?: 'summary' | 'summary_large_image'
 }): void {
-  const absoluteUrl = `${window.location.origin}${path}`
+  const absoluteUrl = buildPublicSiteUrl(path)
   document.title = `${title} | ${PUBLIC_SITE_NAME}`
 
   const canonicalSelector = 'link[rel="canonical"]'
@@ -2191,7 +2192,7 @@ export function PublicLayout() {
       left: 0,
       behavior: 'auto',
     })
-  }, [location.pathname, location.search])
+  }, [location.hash, location.pathname, location.search])
 
   return (
     <div className="public-site-shell">

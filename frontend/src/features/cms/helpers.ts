@@ -1,4 +1,5 @@
 import { ApiError } from '../../api/client'
+import { buildPublicSiteUrl } from '../../lib/siteUrls'
 import type { CmsArticleMediaAsset, CmsCategoryNode } from './types'
 
 export type FlatCmsCategory = {
@@ -159,4 +160,8 @@ export function extractMediaFileName(path: string): string {
     return ''
   }
   return candidate
+}
+
+export function buildCmsPublicArticleUrl(articlePath: string): string {
+  return buildPublicSiteUrl(articlePath)
 }

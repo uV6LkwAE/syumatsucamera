@@ -5,7 +5,7 @@ import ApiErrorPopup from '../../../components/ApiErrorPopup'
 import CmsTabGuide from '../../../components/CmsTabGuide'
 import ConsoleDropdown, { ConsoleDropdownOption } from '../../../components/ConsoleDropdown'
 import ConsoleNotice from '../../../components/ConsoleNotice'
-import { formatCmsDate } from '../helpers'
+import { buildCmsPublicArticleUrl, formatCmsDate } from '../helpers'
 import type {
   CmsArticleAuthorOptionListResponse,
   CmsArticleListResponse,
@@ -578,12 +578,12 @@ export default function CmsArticlesPage({ embedded = false }: CmsArticlesPagePro
                 articles.map((article) => (
                   <tr key={article.id}>
                     <td>
-                      <Link className="cms-article-title-link" to={article.path}>
+                      <a className="cms-article-title-link" href={buildCmsPublicArticleUrl(article.path)}>
                         <div className="cms-article-title-cell">
                           <strong>{article.title}</strong>
                           <span>{article.path}</span>
                         </div>
-                      </Link>
+                      </a>
                     </td>
                     <td>{article.category.name}</td>
                     <td>{article.author.display_name ?? '未設定'}</td>
