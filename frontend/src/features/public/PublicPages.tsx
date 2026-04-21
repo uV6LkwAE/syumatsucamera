@@ -1015,7 +1015,7 @@ function PublicDetailRelatedList({
                 src={article.thumbnail_url}
                 alt={article.title}
                 width={160}
-                height={84}
+                height={120}
                 loading="lazy"
                 decoding="async"
               />
@@ -1912,7 +1912,7 @@ export function PublicArticleDetailPage() {
                   src={article.thumbnail_url}
                   alt={article.title}
                   width={1200}
-                  height={630}
+                  height={900}
                   loading="eager"
                   decoding="async"
                 />

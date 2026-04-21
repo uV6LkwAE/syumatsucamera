@@ -5352,10 +5352,16 @@ body {
 }
 
 .public-article-thumb-frame,
-.public-detail-thumb-wrap,
 .public-ogp-thumb-wrap {
   position: relative;
   aspect-ratio: 1200 / 630;
+  background: #e9efe5;
+  overflow: hidden;
+}
+
+.public-detail-thumb-wrap {
+  position: relative;
+  aspect-ratio: 4 / 3;
   background: #e9efe5;
   overflow: hidden;
 }
@@ -6342,7 +6348,7 @@ body {
 .public-detail-related-thumb-frame {
   display: block;
   width: 100%;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 4 / 3;
   border-radius: 0.65rem;
   overflow: hidden;
   background: #eef3ea;
