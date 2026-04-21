@@ -1872,7 +1872,7 @@ export default function CmsArticleEditorPage({
               files: uploadedPaths,
               isImages: uploadedPaths.map(() => true),
             },
-          },
+          }
         } catch (error) {
           setErrorMessage(error)
           throw error
