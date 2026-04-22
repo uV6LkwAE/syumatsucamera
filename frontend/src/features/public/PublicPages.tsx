@@ -2213,7 +2213,14 @@ export function PublicLayout() {
             <span className="navbar-toggler-icon" aria-hidden="true" />
           </button>
           <Link className="public-site-logo" to="/">
-            <i className="bi bi-camera" aria-hidden="true" />
+            <img
+              className="public-site-logo-mark"
+              src="/site-logo.png"
+              alt=""
+              aria-hidden="true"
+              width={48}
+              height={48}
+            />
             <span>週末カメラ</span>
           </Link>
           <span className="public-header-spacer" aria-hidden="true" />
