@@ -159,6 +159,11 @@ kubectl get cronjob
 kubectl create job --from=cronjob/app-cronjob app-cronjob-manual-$(date +%s)
 ```
 
+PV反映の即時実行テスト:
+```bash
+kubectl create job --from=cronjob/app-pv-flush app-pv-flush-manual-$(date +%s)
+```
+
 Jobログ:
 ```bash
 kubectl get jobs

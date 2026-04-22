@@ -1,0 +1,30 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: app-pv-flush
+spec:
+  schedule: "*/30 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          imagePullSecrets:
+            - name: registry-credentials
+          containers:
+            - name: app-pv-flush
+              image: registry.syumatsucamera.com/syumatsucamera/backend
+              imagePullPolicy: Always
+              command:
+                - python
+              args:
+                - manage.py
+                - pv_flush
+              envFrom:
+                - configMapRef:
+                    name: app-config
+                - secretRef:
+                    name: app-secret
