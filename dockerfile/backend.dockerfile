@@ -37,8 +37,9 @@ COPY --from=builder /tmp/wheels /tmp/wheels
 COPY backend/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --no-index --find-links=/tmp/wheels -r /tmp/requirements.txt \
     && rm -rf /tmp/wheels /tmp/requirements.txt
+COPY Caveat /Caveat
 COPY backend /app
-RUN chown -R appuser:appuser /var/log/syumatsucamera /app/logs /app
+RUN chown -R appuser:appuser /var/log/syumatsucamera /app/logs /app /Caveat
 USER appuser
 EXPOSE 8000
 CMD ["gunicorn", "syumatsucamera.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3"]
@@ -49,6 +50,7 @@ RUN apt-get update \
       curl \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=deps-dev /usr/local /usr/local
+COPY Caveat /Caveat
 COPY backend /app
 EXPOSE 8000
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

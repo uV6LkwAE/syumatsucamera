@@ -8,13 +8,14 @@ import re
 import shutil
 import uuid
 from fractions import Fraction
+from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 from django.conf import settings
 from django.utils.text import slugify
-from PIL import ExifTags, Image, ImageDraw, ImageFont, ImageOps
+from PIL import ExifTags, Image, ImageCms, ImageDraw, ImageFont, ImageOps
 from rest_framework.exceptions import ValidationError
 
 from cms.models import (
@@ -33,6 +34,10 @@ IMAGE_FORMATS_BY_EXTENSION = {
     "png": {"PNG"},
     "gif": {"GIF"},
 }
+SITE_WATERMARK_FONT_PATH = Path("/Caveat/static/Caveat-Bold.ttf")
+SITE_WATERMARK_TEXT = "@syumatsucamera"
+SITE_WATERMARK_WIDTH_RATIO = 0.22
+SITE_WATERMARK_OPACITY = 1.0
 
 EXIF_DISPLAY_FIELDS = (
     ("ISO", 34855),
@@ -327,27 +332,39 @@ class MediaService:
             shutil.copyfile(source_path, original_path)
         source_size = original_path.stat().st_size
 
-        exif_json = MediaService.load_exif_json_from_original(
-            original_path=original_path,
-            stored_file_name=stored_file_name,
-        )
+        with Image.open(original_path) as original_image:
+            exif_json = MediaService.extract_exif(image=original_image)
+            if exif_json is None:
+                logger.log(
+                    logging.INFO,
+                    "原本にEXIF情報がありません: file_name=%s original_path=%s",
+                    stored_file_name,
+                    original_path,
+                )
+            else:
+                logger.log(
+                    logging.INFO,
+                    "原本からEXIFを取得しました: file_name=%s original_path=%s exif_keys=%s",
+                    stored_file_name,
+                    original_path,
+                    ",".join(exif_json.keys()),
+                )
 
-        if extension == "gif":
-            with Image.open(original_path) as original_image:
+            if extension == "gif":
                 width, height = original_image.size
-            shutil.copyfile(original_path, public_path)
-            checksum = MediaService.calculate_sha256_from_path(file_path=public_path)
-        else:
-            public_raw, width, height = MediaService.build_public_image_bytes(
-                source_path=original_path,
-                source_size=source_size,
-                stored_file_name=stored_file_name,
-                processing_options=processing_options,
-                exif_json=exif_json,
-            )
-            checksum = hashlib.sha256(public_raw).hexdigest()
-            with public_path.open("wb") as destination:
-                destination.write(public_raw)
+                shutil.copyfile(original_path, public_path)
+                checksum = MediaService.calculate_sha256_from_path(file_path=public_path)
+            else:
+                public_raw, width, height = MediaService.build_public_image_bytes(
+                    source_image=original_image,
+                    source_size=source_size,
+                    stored_file_name=stored_file_name,
+                    processing_options=processing_options,
+                    exif_json=exif_json,
+                )
+                checksum = hashlib.sha256(public_raw).hexdigest()
+                with public_path.open("wb") as destination:
+                    destination.write(public_raw)
 
         if asset is None:
             asset, created = MediaAsset.objects.get_or_create(
@@ -399,7 +416,7 @@ class MediaService:
     @staticmethod
     def build_public_image_bytes(
         *,
-        source_path: Path,
+        source_image: Image.Image,
         source_size: int,
         stored_file_name: str,
         processing_options: dict,
@@ -422,14 +439,18 @@ class MediaService:
         )
         normalized_options = MediaService.normalize_processing_options(processing_options=processing_options)
 
-        with Image.open(source_path) as source_image:
-            if extension in {"jpg", "jpeg"}:
-                source_image.draft(
-                    "RGB",
-                    (settings.CMS_ARTICLE_IMAGE_MAX_LONG_EDGE, settings.CMS_ARTICLE_IMAGE_MAX_LONG_EDGE),
-                )
-            working_image = ImageOps.exif_transpose(source_image)
-            working_image.load()
+        if extension in {"jpg", "jpeg"}:
+            source_image.draft(
+                "RGB",
+                (settings.CMS_ARTICLE_IMAGE_MAX_LONG_EDGE, settings.CMS_ARTICLE_IMAGE_MAX_LONG_EDGE),
+            )
+        working_image = ImageOps.exif_transpose(source_image)
+        working_image.load()
+
+        working_image = MediaService._convert_image_to_srgb(
+            working_image=working_image,
+            stored_file_name=stored_file_name,
+        )
 
         width, height = working_image.size
         long_edge = max(width, height)
@@ -507,54 +528,6 @@ class MediaService:
         )
         return public_raw, width, height
 
-    @staticmethod
-    def load_exif_json_from_original(*, original_path: Path, stored_file_name: str) -> dict | None:
-        """
-        原本ファイルからEXIF情報を取得する。
-        """
-        if not original_path.exists():
-            logger.log(
-                logging.ERROR,
-                "原本ファイルが存在しません: file_name=%s original_path=%s",
-                stored_file_name,
-                original_path,
-            )
-            raise RuntimeError(f"原本ファイルが存在しません: {stored_file_name}")
-
-        try:
-            with original_path.open("rb") as original_file_obj:
-                with Image.open(original_file_obj) as original_image:
-                    exif_json = MediaService.extract_exif(image=original_image)
-        except Exception as exc:
-            logger.log(
-                logging.ERROR,
-                "EXIFの取得に失敗しました: file_name=%s original_path=%s error=%s",
-                stored_file_name,
-                original_path,
-                exc,
-                exc_info=True,
-            )
-            return None
-
-        if exif_json is None:
-            logger.log(
-                logging.WARNING,
-                "原本からEXIFを取得できませんでした: file_name=%s original_path=%s",
-                stored_file_name,
-                original_path,
-            )
-            return None
-
-        logger.log(
-            logging.INFO,
-            "原本からEXIFを取得しました: file_name=%s original_path=%s exif_keys=%s",
-            stored_file_name,
-            original_path,
-            ",".join(exif_json.keys()),
-        )
-        return exif_json
-
-    @staticmethod
     def rewrite_temp_paths_to_public(
         *,
         body_html: str,
@@ -1195,6 +1168,50 @@ class MediaService:
         return working_image
 
     @staticmethod
+    def _convert_image_to_srgb(*, working_image: Image.Image, stored_file_name: str) -> Image.Image:
+        """
+        ICCプロファイル付き画像をsRGBへ変換する。
+        """
+        icc_profile = working_image.info.get("icc_profile")
+        if not icc_profile:
+            logger.log(
+                logging.INFO,
+                "ICCプロファイルがないためsRGBとして扱います: file_name=%s mode=%s",
+                stored_file_name,
+                working_image.mode,
+            )
+            return working_image
+
+        logger.log(
+            logging.INFO,
+            "ICCプロファイル付き画像をsRGBへ変換します: file_name=%s mode=%s",
+            stored_file_name,
+            working_image.mode,
+        )
+        try:
+            source_profile = ImageCms.ImageCmsProfile(io.BytesIO(icc_profile))
+            target_profile = ImageCms.createProfile("sRGB")
+            if working_image.mode == "RGBA":
+                rgb_image = working_image.convert("RGB")
+                alpha = working_image.getchannel("A")
+                converted = ImageCms.profileToProfile(
+                    rgb_image,
+                    source_profile,
+                    target_profile,
+                    outputMode="RGB",
+                )
+                converted.putalpha(alpha)
+                return converted
+            return ImageCms.profileToProfile(
+                working_image,
+                source_profile,
+                target_profile,
+                outputMode="RGB",
+            )
+        except Exception as exc:
+            raise RuntimeError(f"sRGB変換に失敗しました: {stored_file_name}") from exc
+
+    @staticmethod
     def _apply_exif_watermark(
         *,
         working_image: Image.Image,
@@ -1241,8 +1258,7 @@ class MediaService:
         margin = max(16, round(max(working_image.size) * 0.016))
         line_gap = max(4, round(font_size * 0.3))
 
-        overlay = Image.new("RGBA", working_image.size, (0, 0, 0, 0))
-        draw = ImageDraw.Draw(overlay)
+        draw = ImageDraw.Draw(working_image, "RGBA")
         text_boxes = [
             MediaService._measure_text_box(draw=draw, text=line, font=font)
             for line in lines
@@ -1272,7 +1288,7 @@ class MediaService:
             )
             current_y += text_height + line_gap
 
-        return Image.alpha_composite(working_image, overlay)
+        return working_image
 
     @staticmethod
     def build_visible_exif_lines(*, exif_json: dict | None) -> list[str]:
@@ -1295,42 +1311,101 @@ class MediaService:
     @staticmethod
     def _apply_site_logo_watermark(*, working_image: Image.Image) -> Image.Image:
         """
-        サイトロゴ透かしを右下へ描画する。
+        サイト名テキスト透かしを右下へ描画する。
         """
         if working_image.mode != "RGBA":
             working_image = working_image.convert("RGBA")
 
-        brand_logo_path = settings.CMS_THUMBNAIL_BRAND_IMAGE_PATH
-        if not brand_logo_path.exists():
-            raise RuntimeError(f"ブランドロゴPNGが存在しません: {brand_logo_path}")
-
-        with Image.open(brand_logo_path) as source_logo:
-            brand_logo = source_logo.convert("RGBA")
-
         long_edge = max(working_image.size)
         target_width = max(
             1,
-            round(long_edge * settings.CMS_ARTICLE_SITE_LOGO_WATERMARK_WIDTH_RATIO),
+            round(long_edge * SITE_WATERMARK_WIDTH_RATIO),
         )
-        source_width, source_height = brand_logo.size
-        target_height = max(1, round(source_height * (target_width / source_width)))
-        resized_logo = brand_logo.resize(
-            (target_width, target_height),
-            Image.Resampling.LANCZOS,
+        font = MediaService._load_site_watermark_font(
+            target_width=target_width,
+            text=SITE_WATERMARK_TEXT,
+            long_edge=long_edge,
         )
-
-        alpha_channel = resized_logo.getchannel("A")
-        alpha_channel = alpha_channel.point(
-            lambda alpha: int(alpha * settings.CMS_ARTICLE_SITE_LOGO_WATERMARK_OPACITY)
+        draw = ImageDraw.Draw(working_image, "RGBA")
+        text_box = draw.textbbox(
+            (0, 0),
+            SITE_WATERMARK_TEXT,
+            font=font,
         )
-        resized_logo.putalpha(alpha_channel)
-
         margin = max(18, round(long_edge * 0.018))
-        paste_x = working_image.width - target_width - margin
-        paste_y = working_image.height - target_height - margin
-        overlay = Image.new("RGBA", working_image.size, (0, 0, 0, 0))
-        overlay.paste(resized_logo, (paste_x, paste_y), resized_logo)
-        return Image.alpha_composite(working_image, overlay)
+        text_x = working_image.width - margin - text_box[2]
+        text_y = working_image.height - margin - text_box[3]
+        contrast_box = (
+            max(0, text_x + text_box[0]),
+            max(0, text_y + text_box[1]),
+            min(working_image.width, text_x + text_box[2]),
+            min(working_image.height, text_y + text_box[3]),
+        )
+        fill = MediaService._site_watermark_color(
+            working_image=working_image,
+            contrast_box=contrast_box,
+        )
+        draw.text(
+            (text_x, text_y),
+            SITE_WATERMARK_TEXT,
+            font=font,
+            fill=fill,
+        )
+        return working_image
+
+    @staticmethod
+    @lru_cache(maxsize=64)
+    def _load_site_watermark_font(
+        *,
+        target_width: int,
+        text: str,
+        long_edge: int,
+    ) -> ImageFont.FreeTypeFont:
+        """
+        透かし文字列が目標幅に収まるCaveatフォントを読み込む。
+        """
+        size = max(18, round(long_edge * 0.055))
+        dummy_image = Image.new("RGBA", (1, 1))
+        draw = ImageDraw.Draw(dummy_image)
+        while size >= 12:
+            font = MediaService._load_site_watermark_font_by_size(size=size)
+            text_box = draw.textbbox(
+                (0, 0),
+                text,
+                font=font,
+            )
+            if text_box[2] - text_box[0] <= target_width:
+                return font
+            size -= 2
+
+        return MediaService._load_site_watermark_font_by_size(size=12)
+
+    @staticmethod
+    @lru_cache(maxsize=64)
+    def _load_site_watermark_font_by_size(*, size: int) -> ImageFont.FreeTypeFont:
+        """
+        Caveatフォントをサイズ単位で読み込んで再利用する。
+        """
+        return ImageFont.truetype(str(SITE_WATERMARK_FONT_PATH), size=size)
+
+    @staticmethod
+    def _site_watermark_color(
+        *,
+        working_image: Image.Image,
+        contrast_box: tuple[int, int, int, int],
+    ) -> tuple[int, int, int, int]:
+        """
+        背景の明るさに応じた透かし文字色を返す。
+        """
+        alpha = round(255 * SITE_WATERMARK_OPACITY)
+        crop = working_image.crop(contrast_box).convert("L")
+        histogram = crop.histogram()
+        pixel_count = max(1, sum(histogram))
+        luminance = sum(value * count for value, count in enumerate(histogram)) / pixel_count
+
+        if luminance >= 132:
+            return (0, 0, 0, alpha)
+        return (255, 255, 255, alpha)
 
     @staticmethod
     def _serialize_public_image(
@@ -1344,25 +1419,26 @@ class MediaService:
         width, height = working_image.size
 
         if extension in {"jpg", "jpeg"}:
-            public_raw = MediaService._encode_public_image(
+            jpeg_image = MediaService._build_metadata_free_jpeg_image(
                 working_image=working_image,
-                extension=extension,
+            )
+            public_raw = MediaService._encode_public_jpeg_image(
+                jpeg_image=jpeg_image,
                 quality=settings.CMS_ARTICLE_IMAGE_QUALITY_HIGH,
+                optimize=True,
+                progressive=True,
             )
             if len(public_raw) <= settings.CMS_ARTICLE_IMAGE_PUBLIC_MAX_BYTES:
                 return public_raw, width, height
 
-            public_raw = MediaService._encode_public_image_at_target_size(
-                working_image=working_image,
-                extension=extension,
+            public_raw = MediaService._encode_public_jpeg_image_at_target_size(
+                jpeg_image=jpeg_image,
             )
             return public_raw, width, height
 
         if extension == "png":
-            public_raw = MediaService._encode_public_image(
+            public_raw = MediaService._encode_public_png_image(
                 working_image=working_image,
-                extension=extension,
-                quality=None,
             )
             if len(public_raw) > settings.CMS_ARTICLE_IMAGE_PUBLIC_MAX_BYTES:
                 logger.log(
@@ -1376,41 +1452,40 @@ class MediaService:
         raise RuntimeError(f"対応していない公開画像形式です: {extension}")
 
     @staticmethod
-    def _encode_public_image(
+    def _encode_public_jpeg_image(
         *,
-        working_image: Image.Image,
-        extension: str,
-        quality: int | None,
+        jpeg_image: Image.Image,
+        quality: int,
+        optimize: bool,
+        progressive: bool,
     ) -> bytes:
         """
-        公開用画像を指定品質でエンコードする。
+        公開用JPEG画像を指定品質でエンコードする。
         """
         buffer = io.BytesIO()
+        jpeg_image.save(
+            buffer,
+            format="JPEG",
+            quality=quality,
+            optimize=optimize,
+            progressive=progressive,
+        )
+        return buffer.getvalue()
 
-        if extension in {"jpg", "jpeg"}:
-            if quality is None:
-                raise RuntimeError("JPEG品質が指定されていません。")
-            MediaService._build_metadata_free_jpeg_image(
-                working_image=working_image,
-            ).save(
-                buffer,
-                format="JPEG",
-                quality=quality,
-                optimize=True,
-                progressive=True,
-            )
-        elif extension == "png":
-            MediaService._build_metadata_free_png_image(
-                working_image=working_image,
-            ).save(
-                buffer,
-                format="PNG",
-                optimize=True,
-                compress_level=9,
-            )
-        else:
-            raise RuntimeError(f"対応していない公開画像形式です: {extension}")
-
+    @staticmethod
+    def _encode_public_png_image(*, working_image: Image.Image) -> bytes:
+        """
+        公開用PNG画像をエンコードする。
+        """
+        buffer = io.BytesIO()
+        MediaService._build_metadata_free_png_image(
+            working_image=working_image,
+        ).save(
+            buffer,
+            format="PNG",
+            optimize=True,
+            compress_level=9,
+        )
         return buffer.getvalue()
 
     @staticmethod
@@ -1432,39 +1507,45 @@ class MediaService:
         return working_image.convert("RGBA")
 
     @staticmethod
-    def _encode_public_image_at_target_size(
+    def _encode_public_jpeg_image_at_target_size(
         *,
-        working_image: Image.Image,
-        extension: str,
+        jpeg_image: Image.Image,
     ) -> bytes:
         """
-        上限サイズ以下を満たす最大品質の画像bytesを二分探索で返す。
+        上限サイズ以下を満たす最大品質のJPEG bytesを二分探索で返す。
         """
         low = settings.CMS_ARTICLE_IMAGE_QUALITY_LOW
         high = settings.CMS_ARTICLE_IMAGE_QUALITY_HIGH - 1
         target_size = settings.CMS_ARTICLE_IMAGE_PUBLIC_MAX_BYTES
-        best_raw: bytes | None = None
+        best_quality: int | None = None
 
         while low <= high:
             quality = (low + high) // 2
-            candidate_raw = MediaService._encode_public_image(
-                working_image=working_image,
-                extension=extension,
+            candidate_raw = MediaService._encode_public_jpeg_image(
+                jpeg_image=jpeg_image,
                 quality=quality,
+                optimize=False,
+                progressive=False,
             )
             if len(candidate_raw) <= target_size:
-                best_raw = candidate_raw
+                best_quality = quality
                 low = quality + 1
             else:
                 high = quality - 1
 
-        if best_raw is not None:
-            return best_raw
+        if best_quality is not None:
+            return MediaService._encode_public_jpeg_image(
+                jpeg_image=jpeg_image,
+                quality=best_quality,
+                optimize=True,
+                progressive=True,
+            )
 
-        return MediaService._encode_public_image(
-            working_image=working_image,
-            extension=extension,
+        return MediaService._encode_public_jpeg_image(
+            jpeg_image=jpeg_image,
             quality=settings.CMS_ARTICLE_IMAGE_QUALITY_LOW,
+            optimize=True,
+            progressive=True,
         )
 
     @staticmethod

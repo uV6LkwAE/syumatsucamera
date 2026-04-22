@@ -50,6 +50,7 @@ services:
     command: ["/bin/sh", "-ec", "python manage.py migrate --noinput && exec python manage.py runserver 0.0.0.0:8000"]
     volumes:
       - ../backend:/app
+      - ../Caveat:/Caveat:ro
     ports:
       - "8000:8000"
     expose:
@@ -83,6 +84,7 @@ services:
       - exec celery -A "$${CELERY_APP_MODULE:-syumatsucamera}" worker -l info
     volumes:
       - ../backend:/app
+      - ../Caveat:/Caveat:ro
     depends_on:
       backend:
         condition: service_healthy
@@ -106,6 +108,7 @@ services:
       - while true; do python manage.py pv_flush && sleep 1800; done
     volumes:
       - ../backend:/app
+      - ../Caveat:/Caveat:ro
     depends_on:
       backend:
         condition: service_healthy
