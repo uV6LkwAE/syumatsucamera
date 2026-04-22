@@ -1319,6 +1319,8 @@ body {
 }
 
 .public-card-grid.is-archive-four .public-article-card-title {
+  font-size: 0.86rem;
+  line-height: 1.65;
   font-weight: 700;
 }
 
