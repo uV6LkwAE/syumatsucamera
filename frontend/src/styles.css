@@ -6738,6 +6738,13 @@ body {
   box-shadow: 0 10px 28px rgba(27, 45, 20, 0.08);
 }
 
+@media (min-width: 768px) {
+  .public-article-body-image.is-portrait {
+    max-height: 80vh;
+    object-fit: contain;
+  }
+}
+
 .public-ogp-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

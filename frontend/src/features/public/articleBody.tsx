@@ -5,6 +5,7 @@ import {
   useState,
   type ComponentPropsWithoutRef,
   type ReactNode,
+  type SyntheticEvent,
 } from 'react'
 import type { PublicArticleOptionItem, PublicOgpRecord, PublicTocNode } from './types'
 
@@ -209,6 +210,37 @@ function renderXEmbed(url: string, key: string): ReactNode {
   )
 }
 
+type PublicArticleImageProps = {
+  src: string
+  alt: string
+  width: number
+  height: number
+}
+
+function PublicArticleImage({ src, alt, width, height }: PublicArticleImageProps): ReactNode {
+  const [isPortrait, setIsPortrait] = useState(height > width)
+
+  function handleLoad(event: SyntheticEvent<HTMLImageElement>): void {
+    const image = event.currentTarget
+    if (image.naturalWidth > 0 && image.naturalHeight > 0) {
+      setIsPortrait(image.naturalHeight > image.naturalWidth)
+    }
+  }
+
+  return (
+    <img
+      className={`public-article-body-image${isPortrait ? ' is-portrait' : ''}`}
+      src={src}
+      alt={alt}
+      width={width}
+      height={height}
+      loading="lazy"
+      decoding="async"
+      onLoad={handleLoad}
+    />
+  )
+}
+
 function createElementProps(element: Element): Record<string, unknown> {
   const props: Record<string, unknown> = {}
   for (const attribute of Array.from(element.attributes)) {
@@ -353,15 +385,12 @@ function renderNode(
     const width = Number(element.getAttribute('width') ?? 0)
     const height = Number(element.getAttribute('height') ?? 0)
     return (
-      <img
+      <PublicArticleImage
         key={key}
-        className="public-article-body-image"
         src={src}
         alt={alt}
         width={Number.isFinite(width) && width > 0 ? width : 1200}
         height={Number.isFinite(height) && height > 0 ? height : 800}
-        loading="lazy"
-        decoding="async"
       />
     )
   }
