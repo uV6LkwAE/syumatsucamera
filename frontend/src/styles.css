@@ -5989,6 +5989,10 @@ body {
   overflow: hidden;
 }
 
+.public-card-grid.is-archive-four .public-article-card-title {
+  font-weight: 700;
+}
+
 .public-article-card-summary {
   display: -webkit-box;
   margin-top: 0.7rem;
