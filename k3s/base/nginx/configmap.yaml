@@ -9,7 +9,7 @@ data:
       server_name syumatsucamera.com;
 
       client_max_body_size 20M;
-      root /usr/share/nginx/html;
+      root /usr/share/nginx/html/public;
       index index.html;
 
       location /api/ {
@@ -82,7 +82,7 @@ data:
       server_name cms.syumatsucamera.com;
 
       client_max_body_size 64M;
-      root /usr/share/nginx/html;
+      root /usr/share/nginx/html/cms;
       index index.html;
 
       location = / {

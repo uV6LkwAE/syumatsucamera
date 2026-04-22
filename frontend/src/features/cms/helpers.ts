@@ -1,4 +1,4 @@
-import { ApiError } from '../../api/client'
+import { ApiError } from '../../api/apiError'
 import { buildPublicSiteUrl } from '../../lib/siteUrls'
 import type { CmsArticleMediaAsset, CmsCategoryNode } from './types'
 

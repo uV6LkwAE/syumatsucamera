@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ApiError, apiRequest } from '../../api/client'
+import { ApiError } from '../../api/apiError'
+import { apiRequest } from '../../api/client'
 import ApiErrorPopup from '../../components/ApiErrorPopup'
 import CmsTabGuide from '../../components/CmsTabGuide'
 import ConsoleNotice from '../../components/ConsoleNotice'

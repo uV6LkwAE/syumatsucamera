@@ -1,3 +1,7 @@
+import { ApiError, type ApiErrorPayload } from './apiError'
+
+export { ApiError }
+
 const API_BASE_PATH = '/api'
 const ACCESS_JWT_STORAGE_KEY = 'cf_access_jwt_assertion'
 const API_LOADING_MIN_VISIBLE_MS = 500
@@ -19,35 +23,12 @@ type ApiRequestOptions = {
   showLoading?: boolean
 }
 
-type ApiErrorPayload = {
-  detail?: string
-  code?: string
-  errors?: Record<string, unknown>
-}
-
 type DevelopmentAccessTokenResponse = {
   token_type: string
   token: string
   expires_at: string
   email: string
   sub: string
-}
-
-export class ApiError extends Error {
-  status: number
-  code: string
-  detail: string
-  errors?: Record<string, unknown>
-
-  constructor(status: number, payload?: ApiErrorPayload) {
-    const detail = payload?.detail ?? 'APIリクエストに失敗しました。'
-    super(detail)
-    this.name = 'ApiError'
-    this.status = status
-    this.code = payload?.code ?? 'API_ERROR'
-    this.detail = detail
-    this.errors = payload?.errors
-  }
 }
 
 function emitApiLoadingChange(): void {

@@ -10,5 +10,6 @@ RUN npm run build
 FROM nginx:1.27-alpine AS runtime
 RUN apk add --no-cache bash
 COPY --from=frontend-build /app/dist /usr/share/nginx/html
+COPY dockerfile/nginx.prod.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run build:public && npm run build:cms",
+    "build:public": "vite build --mode public --outDir dist/public --emptyOutDir",
+    "build:cms": "vite build --mode cms --outDir dist/cms --emptyOutDir && mv dist/cms/index.cms.html dist/cms/index.html",
     "preview": "vite preview"
   },
   "dependencies": {

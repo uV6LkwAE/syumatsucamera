@@ -16,7 +16,7 @@ import {
   useParams,
   useSearchParams,
 } from 'react-router-dom'
-import { ApiError } from '../../api/client'
+import { ApiError } from '../../api/apiError'
 import ApiErrorPopup from '../../components/ApiErrorPopup'
 import publicHeroPhoto from '../../assets/public/public-hero-photo.jpg'
 import {

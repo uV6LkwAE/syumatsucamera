@@ -1,4 +1,4 @@
-import { ApiError } from '../api/client'
+import { ApiError } from '../api/apiError'
 
 export type ApiErrorFieldEntry = {
   path: string
@@ -265,4 +265,3 @@ export function buildApiErrorViewModel(
     fields: [],
   }
 }
-

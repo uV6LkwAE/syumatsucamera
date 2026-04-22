@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
-import { ApiError, apiRequest } from '../../api/client'
+import { ApiError } from '../../api/apiError'
+import { apiRequest } from '../../api/client'
 import ApiErrorPopup from '../../components/ApiErrorPopup'
 import CmsTabGuide from '../../components/CmsTabGuide'
 import ConsoleDropdown, { ConsoleDropdownOption } from '../../components/ConsoleDropdown'
