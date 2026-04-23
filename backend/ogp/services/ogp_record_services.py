@@ -48,7 +48,7 @@ class OgpRecordService:
         OGPキャッシュを手動更新する。
         """
         update_fields = []
-        for field_name in ("title", "summary", "thumbnail", "site_name"):
+        for field_name in ("title", "summary", "thumbnail", "price", "is_associates", "site_name"):
             if field_name not in payload:
                 continue
             value = payload[field_name]
@@ -100,12 +100,16 @@ class OgpRecordService:
         ogp_record.title = ogp_payload["title"]
         ogp_record.summary = ogp_payload["summary"]
         ogp_record.thumbnail = ogp_payload["thumbnail"]
+        ogp_record.price = ogp_payload["price"]
+        ogp_record.is_associates = ogp_payload["is_associates"]
         ogp_record.site_name = ogp_payload["site_name"]
         ogp_record.save(
             update_fields=[
                 "title",
                 "summary",
                 "thumbnail",
+                "price",
+                "is_associates",
                 "site_name",
                 "updated_at",
             ]

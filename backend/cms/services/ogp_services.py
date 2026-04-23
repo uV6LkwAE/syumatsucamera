@@ -1,7 +1,10 @@
 """
 OGP キャッシュサービスを定義する。
 """
-from urllib.parse import urlparse
+import json
+import re
+from html import unescape
+from urllib.parse import parse_qs, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -18,6 +21,14 @@ REQUEST_HEADERS = {
 AMAZON_HOST_MARKERS = (
     "amazon.",
     "amzn.to",
+)
+AMAZON_THUMBNAIL_ARRAY_PATTERN = re.compile(
+    r"colorImages\s*[:=]\s*\{\s*.*?initial\s*[:=]\s*\[(?P<body>.*?)\]\s*\}",
+    re.IGNORECASE | re.DOTALL,
+)
+AMAZON_THUMBNAIL_URL_PATTERN = re.compile(
+    r'"thumb"\s*:\s*"(?P<url>(?:\\.|[^"])*)"',
+    re.IGNORECASE | re.DOTALL,
 )
 
 
@@ -63,6 +74,8 @@ class OgpService:
                             "title": None,
                             "summary": None,
                             "thumbnail": None,
+                            "price": None,
+                            "is_associates": None,
                             "site_name": None,
                         },
                     )
@@ -91,8 +104,6 @@ class OgpService:
                 continue
             if OgpService.contains_embedded_media(anchor=anchor):
                 continue
-            if OgpService.is_amazon_url(url=href):
-                continue
             if href in seen:
                 continue
             seen.add(href)
@@ -103,6 +114,16 @@ class OgpService:
     def fetch_ogp(*, url: str) -> dict:
         """
         URL から OGP 情報を取得して返す。
+        """
+        if OgpService.is_amazon_url(url=url):
+            return OgpService.fetch_amazon_ogp(url=url)
+
+        return OgpService.fetch_standard_ogp(url=url)
+
+    @staticmethod
+    def fetch_standard_ogp(*, url: str) -> dict:
+        """
+        通常ページの OGP 情報を取得して返す。
         """
         response = requests.get(
             url,
@@ -130,7 +151,43 @@ class OgpService:
             "title": title,
             "summary": summary,
             "thumbnail": thumbnail,
+            "price": None,
+            "is_associates": None,
             "site_name": site_name,
+        }
+
+    @staticmethod
+    def fetch_amazon_ogp(*, url: str) -> dict:
+        """
+        Amazon ページの情報を独自に抽出して返す。
+        """
+        response = requests.get(
+            url,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+            headers=REQUEST_HEADERS,
+        )
+        response.raise_for_status()
+        response.encoding = response.apparent_encoding or response.encoding
+        soup = BeautifulSoup(response.text, "lxml")
+
+        title = None
+        if soup.title is not None:
+            title = soup.title.get_text(strip=True) or None
+
+        price_element = soup.select_one("span.a-price-whole")
+        price = None
+        if price_element is not None:
+            price = price_element.get_text(" ", strip=True) or None
+
+        thumbnail = OgpService._extract_amazon_thumbnail(soup=soup)
+
+        return {
+            "title": title,
+            "summary": None,
+            "thumbnail": thumbnail,
+            "price": price,
+            "is_associates": OgpService.is_associate_url(url=url),
+            "site_name": None,
         }
 
     @staticmethod
@@ -141,6 +198,19 @@ class OgpService:
         parsed = urlparse(url)
         host = parsed.netloc.lower()
         return any(marker in host for marker in AMAZON_HOST_MARKERS)
+
+    @staticmethod
+    def is_associate_url(*, url: str) -> bool:
+        """
+        Amazon アソシエイト URL かどうかを返す。
+        """
+        parsed = urlparse(url)
+        host = parsed.netloc.lower()
+        if host.endswith("amzn.to"):
+            return True
+        if not any(marker in host for marker in AMAZON_HOST_MARKERS if marker != "amzn.to"):
+            return False
+        return "tag" in parse_qs(parsed.query, keep_blank_values=True)
 
     @staticmethod
     def contains_embedded_media(*, anchor: Tag) -> bool:
@@ -170,3 +240,31 @@ class OgpService:
             return None
         value = str(tag.get("content", "")).strip()
         return value or None
+
+    @staticmethod
+    def _extract_amazon_thumbnail(*, soup: BeautifulSoup) -> str | None:
+        """
+        Amazon の ImageBlockATF から thumb URL を抽出する。
+        """
+        for script in soup.find_all("script"):
+            script_text = script.get_text()
+            if "ImageBlockATF" not in script_text or "colorImages" not in script_text:
+                continue
+
+            array_match = AMAZON_THUMBNAIL_ARRAY_PATTERN.search(script_text)
+            if array_match is None:
+                continue
+
+            thumb_match = AMAZON_THUMBNAIL_URL_PATTERN.search(array_match.group("body"))
+            if thumb_match is None:
+                continue
+
+            raw_url = thumb_match.group("url")
+            try:
+                decoded_url = json.loads(f'"{raw_url}"')
+            except json.JSONDecodeError:
+                decoded_url = raw_url
+            normalized_url = unescape(decoded_url).strip()
+            if normalized_url != "":
+                return normalized_url
+        return None

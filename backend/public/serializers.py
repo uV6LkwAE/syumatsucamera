@@ -204,6 +204,8 @@ class PublicOgpRecordSerializer(serializers.Serializer):
     title = serializers.CharField(allow_null=True, read_only=True)
     summary = serializers.CharField(allow_null=True, read_only=True)
     thumbnail = serializers.CharField(allow_null=True, read_only=True)
+    price = serializers.CharField(allow_null=True, read_only=True)
+    is_associates = serializers.BooleanField(allow_null=True, read_only=True)
     site_name = serializers.CharField(allow_null=True, read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
 

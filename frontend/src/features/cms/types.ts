@@ -217,6 +217,8 @@ export type CmsOgpRecord = {
   title: string | null
   summary: string | null
   thumbnail: string | null
+  price: string | null
+  is_associates: boolean | null
   site_name: string | null
   updated_at: string
 }

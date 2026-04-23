@@ -41,6 +41,8 @@ class OgpRecordSerializer(serializers.Serializer):
     title = serializers.CharField(allow_null=True, read_only=True)
     summary = serializers.CharField(allow_null=True, read_only=True)
     thumbnail = serializers.CharField(allow_null=True, read_only=True)
+    price = serializers.CharField(allow_null=True, read_only=True)
+    is_associates = serializers.BooleanField(allow_null=True, read_only=True)
     site_name = serializers.CharField(allow_null=True, read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
 
@@ -62,6 +64,8 @@ class OgpRecordUpdateRequestSerializer(serializers.Serializer):
     title = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     summary = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     thumbnail = serializers.URLField(required=False, allow_blank=True, allow_null=True)
+    price = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    is_associates = serializers.BooleanField(required=False, allow_null=True)
     site_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
     def validate(self, attrs):

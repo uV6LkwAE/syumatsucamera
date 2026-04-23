@@ -461,6 +461,12 @@ class ArticleOgpInfo(models.Model):
     title = models.TextField(null=True, blank=True, verbose_name="タイトル")
     summary = models.TextField(null=True, blank=True, verbose_name="概要")
     thumbnail = models.TextField(null=True, blank=True, verbose_name="サムネイルURL")
+    price = models.TextField(null=True, blank=True, verbose_name="価格")
+    is_associates = models.BooleanField(
+        null=True,
+        blank=True,
+        verbose_name="アソシエイト",
+    )
     site_name = models.TextField(null=True, blank=True, verbose_name="サイト名")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="更新日時")

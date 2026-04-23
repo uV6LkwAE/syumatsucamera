@@ -189,6 +189,16 @@ function renderOgpCard(record: PublicOgpRecord, key: string): ReactNode {
       <div className="public-ogp-copy">
         <p className="public-ogp-site">{record.site_name ?? '外部リンク'}</p>
         <p className="public-ogp-title">{record.title ?? record.url}</p>
+        {record.price !== null || record.is_associates ? (
+          <div className="public-ogp-meta">
+            {record.price !== null ? (
+              <span className="public-ogp-price">{record.price}</span>
+            ) : null}
+            {record.is_associates ? (
+              <span className="public-ogp-affiliate">Amazonアソシエイト</span>
+            ) : null}
+          </div>
+        ) : null}
         {record.summary ? (
           <p className="public-ogp-summary">{record.summary}</p>
         ) : null}

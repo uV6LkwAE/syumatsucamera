@@ -2127,6 +2127,30 @@ body {
   overflow: hidden;
 }
 
+.public-ogp-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.public-ogp-price {
+  color: #8a5d17;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.public-ogp-affiliate {
+  padding: 0.08rem 0.42rem;
+  border-radius: 999px;
+  background: rgba(131, 160, 104, 0.12);
+  color: #5b6d47;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
 .public-ogp-summary {
   display: -webkit-box;
   margin: 0.45rem 0 0;

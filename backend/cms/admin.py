@@ -82,7 +82,7 @@ class ArticleOgpInfoAdmin(admin.ModelAdmin):
     OGP キャッシュの管理画面設定。
     """
 
-    list_display = ("article", "url", "site_name", "updated_at")
+    list_display = ("article", "url", "site_name", "price", "is_associates", "updated_at")
     search_fields = ("url", "title", "site_name")
 
 
