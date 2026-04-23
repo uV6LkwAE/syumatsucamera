@@ -102,13 +102,6 @@ data:
         try_files $uri =404;
       }
 
-      location ^~ /media/tmp/ {
-        alias /media/tmp/;
-        expires 0;
-        add_header Cache-Control "no-store" always;
-        try_files $request_filename =404;
-      }
-
       location ^~ /media/original/ {
         return 404;
       }
@@ -169,6 +162,13 @@ data:
 
       location ^~ /media/original/ {
         return 404;
+      }
+
+      location ^~ /media/tmp/ {
+        alias /media/tmp/;
+        expires 0;
+        add_header Cache-Control "no-store" always;
+        try_files $request_filename =404;
       }
 
       location ^~ /media/images/ {
