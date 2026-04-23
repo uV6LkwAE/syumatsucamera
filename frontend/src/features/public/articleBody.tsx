@@ -30,7 +30,7 @@ type TwitterWidgetsWindow = Window & {
   }
 }
 
-const URL_ONLY_TEXT_PATTERN = /^https?:\/\/[^\s<>"']+$/i
+const URL_ONLY_TEXT_PATTERN = /^https?:\/\/(?!media\.syumatsucamera\.com(?:\/|$))[^\s<>"']+$/i
 const MEDIA_SOURCE_PATTERN = /^\/?media\/(.+)$/i
 const DATA_OR_BLOB_PATTERN = /^(data:|blob:)/i
 const ABSOLUTE_HTTP_PATTERN = /^https?:\/\//i
@@ -113,35 +113,32 @@ function parseStyleAttribute(styleText: string): Record<string, string> {
 }
 
 function extractUrlOnlyLinkHref(element: Element): string | null {
-  if (element.tagName.toLowerCase() !== 'p') {
-    return null
-  }
-
-  const meaningfulNodes = Array.from(element.childNodes).filter((node) => {
-    if (node.nodeType === Node.TEXT_NODE) {
-      return (node.textContent ?? '').trim() !== ''
+  const tagName = element.tagName.toLowerCase()
+  if (tagName !== 'a') {
+    const meaningfulNodes = Array.from(element.childNodes).filter((node) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        return (node.textContent ?? '').trim() !== ''
+      }
+      return true
+    })
+    if (meaningfulNodes.length !== 1) {
+      return null
     }
-    return true
-  })
-  if (meaningfulNodes.length !== 1) {
+
+    const onlyNode = meaningfulNodes[0]
+    if (onlyNode.nodeType !== Node.ELEMENT_NODE) {
+      return null
+    }
+
+    return extractUrlOnlyLinkHref(onlyNode as Element)
+  }
+
+  if (element.querySelector('img, picture, video, iframe') !== null) {
     return null
   }
 
-  const onlyNode = meaningfulNodes[0]
-  if (onlyNode.nodeType !== Node.ELEMENT_NODE) {
-    return null
-  }
-
-  const anchor = onlyNode as Element
-  if (anchor.tagName.toLowerCase() !== 'a') {
-    return null
-  }
-  if (anchor.querySelector('img, picture, video, iframe') !== null) {
-    return null
-  }
-
-  const href = (anchor.getAttribute('href') ?? '').trim()
-  const linkText = (anchor.textContent ?? '').trim()
+  const href = (element.getAttribute('href') ?? '').trim()
+  const linkText = (element.textContent ?? '').trim()
   if (!URL_ONLY_TEXT_PATTERN.test(linkText)) {
     return null
   }
