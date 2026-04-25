@@ -113,6 +113,10 @@ function parseStyleAttribute(styleText: string): Record<string, string> {
 }
 
 function extractUrlOnlyLinkHref(element: Element): string | null {
+  if (element.closest('blockquote.twitter-tweet') !== null) {
+    return null
+  }
+
   const tagName = element.tagName.toLowerCase()
   if (tagName !== 'a') {
     const meaningfulNodes = Array.from(element.childNodes).filter((node) => {
@@ -357,6 +361,7 @@ function renderNode(
   ogpByUrl: Record<string, PublicOgpRecord>,
   tocState: TocBuildState,
   stateRef: { hasXEmbeds: boolean },
+  insideTwitterTweet = false,
 ): ReactNode {
   if (node.nodeType === Node.TEXT_NODE) {
     return node.textContent
@@ -372,11 +377,6 @@ function renderNode(
     return null
   }
 
-  const ogpHref = extractUrlOnlyLinkHref(element)
-  if (ogpHref !== null && ogpByUrl[ogpHref] !== undefined) {
-    return renderOgpCard(ogpByUrl[ogpHref], key)
-  }
-
   if (tagName === 'div' && element.getAttribute('data-embed') === 'x') {
     const embedUrl = (element.getAttribute('data-url') ?? '').trim()
     if (X_STATUS_URL_PATTERN.test(embedUrl)) {
@@ -384,6 +384,34 @@ function renderNode(
       return renderXEmbed(embedUrl, key)
     }
     return null
+  }
+
+  if (tagName === 'blockquote' && element.classList.contains('twitter-tweet')) {
+    return createElement(
+      tagName,
+      {
+        ...createElementProps(element),
+        key,
+      },
+      ...Array.from(element.childNodes).map((childNode, index) =>
+        renderNode(
+          childNode,
+          `${key}-${index}`,
+          cdnBaseUrl,
+          ogpByUrl,
+          tocState,
+          stateRef,
+          true,
+        ),
+      ),
+    )
+  }
+
+  if (!insideTwitterTweet) {
+    const ogpHref = extractUrlOnlyLinkHref(element)
+    if (ogpHref !== null && ogpByUrl[ogpHref] !== undefined) {
+      return renderOgpCard(ogpByUrl[ogpHref], key)
+    }
   }
 
   if (tagName === 'img') {
@@ -403,7 +431,15 @@ function renderNode(
   }
 
   const children = Array.from(element.childNodes).map((childNode, index) =>
-    renderNode(childNode, `${key}-${index}`, cdnBaseUrl, ogpByUrl, tocState, stateRef),
+    renderNode(
+      childNode,
+      `${key}-${index}`,
+      cdnBaseUrl,
+      ogpByUrl,
+      tocState,
+      stateRef,
+      insideTwitterTweet,
+    ),
   )
 
   if (tagName === 'pre') {
@@ -484,6 +520,17 @@ function renderNode(
 
   if (tagName === 'a') {
     const href = element.getAttribute('href') ?? '#'
+    if (insideTwitterTweet) {
+      return createElement(
+        'a',
+        {
+          ...createElementProps(element),
+          key,
+          href,
+        },
+        ...children,
+      )
+    }
     const isExternal = ABSOLUTE_HTTP_PATTERN.test(href)
     return createElement(
       'a',
