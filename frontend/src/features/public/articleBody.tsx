@@ -387,6 +387,7 @@ function renderNode(
   }
 
   if (tagName === 'blockquote' && element.classList.contains('twitter-tweet')) {
+    stateRef.hasXEmbeds = true
     return createElement(
       tagName,
       {
