@@ -234,6 +234,7 @@ CMS_THUMBNAIL_BRAND_IMAGE_PATH = BASE_DIR / "cms" / "assets" / "brand" / "syumat
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CORS_ALLOW_ALL_ORIGINS = True
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 CMS_ARTICLE_SESSION_TTL_SECONDS = 300
 CMS_ARTICLE_PENDING_SNAPSHOT_TTL_SECONDS = 24 * 60 * 60
 # 重い画像処理は 1 プロセス 1 タスクで回してメモリの山を抑える。
