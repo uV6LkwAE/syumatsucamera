@@ -2373,7 +2373,23 @@ body {
 }
 
 .public-contact-label {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.public-contact-required {
+  color: #b42318;
+  font-size: 0.85rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.public-contact-description {
+  margin: 0.95rem 0 0;
+  color: #586253;
+  font-size: 0.95rem;
+  line-height: 1.9;
 }
 
 .public-contact-input,

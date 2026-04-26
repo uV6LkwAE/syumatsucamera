@@ -2036,11 +2036,21 @@ export function PublicContactPage() {
       <section className="public-contact-shell">
         <p className="public-section-kicker">Contact</p>
         <h1 className="public-collection-title">お問い合わせ</h1>
+        <p className="public-contact-description">
+          本ブログに関するお問い合わせ、製品のレビュー依頼は以下のフォームからご連絡ください。
+          カメラ周辺機器、ガジェット、その他レビューさせていただきます。
+          返信までにお時間をいただく場合があります。
+        </p>
 
         <form className="public-contact-form" onSubmit={(event) => void handleSubmit(event)}>
           <div className="public-contact-grid">
             <label className="public-contact-field">
-              <span className="public-contact-label">種別</span>
+              <span className="public-contact-label">
+                種別
+                <span className="public-contact-required" aria-hidden="true">
+                  *
+                </span>
+              </span>
               <PublicContactSubjectDropdown
                 value={form.subject_type}
                 onChange={(value) => setForm((current) => ({ ...current, subject_type: value }))}
@@ -2061,7 +2071,12 @@ export function PublicContactPage() {
               />
             </label>
             <label className="public-contact-field">
-              <span className="public-contact-label">お名前</span>
+              <span className="public-contact-label">
+                お名前
+                <span className="public-contact-required" aria-hidden="true">
+                  *
+                </span>
+              </span>
               <input
                 className="form-control public-contact-input"
                 type="text"
@@ -2076,7 +2091,12 @@ export function PublicContactPage() {
               />
             </label>
             <label className="public-contact-field">
-              <span className="public-contact-label">メールアドレス</span>
+              <span className="public-contact-label">
+                メールアドレス
+                <span className="public-contact-required" aria-hidden="true">
+                  *
+                </span>
+              </span>
               <input
                 className="form-control public-contact-input"
                 type="email"
@@ -2092,7 +2112,12 @@ export function PublicContactPage() {
             </label>
           </div>
           <label className="public-contact-field">
-            <span className="public-contact-label">本文</span>
+            <span className="public-contact-label">
+              本文
+              <span className="public-contact-required" aria-hidden="true">
+                *
+              </span>
+            </span>
             <textarea
               className="form-control public-contact-textarea"
               value={form.body}
