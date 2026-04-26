@@ -2192,7 +2192,37 @@ export function PublicLayout() {
       left: 0,
       behavior: 'auto',
     })
+  }, [location.pathname, location.search])
+
+  useLayoutEffect(() => {
+    if (location.hash === '') {
+      return
+    }
+
+    const targetId = decodeURIComponent(location.hash.slice(1))
+    if (targetId === '') {
+      return
+    }
+
+    const targetElement = document.getElementById(targetId)
+    if (targetElement === null) {
+      return
+    }
+
+    targetElement.scrollIntoView({
+      block: 'start',
+      inline: 'nearest',
+      behavior: 'auto',
+    })
   }, [location.hash, location.pathname, location.search])
+
+  useEffect(() => {
+    const previousScrollRestoration = window.history.scrollRestoration
+    window.history.scrollRestoration = 'manual'
+    return () => {
+      window.history.scrollRestoration = previousScrollRestoration
+    }
+  }, [])
 
   return (
     <div className="public-site-shell">
