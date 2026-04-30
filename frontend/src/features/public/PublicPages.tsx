@@ -1103,6 +1103,32 @@ function PublicCategoryTree({ categories }: { categories: PublicCategoryTreeItem
   )
 }
 
+function PublicSidebarTaxonomyBlocks({ sidebar }: { sidebar: PublicSidebarResponse }) {
+  return (
+    <>
+      <section className="public-sidebar-block public-category-block">
+        <div className="public-sidebar-section-head">
+          <h2 className="public-sidebar-section-title">カテゴリー</h2>
+        </div>
+        <PublicCategoryTree categories={sidebar.category_tree} />
+      </section>
+
+      <section className="public-sidebar-block public-tag-block">
+        <div className="public-sidebar-section-head">
+          <h2 className="public-sidebar-section-title">タグ</h2>
+        </div>
+        <div className="public-sidebar-chip-cloud">
+          {sidebar.tags.map((tag) => (
+            <Link key={tag.id} className="public-sidebar-chip" to={tag.path}>
+              #{tag.name}
+            </Link>
+          ))}
+        </div>
+      </section>
+    </>
+  )
+}
+
 function PublicHomeDesktopLower({
   searchText,
   onSearchTextChange,
@@ -1233,25 +1259,7 @@ function PublicHomeDesktopLower({
               </section>
             </div>
 
-            <section className="public-sidebar-block public-category-block">
-              <div className="public-sidebar-section-head">
-                <h2 className="public-sidebar-section-title">カテゴリー</h2>
-              </div>
-              <PublicCategoryTree categories={sidebar.category_tree} />
-            </section>
-
-            <section className="public-sidebar-block public-tag-block">
-              <div className="public-sidebar-section-head">
-                <h2 className="public-sidebar-section-title">タグ</h2>
-              </div>
-              <div className="public-sidebar-chip-cloud">
-                {sidebar.tags.map((tag) => (
-                  <Link key={tag.id} className="public-sidebar-chip" to={tag.path}>
-                    #{tag.name}
-                  </Link>
-                ))}
-              </div>
-            </section>
+            <PublicSidebarTaxonomyBlocks sidebar={sidebar} />
           </div>
         ) : null}
       </aside>
@@ -1811,6 +1819,7 @@ export function PublicSearchPage() {
 export function PublicArticleDetailPage() {
   const { categorySlug = '', articleSlug = '' } = useParams()
   const location = useLocation()
+  const { sidebar, errorPath: sidebarErrorPath } = usePublicSidebarPayload()
   const [payload, setPayload] = useState<PublicArticleDetailResponse | null>(null)
   const [errorPath, setErrorPath] = useState('')
 
@@ -1851,8 +1860,8 @@ export function PublicArticleDetailPage() {
     }
   }, [articleSlug, categorySlug, location.pathname])
 
-  if (errorPath !== '') {
-    return <Navigate to={errorPath} replace />
+  if (errorPath !== '' || sidebarErrorPath !== '') {
+    return <Navigate to={errorPath || sidebarErrorPath} replace />
   }
 
   if (payload === null) {
@@ -1881,6 +1890,7 @@ export function PublicArticleDetailPage() {
         <aside className="public-detail-sidebar col-lg-4 order-2 order-lg-2">
           <PublicDetailAuthorPanel article={article} />
           <PublicDetailRelatedList articles={relatedArticles} />
+          {sidebar !== null ? <PublicSidebarTaxonomyBlocks sidebar={sidebar} /> : null}
         </aside>
 
         <div className="col-lg-8 order-1 order-lg-1">
