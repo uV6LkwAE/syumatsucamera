@@ -6,6 +6,7 @@ from rest_framework import serializers
 
 from cms.models import ArticleStatus, TwitterCardType
 from cms.services.article_option_services import ArticleOptionService
+from cms.services.media_services import MediaService
 from core.media_urls import build_cdn_media_url
 
 
@@ -239,6 +240,8 @@ class PublicArticleSummarySerializer(serializers.Serializer):
     views_total = serializers.IntegerField(read_only=True)
     is_profit = serializers.BooleanField(read_only=True)
     thumbnail_url = serializers.SerializerMethodField()
+    thumbnail_width = serializers.SerializerMethodField()
+    thumbnail_height = serializers.SerializerMethodField()
     path = serializers.CharField(read_only=True)
     category = PublicCategorySummarySerializer(read_only=True)
     author = PublicAuthorSummarySerializer(read_only=True)
@@ -259,6 +262,22 @@ class PublicArticleSummarySerializer(serializers.Serializer):
         if thumbnail_url is None:
             raise RuntimeError("公開記事のサムネイルURLを生成できません。")
         return thumbnail_url
+
+    def get_thumbnail_width(self, obj) -> int:
+        """
+        サムネイル横幅を返す。
+        """
+        if obj.thumbnail_asset is None:
+            return MediaService.THUMBNAIL_WIDTH
+        return obj.thumbnail_asset.width
+
+    def get_thumbnail_height(self, obj) -> int:
+        """
+        サムネイル高さを返す。
+        """
+        if obj.thumbnail_asset is None:
+            return MediaService.THUMBNAIL_HEIGHT
+        return obj.thumbnail_asset.height
 
     def get_article_option(self, obj) -> dict:
         """

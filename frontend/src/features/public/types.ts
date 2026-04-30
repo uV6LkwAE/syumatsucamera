@@ -65,6 +65,8 @@ export type PublicArticleSummary = {
   views_total: number
   is_profit: boolean
   thumbnail_url: string
+  thumbnail_width: number | null
+  thumbnail_height: number | null
   path: string
   category: PublicCategorySummary
   author: PublicAuthorSummary

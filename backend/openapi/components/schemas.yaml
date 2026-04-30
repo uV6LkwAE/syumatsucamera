@@ -272,6 +272,8 @@ components:
         - category
         - author
         - thumbnail_url
+        - thumbnail_width
+        - thumbnail_height
         - path
         - article_option
       properties:
@@ -292,6 +294,10 @@ components:
         thumbnail_url:
           type: string
           format: uri
+        thumbnail_width:
+          type: integer
+        thumbnail_height:
+          type: integer
         path:
           type: string
         category:
@@ -447,6 +453,8 @@ components:
             - toc
             - ogp_by_url
             - thumbnail_url
+            - thumbnail_width
+            - thumbnail_height
             - twitter_card
             - article_option
             - path
@@ -472,6 +480,10 @@ components:
             thumbnail_url:
               type: string
               format: uri
+            thumbnail_width:
+              type: integer
+            thumbnail_height:
+              type: integer
             path:
               type: string
             twitter_card:

@@ -196,6 +196,19 @@ function formatPublicDateParts(value: string | null): { year: string; monthDay: 
   }
 }
 
+function buildThumbnailAspectRatioStyle(
+  width: number | null,
+  height: number | null,
+): CSSProperties | undefined {
+  if (width === null || height === null || width <= 0 || height <= 0) {
+    return undefined
+  }
+
+  return {
+    aspectRatio: `${width} / ${height}`,
+  }
+}
+
 function buildProfileTextParagraphs(value: string): string[] {
   const normalizedValue = value.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
   return normalizedValue
@@ -1852,6 +1865,10 @@ export function PublicArticleDetailPage() {
     : [article.category]
   const publishedAt = article.published_at
   const publishedDateParts = formatPublicDateParts(publishedAt)
+  const thumbnailWrapStyle = buildThumbnailAspectRatioStyle(
+    article.thumbnail_width,
+    article.thumbnail_height,
+  )
   const headingPanelClassName = `public-detail-heading-panel${
     publishedDateParts === null ? ' without-date' : ''
   }`
@@ -1907,13 +1924,13 @@ export function PublicArticleDetailPage() {
                   ) : null}
                 </div>
               </div>
-              <div className="public-detail-thumb-wrap">
+              <div className="public-detail-thumb-wrap" style={thumbnailWrapStyle}>
                 <img
                   className="public-detail-thumb"
                   src={article.thumbnail_url}
                   alt={article.title}
-                  width={1200}
-                  height={900}
+                  width={article.thumbnail_width ?? 3}
+                  height={article.thumbnail_height ?? 2}
                   loading="eager"
                   decoding="async"
                 />
