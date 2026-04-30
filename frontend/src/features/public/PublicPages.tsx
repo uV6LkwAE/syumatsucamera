@@ -40,10 +40,10 @@ import type {
   PublicSidebarResponse,
 } from './types'
 
-const PUBLIC_PAGE_SIZE = 9
+const PUBLIC_PAGE_SIZE = 12
 const HOME_SECTION_SIZE = 6
-const HOME_SEARCH_PAGE_SIZE = 9
-const HOME_MOBILE_SEARCH_PAGE_SIZE = 6
+const HOME_SEARCH_PAGE_SIZE = 12
+const HOME_MOBILE_SEARCH_PAGE_SIZE = 12
 const HOME_SEARCH_DEBOUNCE_MS = 320
 const PUBLIC_SITE_NAME = '週末カメラ'
 const PUBLIC_SITE_DESCRIPTION = '気ままに、機材と写真を楽しむブログ'
@@ -574,14 +574,16 @@ function PublicArticleCard({
   variant = 'standard',
   eager = false,
   showSupplement = true,
+  className = '',
 }: {
   article: PublicArticleSummary
   variant?: 'hero' | 'standard' | 'compact'
   eager?: boolean
   showSupplement?: boolean
+  className?: string
 }) {
   return (
-    <article className={`public-article-card is-${variant}`}>
+    <article className={`public-article-card is-${variant}${className === '' ? '' : ` ${className}`}`}>
       <Link className="public-article-card-link" to={article.path}>
         <div className="public-article-thumb-frame">
           <img
@@ -1019,22 +1021,16 @@ function PublicDetailRelatedList({
     <section className="public-detail-side-block public-detail-related-panel">
       <p className="public-detail-side-kicker">Related</p>
       <h2>関連記事</h2>
-      <div className="public-detail-related-list">
+      <div className="public-detail-related-grid">
         {articles.map((article) => (
-          <Link key={article.id} className="public-detail-related-item" to={article.path}>
-            <div className="public-detail-related-thumb-frame">
-              <img
-                className="public-detail-related-thumb"
-                src={article.thumbnail_url}
-                alt={article.title}
-                width={160}
-                height={120}
-                loading="lazy"
-                decoding="async"
-              />
-            </div>
-            <span>{article.title}</span>
-          </Link>
+          <PublicArticleCard
+            key={article.id}
+            article={article}
+            variant="compact"
+            eager={false}
+            showSupplement={false}
+            className="is-related-detail"
+          />
         ))}
       </div>
     </section>
