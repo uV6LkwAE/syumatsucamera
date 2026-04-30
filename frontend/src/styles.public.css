@@ -2912,6 +2912,11 @@ body {
     display: none;
   }
 
+  .public-home-search-field input,
+  input[type='search'] {
+    font-size: 16px;
+  }
+
   .public-profile-body {
     grid-template-columns: minmax(0, 1fr);
     gap: 0.78rem;

@@ -1750,6 +1750,7 @@ export function PublicTagArticlesPage() {
         ordering: 'newest',
         tag_slug: tagSlug,
       }}
+      mobileTwoColumnCards
     />
   )
 }
@@ -1777,7 +1778,7 @@ export function PublicSearchPage() {
         author_id: authorId === '' ? undefined : authorId,
         ordering: 'newest',
       }}
-      mobileTwoColumnCards={isAuthorFiltered}
+      mobileTwoColumnCards
       resolveTitle={
         isAuthorFiltered
           ? (payload) => {
