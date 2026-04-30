@@ -5450,6 +5450,11 @@ body {
 
 .public-home-latest-title {
   font-size: 1.35rem;
+  font-weight: 650;
+}
+
+.public-profile-block .public-sidebar-title {
+  font-weight: 650;
 }
 
 .public-home-search-field {
@@ -7396,6 +7401,42 @@ body {
 }
 
 @media (max-width: 767.98px) {
+  .public-sidebar-category-item + .public-sidebar-category-item {
+    margin-top: 0.12rem;
+  }
+
+  .public-sidebar-category-row {
+    grid-template-columns: 1.75rem minmax(0, 1fr);
+    min-height: 2.05rem;
+    border-radius: 0.55rem;
+  }
+
+  .public-sidebar-category-icon {
+    width: 1.75rem;
+    height: 2.05rem;
+    font-size: 0.78rem;
+  }
+
+  .public-sidebar-category-link {
+    min-height: 2.05rem;
+    padding: 0.35rem 0.55rem 0.35rem 0;
+    font-size: 0.86rem;
+    line-height: 1.45;
+  }
+
+  .public-sidebar-category-collapse {
+    padding-left: 0.35rem;
+  }
+
+  .public-sidebar-category-collapse-inner {
+    padding-left: 0.35rem;
+  }
+
+  .public-sidebar-category-collapse .public-sidebar-category-tree {
+    padding-top: 0.12rem;
+    padding-bottom: 0.05rem;
+  }
+
   .public-mini-carousel-label {
     top: 0.4rem;
     left: 0.4rem;
