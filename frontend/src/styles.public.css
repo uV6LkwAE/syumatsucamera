@@ -2775,6 +2775,154 @@ body {
     line-height: 1.15;
   }
 
+  .public-detail-author-card {
+    display: grid;
+    grid-template-columns: 3.25rem minmax(0, 1fr);
+    column-gap: 0.8rem;
+    row-gap: 0.7rem;
+    padding: 0.85rem;
+    border-radius: 0.85rem;
+  }
+
+  .public-profile-block {
+    display: grid;
+    grid-template-columns: 3.25rem minmax(0, 1fr);
+    column-gap: 0.8rem;
+    row-gap: 0.7rem;
+    padding: 0.85rem;
+    border-radius: 0.85rem;
+  }
+
+  .public-profile-header {
+    display: none;
+  }
+
+  .public-profile-body {
+    display: contents;
+  }
+
+  .public-profile-icon {
+    align-self: start;
+    grid-column: 1;
+    grid-row: 1;
+    width: 3.25rem;
+    height: 3.25rem;
+    margin-top: 0;
+  }
+
+  .public-profile-copy {
+    grid-column: 2;
+    grid-row: 1;
+    width: 100%;
+    text-align: left;
+  }
+
+  .public-profile-copy .public-sidebar-kicker {
+    display: none;
+  }
+
+  .public-profile-copy .public-sidebar-title {
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+
+  .public-profile-text {
+    gap: 0.35rem;
+    margin-top: 0.25rem;
+    font-size: 0.76rem;
+    line-height: 1.6;
+  }
+
+  .public-profile-meta-list {
+    display: none;
+  }
+
+  .public-profile-more-wrap {
+    display: grid;
+    grid-column: 2;
+    grid-row: 2;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.7rem;
+    width: 100%;
+    padding: 0;
+  }
+
+  .public-profile-more-wrap .public-profile-social-links {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: start;
+    justify-content: flex-start;
+    width: auto;
+  }
+
+  .public-profile-more-wrap .public-home-more-link {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+
+  .public-detail-author-card.has-header-image .public-detail-author-header-frame {
+    display: none;
+  }
+
+  .public-detail-author-main,
+  .public-detail-author-card.has-header-image .public-detail-author-main {
+    display: contents;
+  }
+
+  .public-detail-author-icon,
+  .public-detail-author-card.has-header-image .public-detail-author-icon {
+    align-self: start;
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    width: 3.25rem;
+    height: 3.25rem;
+    margin-top: 0;
+    font-size: 1rem;
+  }
+
+  .public-detail-author-copy {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .public-detail-author-copy h2 {
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+
+  .public-detail-author-text {
+    gap: 0.35rem;
+    margin-top: 0.25rem;
+    font-size: 0.76rem;
+    line-height: 1.6;
+  }
+
+  .public-detail-author-footer {
+    display: grid;
+    grid-column: 2;
+    grid-row: 2;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0;
+  }
+
+  .public-detail-author-social-links {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: start;
+    justify-content: flex-start;
+    width: auto;
+  }
+
+  .public-detail-author-link {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+
   .public-detail-author-panel > h2,
   .public-detail-author-panel > .public-detail-side-kicker,
   .public-detail-related-panel h2,
@@ -2789,7 +2937,7 @@ body {
   }
 
   .public-detail-author-footer {
-    align-items: flex-start;
+    align-items: center;
   }
 
   .public-detail-author-link {
@@ -2941,19 +3089,17 @@ body {
   }
 
   .public-profile-body {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0.78rem;
-    padding: 0 1rem 0.9rem;
+    display: contents;
   }
 
   .public-profile-icon {
-    width: 4.35rem;
-    height: 4.35rem;
-    margin-top: -2.175rem;
+    width: 3.25rem;
+    height: 3.25rem;
+    margin-top: 0;
   }
 
   .public-profile-more-wrap {
-    padding: 0 1rem 1rem;
+    padding: 0;
   }
 
   .public-profile-meta-item {

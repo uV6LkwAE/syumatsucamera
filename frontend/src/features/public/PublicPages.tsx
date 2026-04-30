@@ -277,9 +277,11 @@ function PublicProfileSocialLinks({
 function PublicProfileTextBlock({
   paragraphs,
   className,
+  mobileFadeLines = 4,
 }: {
   paragraphs: string[]
   className: string
+  mobileFadeLines?: number
 }) {
   const textRef = useRef<HTMLDivElement | null>(null)
   const isMobileViewport = usePublicMobileViewport()
@@ -339,13 +341,16 @@ function PublicProfileTextBlock({
         lineRects.push({ ...rect })
       }
 
-      const nextShouldFade = lineRects.length >= 5
+      const visibleLineCount = Math.max(1, mobileFadeLines)
+      const nextShouldFade = lineRects.length > visibleLineCount
       setShouldFade(nextShouldFade)
-      setFadeHeight(
-        nextShouldFade
-          ? Math.max(0, lineRects[4].bottom - textElement.getBoundingClientRect().top)
-          : null,
-      )
+      if (nextShouldFade) {
+        const fadeBottom = lineRects[visibleLineCount - 1].bottom
+        const textTop = textElement.getBoundingClientRect().top
+        setFadeHeight(Math.max(0, fadeBottom - textTop))
+        return
+      }
+      setFadeHeight(null)
     }
 
     updateFadeState()
@@ -354,7 +359,7 @@ function PublicProfileTextBlock({
     return () => {
       resizeObserver.disconnect()
     }
-  }, [isMobileViewport, paragraphKey])
+  }, [isMobileViewport, mobileFadeLines, paragraphKey])
 
   const fadeStyle =
     fadeHeight === null
